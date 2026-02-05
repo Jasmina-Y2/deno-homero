@@ -1,0 +1,14 @@
+import { Application } from "https://deno.land/x/oak/mod.ts";
+import { oakCors } from "https://deno.land/x/cors/mod.ts";
+import router from "./src/routes/index.ts";
+import "./src/config/firebase.ts";
+
+const app = new Application();
+const PORT = 8000;
+
+app.use(oakCors());
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+console.log(`🦕 Servidor Deno escuchando en http://localhost:${PORT}`);
+await app.listen({ port: PORT });
