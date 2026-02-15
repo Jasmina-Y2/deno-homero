@@ -1,21 +1,16 @@
-// src/controllers/traductor.controller.ts
 import { Context } from "https://deno.land/x/oak/mod.ts";
 
 export const traducirTexto = async (ctx: Context) => {
     try {
-        // Verificamos si hay cuerpo
         if (!ctx.request.hasBody) {
             ctx.response.status = 400;
             ctx.response.body = { ok: false, message: "No enviaste datos" };
             return;
         }
 
-        // Usamos .json() para parsear el body directamente
         const body = await ctx.request.body.json();
 
         const { texto, idiomaOrigen = "en", idiomaDestino = "es" } = body;
-
-        // Validación básica
         if (!texto) {
             ctx.response.status = 400;
             ctx.response.body = { ok: false, message: "Por favor envía el campo 'texto'" };
