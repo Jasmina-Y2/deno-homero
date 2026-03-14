@@ -1,6 +1,4 @@
 import { db } from "../config/firebase.ts";
-import { ColeccionData } from "../models/coleccion.model.ts";
-import { FieldValue } from "npm:firebase-admin/firestore";
 
 export const crearColeccionService = async (data: any): Promise<string> => {
     try {
@@ -42,5 +40,20 @@ export const mostrarColeccionesPorAutorService = async (idAutor: string) => {
     }
 };
 
+export const getColeccionesPorIdService = async (uid: string) => {
+    try {
+        const snapshot = await db.collection("Coleccion")
+            .where("uid", "==", uid)
+            .get();
+
+        return snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+    } catch (error) {
+        console.error("❌ Error en getColeccionesPorIdService:", error);
+        throw new Error("Error al obtener las colecciones del usuario");
+    }
+};
 
 

@@ -1,5 +1,5 @@
 import { initializeApp, cert } from "npm:firebase-admin/app";
-import { getFirestore } from "npm:firebase-admin/firestore";
+import { getFirestore, FieldValue } from "npm:firebase-admin/firestore";
 import { getStorage } from "npm:firebase-admin/storage"; // Importante para subir imágenes desde el back
 
 const getServiceAccount = async () => {
@@ -39,5 +39,6 @@ try {
 
 export { db };
 export const bucket = getStorage().bucket();
+export const fieldValue = FieldValue;
 
 console.log("🔥 Firebase Admin conectado a: ciarv-2dfcc");

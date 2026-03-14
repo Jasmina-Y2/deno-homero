@@ -1,4 +1,4 @@
-import { crearColeccionService, mostrarColeccionesPorAutorService } from "../service/coleccion.service.ts"
+import { crearColeccionService, mostrarColeccionesPorAutorService, getColeccionesPorIdService } from "../service/coleccion.service.ts"
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { ColeccionData } from "../models/coleccion.model.ts";
 
@@ -40,5 +40,22 @@ export const mostrarColeccionesPorAutorController = async (ctx: RouterContext<st
         const error = err as Error;
         ctx.response.status = 500;
         ctx.response.body = { success: false, error: error.message };
+    }
+};
+
+
+export const getColeccionesUsuario = async (ctx: RouterContext<string>) => {
+    try {
+        const { uid } = ctx.params;
+        if (!uid) {
+            ctx.response.status = 400;
+            ctx.response.body = { success: false, message: "UID es requerido" };
+            return;
+        }
+        const data = await getColeccionesPorIdService(uid);
+        ctx.response.body = { success: true, data };
+    } catch (error) {
+        ctx.response.status = 500;
+        ctx.response.body = { success: false, error: error instanceof Error ? error.message : String(error) };
     }
 };

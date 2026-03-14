@@ -1,8 +1,9 @@
 import { Context } from "oak";
 import { getSignedUrl } from "npm:@aws-sdk/s3-request-presigner";
-import { PutObjectCommand, DeleteObjectCommand } from "npm:@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "npm:@aws-sdk/client-s3";
 import { SynthesizeSpeechCommand } from "npm:@aws-sdk/client-polly";
 import { s3Client, pollyClient, BUCKET_NAME } from "../config/aws.ts";
+import { deleteS3ObjectHelper } from "../service/aws.service.ts";
 
 
 export const getPresignedUrl = async (ctx: Context) => {
@@ -40,6 +41,29 @@ export const getPresignedUrl = async (ctx: Context) => {
         ctx.response.body = { error: "Error al generar permisos de subida" };
     }
 };
+
+export const uploadToS3 = async (buffer: Uint8Array, fileName: string, fileType: string) => {
+    try {
+        const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const key = `profile/${uniqueId}-${fileName}`;
+
+        const command = new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key,
+            Body: buffer,
+            ContentType: fileType,
+            ACL: "public-read",
+        });
+
+        await s3Client.send(command);
+        return `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/${key}`;
+
+    } catch (error) {
+        console.error("❌ Error subiendo a S3:", error);
+        throw error;
+    }
+};
+
 export const generateAudio = async (ctx: Context) => {
     try {
         const body = await ctx.request.body.json();
@@ -71,27 +95,48 @@ export const generateAudio = async (ctx: Context) => {
     }
 };
 
-export const deleteFile = async (ctx: Context) => {
+export const deleteFileController = async (ctx: Context) => {
     try {
         const body = await ctx.request.body.json();
         const { key } = body;
 
         if (!key) {
             ctx.response.status = 400;
+            ctx.response.body = { success: false, message: "Falta la key" };
             return;
         }
+        await deleteS3ObjectHelper(key);
 
-        const command = new DeleteObjectCommand({
+        ctx.response.status = 200;
+        ctx.response.body = { success: true, message: "Archivo eliminado" };
+
+    } catch (error) {
+        console.error("Error controller S3:", error);
+        ctx.response.status = 500;
+        ctx.response.body = { error: "Error al eliminar archivo" };
+    }
+};
+
+export const obtenerUrlLectura = async (ctx: any) => {
+    try {
+        const body = await ctx.request.body.json();
+        const { key } = body;
+
+        if (!key) {
+            ctx.response.status = 400;
+            ctx.response.body = { success: false, message: "Falta el 'key' del archivo" };
+            return;
+        }
+        const command = new GetObjectCommand({
             Bucket: BUCKET_NAME,
             Key: key,
         });
 
-        await s3Client.send(command);
-        ctx.response.body = { success: true, message: "Archivo eliminado" };
+        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
+        ctx.response.body = { success: true, url };
     } catch (error) {
-        console.error("Error eliminando S3:", error);
         ctx.response.status = 500;
-        ctx.response.body = { error: "Error al eliminar archivo" };
+        ctx.response.body = { success: false, error: error };
     }
 };
