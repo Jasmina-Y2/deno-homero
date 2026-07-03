@@ -20,7 +20,8 @@ import {
 import {
     crearColeccionController,
     mostrarColeccionesPorAutorController,
-    getColeccionesUsuario
+    getColeccionesPorId,
+    getTodasLasColecciones
 } from "../controllers/coleccion.controller.ts"
 
 import {
@@ -57,6 +58,7 @@ import { guardarComentario, obtenerComentarios } from "../controllers/comentario
 import { checkStoryViewed } from "../controllers/vistasuser.controller.ts";
 import { getHistoriasPorCategoria } from "../controllers/categoriahistoria.controller.ts";
 import { loginAndSync } from "../controllers/auth.controller.ts";
+import { transformarHistoriaSSML, generateMultivoiceAudio } from "../controllers/ia.controller.ts"
 
 const router = new Router();
 
@@ -106,8 +108,10 @@ router.post("/api/comentarios/guardar", guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
 router.get("/api/historia-info/:id", getHistoriaById);
 
-router.get("/api/colecciones/mostrar/:uid", getColeccionesUsuario);
+router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
+router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);
+
 
 
 router.get("/api/likeuser/likes/:id", getLikesCount);
@@ -121,6 +125,9 @@ router.get("/api/likeuser/mostrar/:uid", getHistoriasLiked);
 router.get("/api/vistasuser/mostrar/:uid", getHistoriasVistas);
 
 router.get("/api/users/perfil/:uid", getUsuarioPerfil);
+
+router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
+router.post("/api/ia/multivoz", generateMultivoiceAudio);
 
 export default router;
 

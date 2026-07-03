@@ -56,4 +56,16 @@ export const getColeccionesPorIdService = async (uid: string) => {
     }
 };
 
+export const getTodasLasColeccionesService = async () => {
+    try {
+        const snapshot = await db.collection("Coleccion").get();
 
+        return snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+    } catch (error) {
+        console.error("❌ Error en getTodasLasColeccionesService:", error);
+        throw new Error("Error al obtener todas las colecciones");
+    }
+};

@@ -1,4 +1,4 @@
-import { crearColeccionService, mostrarColeccionesPorAutorService, getColeccionesPorIdService } from "../service/coleccion.service.ts"
+import { crearColeccionService,getTodasLasColeccionesService, mostrarColeccionesPorAutorService, getColeccionesPorIdService } from "../service/coleccion.service.ts"
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { ColeccionData } from "../models/coleccion.model.ts";
 
@@ -44,7 +44,7 @@ export const mostrarColeccionesPorAutorController = async (ctx: RouterContext<st
 };
 
 
-export const getColeccionesUsuario = async (ctx: RouterContext<string>) => {
+export const getColeccionesPorId = async (ctx: RouterContext<string>) => {
     try {
         const { uid } = ctx.params;
         if (!uid) {
@@ -54,6 +54,18 @@ export const getColeccionesUsuario = async (ctx: RouterContext<string>) => {
         }
         const data = await getColeccionesPorIdService(uid);
         ctx.response.body = { success: true, data };
+    } catch (error) {
+        ctx.response.status = 500;
+        ctx.response.body = { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+};
+
+
+export const getTodasLasColecciones = async (ctx: RouterContext<string>) => {
+    try {
+        const colecciones = await getTodasLasColeccionesService();
+        ctx.response.status = 200;
+        ctx.response.body = { success: true, data: colecciones };
     } catch (error) {
         ctx.response.status = 500;
         ctx.response.body = { success: false, error: error instanceof Error ? error.message : String(error) };
