@@ -5,7 +5,8 @@ import {
     obtenerCardsPorAutorService,
     getCardHistoriasService,
     incrementarVistasService,
-    getHistoriaByIdService
+    getHistoriaByIdService,
+    getHistoriasPorVistas
 } from "../service/historiaInfo.service.ts";
 
 export const crearHistoriaInfoController = async (ctx: RouterContext<string>) => {
@@ -104,5 +105,25 @@ export const getHistoriaById = async (ctx: RouterContext<string>) => {
     } catch (error: any) {
         ctx.response.status = 500;
         ctx.response.body = { success: false, error: error.message };
+    }
+};
+
+
+export const getHistoriasPorVistasController = async (ctx: RouterContext<string>) => {
+    try {
+        const historias = await getHistoriasPorVistas();
+
+        ctx.response.status = 200;
+        ctx.response.body = {
+            success: true,
+            data: historias
+        };
+
+    } catch (error) {
+        ctx.response.status = 500;
+        ctx.response.body = {
+            success: false,
+            error: error instanceof Error ? error.message : "Error al obtener info de la historia"
+        };
     }
 };

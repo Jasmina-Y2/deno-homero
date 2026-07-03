@@ -103,3 +103,24 @@ export const getHistoriaByIdService = async (id: string) => {
 };
 
 
+
+export const getHistoriasPorVistas = async () => {
+    try {
+        const snapshot = await db.collection("HistoriaInfo")
+            .orderBy("vistas", "desc")
+            .limit(10)
+            .get();
+
+        if (snapshot.empty) return [];
+
+        return snapshot.docs.map(doc => ({
+            idDoc: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error("❌ Error en getHistoriaByIdService:", error);
+        throw new Error("No se pudo obtener la información de la historia");
+    }
+};
+
+

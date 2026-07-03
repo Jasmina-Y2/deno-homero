@@ -9,7 +9,8 @@ import {
     getCardsPorAutor,
     getCardHistoriasController,
     incrementarVistas,
-    getHistoriaById
+    getHistoriaById,
+    getHistoriasPorVistasController
 } from "../controllers/historiainfo.controller.ts"
 import {
     crearCardHistoriaController,
@@ -77,6 +78,8 @@ router.delete("/api/card-historias/eliminar/:id", eliminarCardController);
 router.delete("/api/multimedia/limpiar/:id", eliminarMultimediaController);
 router.get("/api/historias-info/autor", getCardsPorAutor);
 router.get("/api/historias-info/mostrar", getCardHistoriasController);
+router.get("/api/historias-info/most-vistas", getHistoriasPorVistasController);
+
 
 router.post("/api/traductor", traducirTexto);
 router.get("/api/categorias/mostrar", getCategoriasController);
