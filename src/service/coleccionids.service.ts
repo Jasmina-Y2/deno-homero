@@ -40,7 +40,7 @@ export const getColeccionPorNombreService = async (docId: string) => {
 
         const historiasCompletas = await Promise.all(
             historiasIds.map(async (id) => {
-                const historiaSnap = await db.collection("CardHistoria")
+                const historiaSnap = await db.collection("HistoriaInfo")
                     .where("id", "==", id)
                     .get();
 
