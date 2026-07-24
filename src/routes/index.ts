@@ -21,6 +21,7 @@ import {
 } from "../controllers/cardhistoria.controller.ts";
 import {
   crearColeccionController,
+  eliminarColeccionesPorUid,
   getColeccionesPorId,
   getTodasLasColecciones,
   mostrarColeccionesPorAutorController,
@@ -80,8 +81,14 @@ const router = new Router();
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 
 router.post("/api/colecciones/crear", crearColeccionController);
-router.post("/api/coleccion-ids/crear", agregarHistoriaAColeccionController);
 router.get("/api/colecciones/mostrar", mostrarColeccionesPorAutorController);
+router.delete("/api/colecciones/eliminar/:uid", eliminarColeccionesPorUid);
+router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
+router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
+
+
+router.post("/api/coleccion-ids/crear", agregarHistoriaAColeccionController);
+
 
 router.post("/api/historias/crear", crearHistoriaController);
 router.post("/api/card-historias/crear", crearCardHistoriaController);
@@ -120,8 +127,6 @@ router.post("/api/comentarios/guardar", guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
 router.get("/api/historia-info/:id", getHistoriaById);
 
-router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
-router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);
 
 router.get("/api/likeuser/likes/:id", getLikesCount);

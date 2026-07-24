@@ -30,7 +30,7 @@ export const mostrarColeccionesPorAutorService = async (idAutor: string) => {
 
         if (querySnapshot.empty) return [];
 
-        return querySnapshot.docs.map((doc) => ({
+        return querySnapshot.docs.map((doc:any) => ({
             id: doc.id,
             ...doc.data(),
         }));
@@ -46,7 +46,7 @@ export const getColeccionesPorIdService = async (uid: string) => {
             .where("uid", "==", uid)
             .get();
 
-        return snapshot.docs.map((doc) => ({
+        return snapshot.docs.map((doc:any) => ({
             id: doc.id,
             ...doc.data(),
         }));
@@ -55,12 +55,29 @@ export const getColeccionesPorIdService = async (uid: string) => {
         throw new Error("Error al obtener las colecciones del usuario");
     }
 };
+export const eliminarColeccionesPorUidService = async (uid: string) => {
+    try {
+        const snapshot = await db.collection("Coleccion")
+            .where("uid", "==", uid)
+            .get();
+        if (snapshot.empty) {
+            return { message: "No se encontraron colecciones para este usuario." };
+        }
+        const deletePromises = snapshot.docs.map((doc:any) => doc.ref.delete());
+        await Promise.all(deletePromises);
+
+        return { message: "Colecciones eliminadas exitosamente." };
+    } catch (error) {
+        console.error("❌ Error en eliminarColeccionesPorUidService:", error);
+        throw new Error("Error al eliminar las colecciones del usuario");
+    }
+};
 
 export const getTodasLasColeccionesService = async () => {
     try {
         const snapshot = await db.collection("Coleccion").get();
 
-        return snapshot.docs.map((doc) => ({
+        return snapshot.docs.map((doc:any) => ({
             id: doc.id,
             ...doc.data(),
         }));
