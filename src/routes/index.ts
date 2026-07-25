@@ -62,6 +62,7 @@ import { getGenteQueMeSigue } from "../controllers/seguir.controller.ts";
 import {
   getUsuarioPerfil,
   getUsuarios,
+  verificarUsuarioEmail,
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
 import {
@@ -86,9 +87,7 @@ router.delete("/api/colecciones/eliminar/:uid", eliminarColeccionesPorUid);
 router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
 router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
 
-
 router.post("/api/coleccion-ids/crear", agregarHistoriaAColeccionController);
-
 
 router.post("/api/historias/crear", crearHistoriaController);
 router.post("/api/card-historias/crear", crearCardHistoriaController);
@@ -143,6 +142,7 @@ router.get("/api/likeuser/mostrar/:uid", getHistoriasLiked);
 router.get("/api/vistasuser/mostrar/:uid", getHistoriasVistas);
 
 router.get("/api/users/perfil/:uid", getUsuarioPerfil);
+router.get("/api/users/verificar-email/:email", verificarUsuarioEmail);
 
 router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
