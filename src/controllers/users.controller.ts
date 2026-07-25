@@ -1,5 +1,6 @@
 import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
+  crearUsuarioService,
   getUsuarioByEmailService,
   getUsuarioByUidService,
   getUsuariosService,
@@ -75,6 +76,27 @@ export const verificarUsuarioEmail = async (ctx: RouterContext<string>) => {
     ctx.response.body = {
       success: false,
       message: "Error verificando el email del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+export const crearUsuario = async (ctx: RouterContext<string>) => {
+  try {
+    const datos = await ctx.request.body.json();
+
+    const user = await crearUsuarioService(datos);
+
+    ctx.response.status = 201;
+    ctx.response.body = { success: true, data: user };
+  } catch (error: unknown) {
+    ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+    ctx.response.body = {
+      success: false,
+      message: "Error creando el perfil del usuario",
       error: errorMessage,
     };
   }

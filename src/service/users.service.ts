@@ -1,4 +1,5 @@
 import { db, fieldValue } from "../config/firebase.ts";
+import { DatosUsuario } from "../models/users.model.ts";
 export const getUsuariosService = async () => {
   try {
     const snapshot = await db.collection("users").get();
@@ -49,5 +50,33 @@ export const getUsuarioByEmailService = async (email: string) => {
   } catch (error) {
     console.error("❌ Error en getUsuarioByEmailService:", error);
     throw new Error("Error al verificar la existencia del email");
+  }
+};
+export const crearUsuarioService = async (datos: DatosUsuario) => {
+  try {
+    const metodoRegistro = datos.metodo || "email";
+
+    await db.collection("users").doc(datos.uid).set({
+      ...datos,
+      fechaRegistro: datos.fechaRegistro || new Date().toISOString(),
+      rol: "usuario",
+      activo: true,
+      metodo: metodoRegistro,
+    });
+
+    console.log(
+      `Usuario creado exitosamente con UID: ${datos.uid} vía ${metodoRegistro}`,
+    );
+
+    return {
+      idDoc: datos.uid,
+      ...datos,
+      rol: "usuario",
+      activo: true,
+      metodo: metodoRegistro,
+    };
+  } catch (error) {
+    console.error("Error en crearUsuarioService:", error);
+    throw new Error("Error al crear el perfil del usuario en la base de datos");
   }
 };

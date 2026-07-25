@@ -60,6 +60,7 @@ import {
 } from "../controllers/seguiruser.controller.ts";
 import { getGenteQueMeSigue } from "../controllers/seguir.controller.ts";
 import {
+  crearUsuario,
   getUsuarioPerfil,
   getUsuarios,
   verificarUsuarioEmail,
@@ -143,6 +144,7 @@ router.get("/api/vistasuser/mostrar/:uid", getHistoriasVistas);
 
 router.get("/api/users/perfil/:uid", getUsuarioPerfil);
 router.get("/api/users/verificar-email/:email", verificarUsuarioEmail);
+router.post("/api/users/crear", crearUsuario);
 
 router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
