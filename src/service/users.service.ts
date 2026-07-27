@@ -117,3 +117,39 @@ export const actualizarNombreUsuarioService = async (
     );
   }
 };
+export const actualizarFotoUsuarioService = async (
+  uid: string,
+  nuevaFotoURL: string,
+) => {
+  try {
+    const snapshot = await db.collection("users").where("uid", "==", uid).get();
+    if (snapshot.empty) {
+      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
+    }
+    const fechaActualizacion = new Date().toISOString();
+
+    const promesas = snapshot.docs.map((doc) => {
+      return doc.ref.update({
+        photoURL: nuevaFotoURL,
+        fechaActualizacion: fechaActualizacion,
+      });
+    });
+
+    await Promise.all(promesas);
+
+    console.log(
+      `Foto actualizada exitosamente a "${nuevaFotoURL}" para el campo UID: ${uid}`,
+    );
+
+    return {
+      uid: uid,
+      photoURL: nuevaFotoURL,
+      fechaActualizacion: fechaActualizacion,
+    };
+  } catch (error) {
+    console.error("Error en actualizarFotoUsuarioService:", error);
+    throw new Error(
+      "Error al modificar la foto del usuario en la base de datos",
+    );
+  }
+};

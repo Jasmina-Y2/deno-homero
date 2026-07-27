@@ -1,5 +1,6 @@
 import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
+  actualizarFotoUsuarioService,
   actualizarNombreUsuarioService,
   crearUsuarioService,
   getUsuarioByEmailService,
@@ -133,6 +134,40 @@ export const actualizarNombreUsuario = async (ctx: RouterContext<string>) => {
     ctx.response.body = {
       success: false,
       message: "Error actualizando el nombre del usuario",
+      error: errorMessage,
+    };
+  }
+};
+export const actualizarFotoUsuario = async (ctx: RouterContext<string>) => {
+  try {
+    const body = await ctx.request.body.json();
+    const { uid, nuevaFotoURL } = body;
+
+    if (!uid || !nuevaFotoURL) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: uid o nuevaFotoURL",
+      };
+      return;
+    }
+
+    const userActualizado = await actualizarFotoUsuarioService(
+      uid,
+      nuevaFotoURL,
+    );
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: userActualizado };
+  } catch (error: unknown) {
+    ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+
+    ctx.response.body = {
+      success: false,
+      message: "Error actualizando la foto del usuario",
       error: errorMessage,
     };
   }
