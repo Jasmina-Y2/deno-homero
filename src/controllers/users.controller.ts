@@ -1,5 +1,6 @@
 import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
+  actualizarNombreUsuarioService,
   crearUsuarioService,
   getUsuarioByEmailService,
   getUsuarioByUidService,
@@ -97,6 +98,41 @@ export const crearUsuario = async (ctx: RouterContext<string>) => {
     ctx.response.body = {
       success: false,
       message: "Error creando el perfil del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+export const actualizarNombreUsuario = async (ctx: RouterContext<string>) => {
+  try {
+    const body = await ctx.request.body.json();
+    const { uid, nuevoNombre } = body;
+
+    if (!uid || !nuevoNombre) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: uid o nuevoNombre",
+      };
+      return;
+    }
+
+    const userActualizado = await actualizarNombreUsuarioService(
+      uid,
+      nuevoNombre,
+    );
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: userActualizado };
+  } catch (error: unknown) {
+    ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+
+    ctx.response.body = {
+      success: false,
+      message: "Error actualizando el nombre del usuario",
       error: errorMessage,
     };
   }

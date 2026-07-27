@@ -80,3 +80,40 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
     throw new Error("Error al crear el perfil del usuario en la base de datos");
   }
 };
+
+export const actualizarNombreUsuarioService = async (
+  uid: string,
+  nuevoNombre: string,
+) => {
+  try {
+    const snapshot = await db.collection("users").where("uid", "==", uid).get();
+    if (snapshot.empty) {
+      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
+    }
+    const fechaActualizacion = new Date().toISOString();
+
+    const promesas = snapshot.docs.map((doc) => {
+      return doc.ref.update({
+        name: nuevoNombre,
+        fechaActualizacion: fechaActualizacion,
+      });
+    });
+
+    await Promise.all(promesas);
+
+    console.log(
+      `Nombre actualizado exitosamente a "${nuevoNombre}" para el campo UID: ${uid}`,
+    );
+
+    return {
+      uid: uid,
+      name: nuevoNombre,
+      fechaActualizacion: fechaActualizacion,
+    };
+  } catch (error) {
+    console.error("Error en actualizarNombreUsuarioService:", error);
+    throw new Error(
+      "Error al modificar el nombre del usuario en la base de datos",
+    );
+  }
+};
