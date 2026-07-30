@@ -329,9 +329,15 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       "VOICE_36": { id: "Brian", engine: "neural" },
     };
 
-    const promesasAudio = dialogos.map(async (pje) => {
-      const voiceConfig = v_map[pje.v] || { id: "Mia", engine: "standard" };
+// 1. Creamos la función para pausar (el delay)
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+    // 2. Aquí guardaremos los fragmentos de audio
+    const partesAudio: Uint8Array[] = [];
+
+    // 3. Reemplazamos el map por un for...of para procesar uno por uno
+    for (const pje of dialogos) {
+      const voiceConfig = v_map[pje.v] || { id: "Mia", engine: "standard" };
       const realVoiceId = voiceConfig.id as any;
       const engineToUse = voiceConfig.engine;
 
@@ -367,10 +373,11 @@ export const generateMultivoiceAudio = async (ctx: any) => {
         );
       }
 
-      return await res.AudioStream.transformToByteArray();
-    });
+      const byteArray = await res.AudioStream.transformToByteArray();
+      partesAudio.push(byteArray);
 
-    const partesAudio = await Promise.all(promesasAudio);
+      await delay(500);
+    }
 
     const longitudTotal = partesAudio.reduce(
       (acc, curr) => acc + curr.length,
