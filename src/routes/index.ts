@@ -79,6 +79,12 @@ import {
   generateMultivoiceAudio,
   transformarHistoriaSSML,
 } from "../controllers/ia.controller.ts";
+import {
+  crearSonido,
+  modificarSonido,
+  obtenerSonidoPorId,
+  obtenerSonidos,
+} from "../controllers/sonido.controller.ts";
 
 const router = new Router();
 
@@ -149,6 +155,11 @@ router.get("/api/users/verificar-email/:email", verificarUsuarioEmail);
 router.post("/api/users/crear", crearUsuario);
 router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
 router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
+
+router.post("/api/sonido/crear", crearSonido);
+router.get("/api/sonido/obtener", obtenerSonidos);
+router.get("/api/sonido/obtener/:id", obtenerSonidoPorId);
+router.put("/api/sonido/modificar/:id", modificarSonido);
 
 router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
