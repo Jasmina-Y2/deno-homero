@@ -62,6 +62,7 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       rol: "usuario",
       activo: true,
       metodo: metodoRegistro,
+      descripcion: "Soy creador original de homero",
     });
 
     console.log(
@@ -74,6 +75,7 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       rol: "usuario",
       activo: true,
       metodo: metodoRegistro,
+      descripcion: "Soy creador original de homero",
     };
   } catch (error) {
     console.error("Error en crearUsuarioService:", error);
@@ -117,6 +119,7 @@ export const actualizarNombreUsuarioService = async (
     );
   }
 };
+
 export const actualizarFotoUsuarioService = async (
   uid: string,
   nuevaFotoURL: string,
@@ -150,6 +153,43 @@ export const actualizarFotoUsuarioService = async (
     console.error("Error en actualizarFotoUsuarioService:", error);
     throw new Error(
       "Error al modificar la foto del usuario en la base de datos",
+    );
+  }
+};
+
+export const actualizarDescripcionUsuarioService = async (
+  uid: string,
+  nuevaDescripcion: string,
+) => {
+  try {
+    const snapshot = await db.collection("users").where("uid", "==", uid).get();
+    if (snapshot.empty) {
+      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
+    }
+    const fechaActualizacion = new Date().toISOString();
+
+    const promesas = snapshot.docs.map((doc) => {
+      return doc.ref.update({
+        descripcion: nuevaDescripcion,
+        fechaActualizacion: fechaActualizacion,
+      });
+    });
+
+    await Promise.all(promesas);
+
+    console.log(
+      `Descripción actualizada exitosamente a "${nuevaDescripcion}" para el campo UID: ${uid}`,
+    );
+
+    return {
+      uid: uid,
+      descripcion: nuevaDescripcion,
+      fechaActualizacion: fechaActualizacion,
+    };
+  } catch (error) {
+    console.error("Error en actualizarDescripcionUsuarioService:", error);
+    throw new Error(
+      "Error al modificar la descripción del usuario en la base de datos",
     );
   }
 };

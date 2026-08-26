@@ -60,6 +60,7 @@ import {
 } from "../controllers/seguiruser.controller.ts";
 import { getGenteQueMeSigue } from "../controllers/seguir.controller.ts";
 import {
+  actualizarDescripcionUsuario,
   actualizarFotoUsuario,
   actualizarNombreUsuario,
   crearUsuario,
@@ -155,6 +156,7 @@ router.get("/api/users/verificar-email/:email", verificarUsuarioEmail);
 router.post("/api/users/crear", crearUsuario);
 router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
 router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
+router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
 
 router.post("/api/sonido/crear", crearSonido);
 router.get("/api/sonido/obtener", obtenerSonidos);
