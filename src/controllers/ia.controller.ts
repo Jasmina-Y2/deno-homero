@@ -164,6 +164,46 @@ interface VoiceConfig {
   engine: "standard" | "neural";
 }
 
+/**
+ * Adapta y sanitiza el SSML según el motor de voz (standard o neural) de AWS Polly
+ */
+const prepararSSMLParaPolly = (rawText: string, engine: string): string => {
+  let content = String(rawText).trim();
+
+  // 1. Quitar <speak> y </speak> envolventes si ya vienen en el input
+  if (/^<speak\b[^>]*>/i.test(content)) {
+    content = content
+      .replace(/^<speak\b[^>]*>/i, "")
+      .replace(/<\/speak>$/i, "")
+      .trim();
+  }
+
+  // 2. Si no contiene etiquetas XML, es texto plano
+  if (!/<[a-zA-Z\/][^>]*>/.test(content)) {
+    content = content
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    content = `<prosody rate="90%">${content}</prosody>`;
+  } else {
+    // Si ya es SSML, solo escapamos los '&' que no formen parte de entidades válidas
+    content = content.replace(/&(?!(amp|lt|gt|quot|apos);)/g, "&amp;");
+  }
+
+  // 3. Adaptaciones para motores Neural (AWS Polly no soporta amazon:effect ni amazon:breath en neural)
+  if (engine === "neural") {
+    content = content
+      .replace(
+        /<amazon:effect\s+name=["']whispered["']>/gi,
+        '<prosody volume="x-soft" rate="90%">',
+      )
+      .replace(/<\/amazon:effect>/gi, "</prosody>")
+      .replace(/<amazon:breath\b[^>]*\/?>/gi, '<break time="200ms"/>');
+  }
+
+  return `<speak>${content}<break time="400ms"/></speak>`;
+};
+
 export const generateMultivoiceAudio = async (ctx: any) => {
   try {
     const body = await ctx.request.body.json();
@@ -219,11 +259,11 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       "VOICE_36": { id: "Brian", engine: "neural" },
     };
 
-    // 1. Creamos la función para pausar (el delay)
+    // 1. Función para pausar (delay)
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
 
-    // 2. Aquí guardaremos los fragmentos de audio
+    // 2. Fragmentos de audio procesados
     const partesAudio: Uint8Array[] = [];
 
     // 3. Procesamos los fragmentos uno por uno
@@ -242,15 +282,11 @@ export const generateMultivoiceAudio = async (ctx: any) => {
 
       const rawText = pje.texto || pje.Texto || pje.TEXTO || pje.t ||
         pje.text || "";
-      const safeText = String(rawText)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
 
-      if (!safeText.trim()) continue;
+      if (!String(rawText).trim()) continue;
 
-      const ssmlContent = `<prosody rate="90%">${safeText}</prosody>`;
-      const finalSSML = `<speak>${ssmlContent}<break time="400ms"/></speak>`;
+      // Preparamos el SSML correctamente
+      const finalSSML = prepararSSMLParaPolly(String(rawText), engineToUse);
 
       const command = new SynthesizeSpeechCommand({
         OutputFormat: "mp3",
@@ -265,7 +301,7 @@ export const generateMultivoiceAudio = async (ctx: any) => {
 
       if (!res.AudioStream) {
         throw new Error(
-          `AWS Polly no devolvió AudioStream para el fragmento: ${safeText}`,
+          `AWS Polly no devolvió AudioStream para el fragmento: ${rawText}`,
         );
       }
 
