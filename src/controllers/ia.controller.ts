@@ -51,117 +51,6 @@ const validarHistoriaCoherencia = async (
   }
 };
 
-/*
-export const transformarHistoriaSSML = async (ctx: any) => {
-  try {
-    const body = await ctx.request.body.json();
-    const personajesOriginales = body.personajes;
-    const textoOriginal = body.historia;
-
-    const apiKey = Deno.env.get("IA_KEY") || "";
-
-    if (!personajesOriginales || !textoOriginal) {
-      ctx.response.status = 400;
-      ctx.response.body = {
-        success: false,
-        error: "Faltan personajes o historia",
-      };
-      return;
-    }
-
-    const promptSistema =
-      `Eres un procesador de datos JSON estricto para un motor Text-to-Speech.
-Tu ÚNICA tarea es dividir la historia en fragmentos y asignar el "voice_id" correcto LEYENDO ESTRICTAMENTE la cabecera de "personajes" enviada por el usuario.
-
-REGLAS ABSOLUTAS:
-1. EXTRACCIÓN DINÁMICA: Identifica qué "voice_id" le pertenece al Narrador y cuál a los demás personajes en el JSON de entrada. Usa solo esos IDs.
-2. NARRACIÓN VS DIÁLOGO: La narración lleva la voz del Narrador. El diálogo lleva la voz del personaje.
-
-
-EJEMPLO ESTRUCTURAL GENÉRICO DE CÓMO CORTAR TEXTO MIXTO:
-Si el texto de entrada tiene esta estructura:
-"¡Cuidado! —gritó el personaje, saltando muy alto—. El techo colapsa."
-
-Tu salida DEBE dividirlo así, usando los IDs extraídos de tu cabecera:
-{
-  "dialogos": [
-    { "t": "¡Cuidado! ", "v": "<ID_DEL_PERSONAJE>" },
-    { "t": "—gritó el personaje, saltando muy alto—. ", "v": "<ID_DEL_NARRADOR>" },
-    { "t": "El techo colapsa.", "v": "<ID_DEL_PERSONAJE>" }
-  ]
-}`;
-
-    const mensajeUsuario = `
-PERSONAJES DISPONIBLES:
-${
-      JSON.stringify(
-        personajesOriginales.map((p: any) => ({
-          personaje: p.nombre,
-          voice_id: p.voice_id,
-        })),
-      )
-    }
-
-HISTORIA A SEGMENTAR:
-"""
-${textoOriginal}
-"""
-`;
-
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`, // Aquí va la llave de Groq
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile", // Modelo gratuito y excelente para JSON
-          messages: [
-            { role: "system", content: promptSistema },
-            { role: "user", content: mensajeUsuario },
-          ],
-          temperature: 0,
-          response_format: { type: "json_object" },
-        }),
-      },
-    );
-
-    const data = await response.json();
-
-    // 1. Verificamos si OpenAI devolvió un error explícito
-    if (data.error) {
-      console.error("❌ Detalle del error de OpenAI:", data.error);
-      throw new Error(`OpenAI falló: ${data.error.message}`);
-    }
-
-    // 2. Verificamos la estructura esperada
-    if (!data.choices || !data.choices[0]) {
-      console.error("❌ Respuesta extraña completa:", data);
-      throw new Error("OpenAI no devolvió el array 'choices'");
-    }
-
-    const resultadoEstructurado = JSON.parse(
-      data.choices[0].message.content.trim(),
-    );
-
-    ctx.response.status = 200;
-    ctx.response.body = {
-      success: true,
-      personajes: personajesOriginales,
-      dialogos: resultadoEstructurado.dialogos,
-    };
-  } catch (error) {
-    console.error("❌ Error con OpenAI:", error);
-    ctx.response.status = 500;
-    ctx.response.body = {
-      success: false,
-      error: error instanceof Error ? error.message : "Error fatal",
-    };
-  }
-};*/
-
 export const transformarHistoriaSSML = async (ctx: any) => {
   try {
     const body = await ctx.request.body.json();
@@ -278,12 +167,13 @@ interface VoiceConfig {
 export const generateMultivoiceAudio = async (ctx: any) => {
   try {
     const body = await ctx.request.body.json();
-    const { dialogos } = body;
+    const dialogos = body.HISTORIA || body.historia || body.dialogos || body.segments;
 
     if (!Array.isArray(dialogos) || dialogos.length === 0) {
       ctx.response.status = 400;
       ctx.response.body = {
-        error: "Debes enviar un array de diálogos válido y no vacío",
+        success: false,
+        error: "Debes enviar un array 'HISTORIA' o 'dialogos' válido y no vacío",
       };
       return;
     }
@@ -329,31 +219,37 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       "VOICE_36": { id: "Brian", engine: "neural" },
     };
 
-// 1. Creamos la función para pausar (el delay)
-    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    // 1. Creamos la función para pausar (el delay)
+    const delay = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
 
     // 2. Aquí guardaremos los fragmentos de audio
     const partesAudio: Uint8Array[] = [];
 
-    // 3. Reemplazamos el map por un for...of para procesar uno por uno
+    // 3. Procesamos los fragmentos uno por uno
     for (const pje of dialogos) {
-      const voiceConfig = v_map[pje.v] || { id: "Mia", engine: "standard" };
+      const rawVoice = pje.personaje || pje.Personaje || pje.PERSONAJE ||
+        pje.v || pje.voice || pje.voz || "VOICE_1";
+      const normalizedVoiceKey = String(rawVoice).trim().toUpperCase();
+
+      const voiceConfig = v_map[normalizedVoiceKey] ||
+        (typeof rawVoice === "string" && !rawVoice.startsWith("VOICE_")
+          ? { id: rawVoice, engine: "standard" }
+          : { id: "Mia", engine: "standard" });
+
       const realVoiceId = voiceConfig.id as any;
       const engineToUse = voiceConfig.engine;
 
-      const safeText = pje.t
+      const rawText = pje.texto || pje.Texto || pje.TEXTO || pje.t ||
+        pje.text || "";
+      const safeText = String(rawText)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-      let ssmlContent = "";
+      if (!safeText.trim()) continue;
 
-      if (pje.v === "VOICE_N") {
-        ssmlContent = `<prosody rate="90%">${safeText}</prosody>`;
-      } else {
-        ssmlContent = `<prosody rate="90%">${safeText}</prosody>`;
-      }
-
+      const ssmlContent = `<prosody rate="90%">${safeText}</prosody>`;
       const finalSSML = `<speak>${ssmlContent}<break time="400ms"/></speak>`;
 
       const command = new SynthesizeSpeechCommand({
@@ -379,6 +275,15 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       await delay(500);
     }
 
+    if (partesAudio.length === 0) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        error: "No se generó ningún fragmento de audio válido.",
+      };
+      return;
+    }
+
     const longitudTotal = partesAudio.reduce(
       (acc, curr) => acc + curr.length,
       0,
@@ -392,7 +297,6 @@ export const generateMultivoiceAudio = async (ctx: any) => {
     }
 
     const fileName = `historia_${Date.now()}.mp3`;
-
     const urlS3 = await uploadToS3(audioFinal, fileName, "audio/mpeg");
 
     ctx.response.status = 200;
@@ -400,15 +304,16 @@ export const generateMultivoiceAudio = async (ctx: any) => {
     ctx.response.body = {
       success: true,
       audioUrl: urlS3,
+      url: urlS3,
       mensaje: "Audio generado y guardado con éxito",
     };
   } catch (error) {
-    console.error("Error crítico en secuencia Multivoz:", error);
+    console.error("Error crítico en secuencia Multivoz Polly:", error);
     ctx.response.status = 500;
     ctx.response.body = {
       success: false,
       error: "Fallo en la síntesis o ensamblaje del audio",
-      detalle: error || error,
+      detalle: error instanceof Error ? error.message : String(error),
     };
   }
 };
