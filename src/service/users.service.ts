@@ -198,6 +198,8 @@ export const actualizarSuscripcionUsuarioService = async (
   uid: string,
   nuevaSuscripcion: boolean,
   verificado: boolean,
+  fechaSuscripcion: string | null = null,
+  fechaVencimiento: string | null = null,
   diasDuracion: number = 30,
   elevensLabCount: number = 15,
 ) => {
@@ -209,17 +211,7 @@ export const actualizarSuscripcionUsuarioService = async (
 
     const ahora = new Date();
     const fechaActualizacion = ahora.toISOString();
-
-    let fechaSuscripcion: string | null = null;
-    let fechaVencimiento: string | null = null;
     const elevensLab = nuevaSuscripcion ? elevensLabCount : 0;
-
-    if (nuevaSuscripcion) {
-      fechaSuscripcion = ahora.toISOString();
-      const fechaVenc = new Date(ahora);
-      fechaVenc.setDate(fechaVenc.getDate() + diasDuracion);
-      fechaVencimiento = fechaVenc.toISOString();
-    }
 
     const dataActualizada = {
       suscription: nuevaSuscripcion,
