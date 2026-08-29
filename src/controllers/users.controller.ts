@@ -3,6 +3,7 @@ import {
   actualizarDescripcionUsuarioService,
   actualizarFotoUsuarioService,
   actualizarNombreUsuarioService,
+  actualizarSuscripcionUsuarioService,
   crearUsuarioService,
   getUsuarioByEmailService,
   getUsuarioByUidService,
@@ -210,3 +211,47 @@ export const actualizarFotoUsuario = async (ctx: RouterContext<string>) => {
     };
   }
 };
+
+export const actualizarSuscripcionUsuario = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const body = await ctx.request.body.json();
+    const { uid, nuevaSuscripcion, verificado, diasDuracion } = body;
+
+    if (!uid || nuevaSuscripcion === undefined || verificado === undefined) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: uid, nuevaSuscripcion o verificado",
+      };
+      return;
+    }
+
+    const dias = typeof diasDuracion === "number" && diasDuracion > 0
+      ? diasDuracion
+      : 30;
+
+    const userActualizado = await actualizarSuscripcionUsuarioService(
+      uid,
+      Boolean(nuevaSuscripcion),
+      Boolean(verificado),
+      dias,
+    );
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: userActualizado };
+  } catch (error: unknown) {
+    ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+
+    ctx.response.body = {
+      success: false,
+      message: "Error actualizando la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
+

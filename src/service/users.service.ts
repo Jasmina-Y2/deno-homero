@@ -10,6 +10,27 @@ export const getUsuariosService = async () => {
   }
 };
 
+const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
+  if (data && data.suscription && data.fechaVencimiento) {
+    const ahora = new Date();
+    const fechaVenc = new Date(data.fechaVencimiento);
+    if (ahora > fechaVenc) {
+      data.suscription = false;
+      data.verificado = false;
+      try {
+        await docRef.update({
+          suscription: false,
+          verificado: false,
+          fechaActualizacion: ahora.toISOString(),
+        });
+      } catch (err) {
+        console.error("Error al actualizar expiración de suscripción:", err);
+      }
+    }
+  }
+  return data;
+};
+
 export const getUsuarioByUidService = async (uid: string) => {
   try {
     const snapshot = await db.collection("users")
@@ -22,9 +43,11 @@ export const getUsuarioByUidService = async (uid: string) => {
     }
 
     const userDoc = snapshot.docs[0];
+    const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
+
     return {
       idDoc: userDoc.id,
-      ...userDoc.data(),
+      ...data,
     };
   } catch (error) {
     console.error("❌ Error en getUsuarioByUidService:", error);
@@ -43,9 +66,11 @@ export const getUsuarioByEmailService = async (email: string) => {
     }
 
     const userDoc = snapshot.docs[0];
+    const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
+
     return {
       idDoc: userDoc.id,
-      ...userDoc.data(),
+      ...data,
     };
   } catch (error) {
     console.error("❌ Error en getUsuarioByEmailService:", error);
@@ -62,6 +87,10 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       rol: "usuario",
       activo: true,
       metodo: metodoRegistro,
+      suscription: false,
+      verificado: false,
+      fechaSuscripcion: null,
+      fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
     });
 
@@ -75,6 +104,10 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       rol: "usuario",
       activo: true,
       metodo: metodoRegistro,
+      suscription: false,
+      verificado: false,
+      fechaSuscripcion: null,
+      fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
     };
   } catch (error) {
@@ -153,6 +186,62 @@ export const actualizarFotoUsuarioService = async (
     console.error("Error en actualizarFotoUsuarioService:", error);
     throw new Error(
       "Error al modificar la foto del usuario en la base de datos",
+    );
+  }
+};
+
+export const actualizarSuscripcionUsuarioService = async (
+  uid: string,
+  nuevaSuscripcion: boolean,
+  verificado: boolean,
+  diasDuracion: number = 30,
+) => {
+  try {
+    const snapshot = await db.collection("users").where("uid", "==", uid).get();
+    if (snapshot.empty) {
+      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
+    }
+
+    const ahora = new Date();
+    const fechaActualizacion = ahora.toISOString();
+
+    let fechaSuscripcion: string | null = null;
+    let fechaVencimiento: string | null = null;
+
+    if (nuevaSuscripcion) {
+      fechaSuscripcion = ahora.toISOString();
+      const fechaVenc = new Date(ahora);
+      fechaVenc.setDate(fechaVenc.getDate() + diasDuracion);
+      fechaVencimiento = fechaVenc.toISOString();
+    }
+
+    const dataActualizada = {
+      suscription: nuevaSuscripcion,
+      verificado: verificado,
+      fechaActualizacion: fechaActualizacion,
+      fechaSuscripcion: fechaSuscripcion,
+      fechaVencimiento: fechaVencimiento,
+      diasDuracion: nuevaSuscripcion ? diasDuracion : 0,
+    };
+
+    const promesas = snapshot.docs.map((doc) => {
+      return doc.ref.update(dataActualizada);
+    });
+
+    await Promise.all(promesas);
+
+    console.log(
+      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. Vencimiento: ${fechaVencimiento}`,
+    );
+
+    return {
+      uid: uid,
+      ...dataActualizada,
+    };
+  } catch (error) {
+    console.error("Error en actualizarSuscripcionUsuarioService:", error);
+    throw new Error(
+      "Error al modificar la suscripción del usuario en la base de datos",
     );
   }
 };
