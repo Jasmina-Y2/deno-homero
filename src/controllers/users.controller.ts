@@ -217,7 +217,7 @@ export const actualizarSuscripcionUsuario = async (
 ) => {
   try {
     const body = await ctx.request.body.json();
-    const { uid, nuevaSuscripcion, verificado, diasDuracion } = body;
+    const { uid, nuevaSuscripcion, verificado, diasDuracion, ElevensLab, elevensLab } = body;
 
     if (!uid || nuevaSuscripcion === undefined || verificado === undefined) {
       ctx.response.status = 400;
@@ -232,11 +232,16 @@ export const actualizarSuscripcionUsuario = async (
       ? diasDuracion
       : 30;
 
+    const cantidadEleven = typeof ElevensLab === "number"
+      ? ElevensLab
+      : (typeof elevensLab === "number" ? elevensLab : 15);
+
     const userActualizado = await actualizarSuscripcionUsuarioService(
       uid,
       Boolean(nuevaSuscripcion),
       Boolean(verificado),
       dias,
+      cantidadEleven,
     );
 
     ctx.response.status = 200;

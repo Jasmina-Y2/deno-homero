@@ -17,10 +17,12 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
     if (ahora > fechaVenc) {
       data.suscription = false;
       data.verificado = false;
+      data.ElevensLab = 0;
       try {
         await docRef.update({
           suscription: false,
           verificado: false,
+          ElevensLab: 0,
           fechaActualizacion: ahora.toISOString(),
         });
       } catch (err) {
@@ -89,6 +91,7 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       metodo: metodoRegistro,
       suscription: false,
       verificado: false,
+      ElevensLab: 0,
       fechaSuscripcion: null,
       fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
@@ -106,6 +109,7 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       metodo: metodoRegistro,
       suscription: false,
       verificado: false,
+      ElevensLab: 0,
       fechaSuscripcion: null,
       fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
@@ -195,6 +199,7 @@ export const actualizarSuscripcionUsuarioService = async (
   nuevaSuscripcion: boolean,
   verificado: boolean,
   diasDuracion: number = 30,
+  elevensLabCount: number = 15,
 ) => {
   try {
     const snapshot = await db.collection("users").where("uid", "==", uid).get();
@@ -207,6 +212,7 @@ export const actualizarSuscripcionUsuarioService = async (
 
     let fechaSuscripcion: string | null = null;
     let fechaVencimiento: string | null = null;
+    const elevensLab = nuevaSuscripcion ? elevensLabCount : 0;
 
     if (nuevaSuscripcion) {
       fechaSuscripcion = ahora.toISOString();
@@ -218,6 +224,7 @@ export const actualizarSuscripcionUsuarioService = async (
     const dataActualizada = {
       suscription: nuevaSuscripcion,
       verificado: verificado,
+      ElevensLab: elevensLab,
       fechaActualizacion: fechaActualizacion,
       fechaSuscripcion: fechaSuscripcion,
       fechaVencimiento: fechaVencimiento,
@@ -231,7 +238,7 @@ export const actualizarSuscripcionUsuarioService = async (
     await Promise.all(promesas);
 
     console.log(
-      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. Vencimiento: ${fechaVencimiento}`,
+      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLab}. Vencimiento: ${fechaVencimiento}`,
     );
 
     return {
