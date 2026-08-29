@@ -201,7 +201,7 @@ export const actualizarSuscripcionUsuarioService = async (
   fechaSuscripcion: string | null = null,
   fechaVencimiento: string | null = null,
   diasDuracion: number = 30,
-  elevensLabCount: number = 15,
+  elevensLab: number = 15,
 ) => {
   try {
     const snapshot = await db.collection("users").where("uid", "==", uid).get();
@@ -211,12 +211,12 @@ export const actualizarSuscripcionUsuarioService = async (
 
     const ahora = new Date();
     const fechaActualizacion = ahora.toISOString();
-    const elevensLab = nuevaSuscripcion ? elevensLabCount : 0;
+    const elevensLabFinal = nuevaSuscripcion ? elevensLab : 0;
 
     const dataActualizada = {
       suscription: nuevaSuscripcion,
       verificado: verificado,
-      ElevensLab: elevensLab,
+      ElevensLab: elevensLabFinal,
       fechaActualizacion: fechaActualizacion,
       fechaSuscripcion: fechaSuscripcion,
       fechaVencimiento: fechaVencimiento,
@@ -230,7 +230,7 @@ export const actualizarSuscripcionUsuarioService = async (
     await Promise.all(promesas);
 
     console.log(
-      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLab}. Vencimiento: ${fechaVencimiento}`,
+      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLabFinal}. Vencimiento: ${fechaVencimiento}`,
     );
 
     return {

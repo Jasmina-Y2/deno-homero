@@ -10,18 +10,31 @@ import {
   getUsuariosService,
 } from "../service/users.service.ts";
 
+// ==========================================
+// OBTENER TODOS LOS USUARIOS
+// ==========================================
 export const getUsuarios = async (ctx: Context) => {
   try {
     const data = await getUsuariosService();
+    ctx.response.status = 200;
     ctx.response.body = { success: true, data };
-  } catch (error) {
+  } catch (error: unknown) {
     ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+
     ctx.response.body = {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      message: "Error obteniendo los usuarios",
+      error: errorMessage,
     };
   }
 };
+
+// ==========================================
+// OBTENER PERFIL POR UID
+// ==========================================
 export const getUsuarioPerfil = async (ctx: RouterContext<string>) => {
   try {
     const { uid } = ctx.params;
@@ -40,12 +53,14 @@ export const getUsuarioPerfil = async (ctx: RouterContext<string>) => {
       return;
     }
 
+    ctx.response.status = 200;
     ctx.response.body = { success: true, data: user };
   } catch (error: unknown) {
     ctx.response.status = 500;
     const errorMessage = error instanceof Error
       ? error.message
       : "Error desconocido";
+
     ctx.response.body = {
       success: false,
       message: "Error obteniendo el perfil del usuario",
@@ -53,6 +68,10 @@ export const getUsuarioPerfil = async (ctx: RouterContext<string>) => {
     };
   }
 };
+
+// ==========================================
+// VERIFICAR USUARIO POR EMAIL
+// ==========================================
 export const verificarUsuarioEmail = async (ctx: RouterContext<string>) => {
   try {
     const { email } = ctx.params;
@@ -71,12 +90,14 @@ export const verificarUsuarioEmail = async (ctx: RouterContext<string>) => {
       return;
     }
 
+    ctx.response.status = 200;
     ctx.response.body = { success: true, data: user };
   } catch (error: unknown) {
     ctx.response.status = 500;
     const errorMessage = error instanceof Error
       ? error.message
       : "Error desconocido";
+
     ctx.response.body = {
       success: false,
       message: "Error verificando el email del usuario",
@@ -85,6 +106,9 @@ export const verificarUsuarioEmail = async (ctx: RouterContext<string>) => {
   }
 };
 
+// ==========================================
+// CREAR USUARIO
+// ==========================================
 export const crearUsuario = async (ctx: RouterContext<string>) => {
   try {
     const datos = await ctx.request.body.json();
@@ -98,6 +122,7 @@ export const crearUsuario = async (ctx: RouterContext<string>) => {
     const errorMessage = error instanceof Error
       ? error.message
       : "Error desconocido";
+
     ctx.response.body = {
       success: false,
       message: "Error creando el perfil del usuario",
@@ -106,6 +131,9 @@ export const crearUsuario = async (ctx: RouterContext<string>) => {
   }
 };
 
+// ==========================================
+// ACTUALIZAR NOMBRE
+// ==========================================
 export const actualizarNombreUsuario = async (ctx: RouterContext<string>) => {
   try {
     const body = await ctx.request.body.json();
@@ -141,6 +169,9 @@ export const actualizarNombreUsuario = async (ctx: RouterContext<string>) => {
   }
 };
 
+// ==========================================
+// ACTUALIZAR DESCRIPCIÓN
+// ==========================================
 export const actualizarDescripcionUsuario = async (
   ctx: RouterContext<string>,
 ) => {
@@ -177,6 +208,10 @@ export const actualizarDescripcionUsuario = async (
     };
   }
 };
+
+// ==========================================
+// ACTUALIZAR FOTO
+// ==========================================
 export const actualizarFotoUsuario = async (ctx: RouterContext<string>) => {
   try {
     const body = await ctx.request.body.json();
@@ -212,6 +247,9 @@ export const actualizarFotoUsuario = async (ctx: RouterContext<string>) => {
   }
 };
 
+// ==========================================
+// ACTUALIZAR SUSCRIPCIÓN
+// ==========================================
 export const actualizarSuscripcionUsuario = async (
   ctx: RouterContext<string>,
 ) => {
@@ -221,11 +259,10 @@ export const actualizarSuscripcionUsuario = async (
       uid,
       nuevaSuscripcion,
       verificado,
-      diasDuracion,
-      ElevensLab,
-      elevensLab,
       fechaSuscripcion,
       fechaVencimiento,
+      diasDuracion,
+      elevensLab,
     } = body;
 
     if (!uid || nuevaSuscripcion === undefined || verificado === undefined) {
@@ -237,22 +274,14 @@ export const actualizarSuscripcionUsuario = async (
       return;
     }
 
-    const dias = typeof diasDuracion === "number" && diasDuracion > 0
-      ? diasDuracion
-      : 30;
-
-    const cantidadEleven = typeof ElevensLab === "number"
-      ? ElevensLab
-      : (typeof elevensLab === "number" ? elevensLab : 15);
-
     const userActualizado = await actualizarSuscripcionUsuarioService(
       uid,
       Boolean(nuevaSuscripcion),
       Boolean(verificado),
       fechaSuscripcion ?? null,
       fechaVencimiento ?? null,
-      dias,
-      cantidadEleven,
+      diasDuracion,
+      elevensLab,
     );
 
     ctx.response.status = 200;
@@ -270,4 +299,3 @@ export const actualizarSuscripcionUsuario = async (
     };
   }
 };
-
