@@ -87,6 +87,7 @@ import {
   obtenerSonidoPorId,
   obtenerSonidos,
 } from "../controllers/sonido.controller.ts";
+import { revenueCatWebhookController } from "../controllers/revenuecat.controller.ts";
 
 const router = new Router();
 
@@ -159,6 +160,7 @@ router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
 router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
 router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
 router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
+router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
 router.post("/api/sonido/crear", crearSonido);
 router.get("/api/sonido/obtener", obtenerSonidos);
