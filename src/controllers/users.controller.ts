@@ -8,6 +8,7 @@ import {
   getUsuarioByEmailService,
   getUsuarioByUidService,
   getUsuariosService,
+  guardarFcmTokenService,
 } from "../service/users.service.ts";
 
 // ==========================================
@@ -299,3 +300,43 @@ export const actualizarSuscripcionUsuario = async (
     };
   }
 };
+
+// ==========================================
+// GUARDAR TOKEN FCM
+// ==========================================
+export const guardarFcmToken = async (ctx: Context) => {
+  try {
+    const body = await ctx.request.body.json();
+    const { uid, fcmToken } = body;
+
+    if (!uid || !fcmToken) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta uid o fcmToken",
+      };
+      return;
+    }
+
+    const resultado = await guardarFcmTokenService(uid, fcmToken);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Token guardado en el backend",
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    ctx.response.status = 500;
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+
+    ctx.response.body = {
+      success: false,
+      message: "Error al guardar el token en el backend",
+      error: errorMessage,
+    };
+  }
+};
+

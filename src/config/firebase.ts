@@ -1,12 +1,9 @@
-import { initializeApp, cert } from "npm:firebase-admin/app";
+import { initializeApp, cert, getApps } from "npm:firebase-admin/app";
 import { getFirestore, FieldValue } from "npm:firebase-admin/firestore";
 import { getStorage } from "npm:firebase-admin/storage"; // Importante para subir imágenes desde el back
+import { getMessaging } from "npm:firebase-admin/messaging";
 
 const getServiceAccount = async () => {
-    for await (const dirEntry of Deno.readDir(Deno.cwd())) {
-        console.log(" -", dirEntry.name);
-    }
-
     try {
         const json = await Deno.readTextFile("./src/config/serviceAccountKey.json");
         return JSON.parse(json);
@@ -21,11 +18,13 @@ const getServiceAccount = async () => {
 
 const serviceAccount = await getServiceAccount();
 
-initializeApp({
-    credential: cert(serviceAccount),
-    projectId: "ciarv-2dfcc",
-    storageBucket: "ciarv-2dfcc.appspot.com"
-});
+if (!getApps().length) {
+    initializeApp({
+        credential: cert(serviceAccount),
+        projectId: "ciarv-2dfcc",
+        storageBucket: "ciarv-2dfcc.appspot.com"
+    });
+}
 
 const db = getFirestore();
 
@@ -37,8 +36,10 @@ try {
     console.warn("⚠️ No se pudo activar modo REST:", error);
 }
 
+export const messaging = getMessaging();
 export { db };
 export const bucket = getStorage().bucket();
 export const fieldValue = FieldValue;
 
-console.log("🔥 Firebase Admin conectado a: ciarv-2dfcc");
+console.log("🔥 Firebase Admin conectado a: ciarv-2dfcc (Firestore, Storage, Messaging)");
+

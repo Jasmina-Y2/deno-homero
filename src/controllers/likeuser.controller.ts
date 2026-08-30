@@ -1,5 +1,5 @@
 import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
-import { checkIfLikedService, toggleLikeService, obtenerTotalLikesService, getHistoriasConLikeService } from "../service/likeuser.service.ts";
+import { checkIfLikedService, toggleLikeService, obtenerTotalLikesService, getHistoriasConLikeService, guardarLikeHistoriaService } from "../service/likeuser.service.ts";
 
 export const checkLikeStatus = async (ctx: Context) => {
     try {
@@ -29,10 +29,13 @@ export const checkLikeStatus = async (ctx: Context) => {
         ctx.response.body = { success: false, message: "Error interno del servidor", error: errorMessage };
     }
 };
+
 export const toggleLike = async (ctx: Context) => {
     try {
         const body = await ctx.request.body.json();
-        const { idPublicacion, idUsuario } = body;
+        const idPublicacion = body.idPublicacion || body.idHistoria;
+        const idUsuario = body.idUsuario || (typeof body.usuarioQueDaLike === "object" ? body.usuarioQueDaLike?.uid : body.usuarioQueDaLike);
+        const { idAutorHistoria, usuarioQueDaLike, nombreUsuario } = body;
 
         if (!idPublicacion || !idUsuario) {
             ctx.response.status = 400;
@@ -40,7 +43,11 @@ export const toggleLike = async (ctx: Context) => {
             return;
         }
 
-        const result = await toggleLikeService(idPublicacion, idUsuario);
+        const result = await toggleLikeService(idPublicacion, idUsuario, {
+            idAutorHistoria,
+            usuarioQueDaLike,
+            nombreUsuario,
+        });
 
         ctx.response.status = 200;
         ctx.response.body = { success: true, ...result };
@@ -50,6 +57,38 @@ export const toggleLike = async (ctx: Context) => {
         ctx.response.body = { success: false, message: "Error gestionando el like", error: errorMessage };
     }
 };
+
+export const darLikeHistoriaController = async (ctx: Context) => {
+    try {
+        const body = await ctx.request.body.json();
+        const idHistoria = body.idHistoria || body.idPublicacion;
+        const idAutorHistoria = body.idAutorHistoria;
+        const usuarioQueDaLike = body.usuarioQueDaLike || body.idUsuario;
+
+        if (!idHistoria || !usuarioQueDaLike) {
+            ctx.response.status = 400;
+            ctx.response.body = {
+                success: false,
+                message: "Faltan datos requeridos: idHistoria o usuarioQueDaLike",
+            };
+            return;
+        }
+
+        const result = await guardarLikeHistoriaService(
+            idHistoria,
+            idAutorHistoria,
+            usuarioQueDaLike,
+        );
+
+        ctx.response.status = 200;
+        ctx.response.body = { success: true, ...result };
+    } catch (error: unknown) {
+        ctx.response.status = 500;
+        const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+        ctx.response.body = { success: false, message: "Error procesando like de historia", error: errorMessage };
+    }
+};
+
 export const getLikesCount = async (ctx: RouterContext<string>) => {
     try {
         const id = ctx.params.id;

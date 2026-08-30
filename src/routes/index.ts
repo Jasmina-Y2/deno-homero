@@ -40,6 +40,7 @@ import {
 
 import {
   checkLikeStatus,
+  darLikeHistoriaController,
   getHistoriasLiked,
   getLikesCount,
   toggleLike,
@@ -67,6 +68,7 @@ import {
   crearUsuario,
   getUsuarioPerfil,
   getUsuarios,
+  guardarFcmToken,
   verificarUsuarioEmail,
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
@@ -123,9 +125,12 @@ router.post("/api/historia/audio/obtener", obtenerAudios);
 router.put("/api/historia-info/vistas/:id", incrementarVistas);
 router.post("/api/vistas-user/registrar", registrarVistaUsuario);
 router.post("/api/like-user/like", toggleLike);
+router.post("/api/historias/like", darLikeHistoriaController);
 
 router.post("/api/seguiruser/seguir", seguirUsuario);
 router.post("/api/seguiruser/dejar-seguir", dejarDeSeguir);
+router.post("/api/users/guardar-token", guardarFcmToken);
+
 
 router.get("/api/seguiruser/seguidores/:uid", getGenteQueMeSigue);
 router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);

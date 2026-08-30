@@ -1,5 +1,13 @@
 import { db, fieldValue } from "../config/firebase.ts";
 import { actualizarLikesHelper } from "./historiaInfo.service.ts";
+import { enviarPushAUsuario } from "./notification.service.ts";
+
+export interface LikeExtraData {
+  idAutorHistoria?: string;
+  usuarioQueDaLike?: { uid?: string; name?: string } | string;
+  nombreUsuario?: string;
+}
+
 export const checkIfLikedService = async (idPublicacion: string, idUsuario: string): Promise<boolean> => {
     try {
         const docRef = db.collection("likesUsuarios").doc(idPublicacion);
@@ -17,7 +25,11 @@ export const checkIfLikedService = async (idPublicacion: string, idUsuario: stri
     }
 };
 
-export const toggleLikeService = async (idPublicacion: string, idUsuario: string) => {
+export const toggleLikeService = async (
+    idPublicacion: string,
+    idUsuario: string,
+    extraData?: LikeExtraData,
+) => {
     try {
         const likeRef = db.collection("likesUsuarios").doc(idPublicacion);
         const userLikeRef = db.collection("Likeuser").doc(idUsuario);
@@ -45,6 +57,57 @@ export const toggleLikeService = async (idPublicacion: string, idUsuario: string
 
             isLiked = true;
             nuevoTotal = usuarios.length + 1;
+
+            // Disparar Notificación Push al autor
+            try {
+                let autorUid = extraData?.idAutorHistoria;
+                let storyTitle = "tu historia";
+
+                if (!autorUid) {
+                    const cardSnap = await db.collection("CardHistoria").where("id", "==", idPublicacion).get();
+                    if (!cardSnap.empty) {
+                        const cardData = cardSnap.docs[0].data();
+                        autorUid = cardData.idAutor;
+                        if (cardData.titulo) storyTitle = cardData.titulo;
+                    } else {
+                        const directCard = await db.collection("CardHistoria").doc(idPublicacion).get();
+                        if (directCard.exists) {
+                            const cardData = directCard.data();
+                            autorUid = cardData?.idAutor;
+                            if (cardData?.titulo) storyTitle = cardData.titulo;
+                        }
+                    }
+                }
+
+                // Notificar si no es su propia historia
+                if (autorUid && autorUid !== idUsuario) {
+                    let nombreLiker = "Alguien";
+                    if (extraData?.nombreUsuario) {
+                        nombreLiker = extraData.nombreUsuario;
+                    } else if (typeof extraData?.usuarioQueDaLike === "object" && extraData.usuarioQueDaLike?.name) {
+                        nombreLiker = extraData.usuarioQueDaLike.name;
+                    } else {
+                        const userSnap = await db.collection("users").doc(idUsuario).get();
+                        if (userSnap.exists) {
+                            nombreLiker = userSnap.data()?.name || "Un usuario";
+                        } else {
+                            const qUser = await db.collection("users").where("uid", "==", idUsuario).get();
+                            if (!qUser.empty) {
+                                nombreLiker = qUser.docs[0].data()?.name || "Un usuario";
+                            }
+                        }
+                    }
+
+                    await enviarPushAUsuario(
+                        autorUid,
+                        "❤️ ¡Nuevo Me Gusta!",
+                        `A ${nombreLiker} le gustó tu historia.`,
+                        { idHistoria: idPublicacion, tipo: "like" },
+                    );
+                }
+            } catch (pushErr) {
+                console.warn("⚠️ No se pudo enviar push de like:", pushErr);
+            }
         }
         return { like: isLiked, total: nuevoTotal };
 
@@ -53,6 +116,26 @@ export const toggleLikeService = async (idPublicacion: string, idUsuario: string
         throw error;
     }
 };
+
+export const guardarLikeHistoriaService = async (
+    idHistoria: string,
+    idAutorHistoria?: string,
+    usuarioQueDaLike?: { uid?: string; name?: string } | string,
+) => {
+    const uid = typeof usuarioQueDaLike === "object" ? usuarioQueDaLike?.uid : usuarioQueDaLike;
+    const nombre = typeof usuarioQueDaLike === "object" ? usuarioQueDaLike?.name : undefined;
+
+    if (!uid) {
+        throw new Error("UID de usuario requerido para dar like");
+    }
+
+    return await toggleLikeService(idHistoria, uid, {
+        idAutorHistoria,
+        usuarioQueDaLike,
+        nombreUsuario: nombre,
+    });
+};
+
 export const obtenerTotalLikesService = async (idPublicacion: string) => {
     try {
         const likeSnap = await db.collection("likesUsuarios").doc(idPublicacion).get();

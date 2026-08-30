@@ -3,13 +3,26 @@ import { seguirUsuarioService, dejarDeSeguirService, getGenteQueYoSigoService } 
 
 /**
  * Controlador para que un usuario empiece a seguir a otro.
- * Se espera un método POST con un JSON que contenga miUid y uidASeguir.
+ * Soporta { miUid, uidASeguir } o { idSeguidor, idSeguido, nombreSeguidor }.
  */
 export const seguirUsuario = async (ctx: Context) => {
     try {
-        const { miUid, uidASeguir } = await ctx.request.body.json();
-        await seguirUsuarioService(miUid, uidASeguir);
-        ctx.response.body = { success: true, message: "Usuario seguido" };
+        const body = await ctx.request.body.json();
+        const miUid = body.miUid || body.idSeguidor;
+        const uidASeguir = body.uidASeguir || body.idSeguido;
+        const nombreSeguidor = body.nombreSeguidor;
+
+        if (!miUid || !uidASeguir) {
+            ctx.response.status = 400;
+            ctx.response.body = {
+                success: false,
+                message: "Faltan datos requeridos: miUid (o idSeguidor) y uidASeguir (o idSeguido)"
+            };
+            return;
+        }
+
+        await seguirUsuarioService(miUid, uidASeguir, nombreSeguidor);
+        ctx.response.body = { success: true, message: "Usuario seguido con éxito" };
     } catch (error) {
         ctx.response.status = 500;
         ctx.response.body = {

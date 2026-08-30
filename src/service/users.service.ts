@@ -281,3 +281,53 @@ export const actualizarDescripcionUsuarioService = async (
     );
   }
 };
+
+export const guardarFcmTokenService = async (
+  uid: string,
+  fcmToken: string,
+) => {
+  try {
+    const fechaActualizacion = new Date().toISOString();
+
+    const userDocRef = db.collection("users").doc(uid);
+    const docSnap = await userDocRef.get();
+
+    if (docSnap.exists) {
+      await userDocRef.update({
+        fcmToken: fcmToken,
+        tokenActualizadoEn: fechaActualizacion,
+        fechaActualizacion: fechaActualizacion,
+      });
+    } else {
+      const snapshot = await db.collection("users").where("uid", "==", uid).get();
+      if (!snapshot.empty) {
+        const promesas = snapshot.docs.map((doc) =>
+          doc.ref.update({
+            fcmToken: fcmToken,
+            tokenActualizadoEn: fechaActualizacion,
+            fechaActualizacion: fechaActualizacion,
+          })
+        );
+        await Promise.all(promesas);
+      } else {
+        await userDocRef.set({
+          uid: uid,
+          fcmToken: fcmToken,
+          tokenActualizadoEn: fechaActualizacion,
+          fechaActualizacion: fechaActualizacion,
+        }, { merge: true });
+      }
+    }
+
+    console.log(`✅ Token FCM guardado en base de datos para usuario: ${uid}`);
+    return {
+      uid,
+      fcmToken,
+      tokenActualizadoEn: fechaActualizacion,
+    };
+  } catch (error) {
+    console.error("❌ Error en guardarFcmTokenService:", error);
+    throw new Error("Error al guardar el FCM token en la base de datos");
+  }
+};
+
