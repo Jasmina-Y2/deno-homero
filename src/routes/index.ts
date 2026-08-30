@@ -90,8 +90,16 @@ import {
   obtenerSonidos,
 } from "../controllers/sonido.controller.ts";
 import { revenueCatWebhookController } from "../controllers/revenuecat.controller.ts";
+import {
+  eliminarNotificacion,
+  marcarNotificacionLeida,
+  marcarTodasNotificacionesLeidas,
+  obtenerConteoNoLeidas,
+  obtenerNotificacionesUsuario,
+} from "../controllers/notificaciones.controller.ts";
 
 const router = new Router();
+
 
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 
@@ -175,4 +183,12 @@ router.put("/api/sonido/modificar/:id", modificarSonido);
 router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
 
+// Notificaciones
+router.get("/api/notificaciones/:uid", obtenerNotificacionesUsuario);
+router.get("/api/notificaciones/no-leidas/:uid", obtenerConteoNoLeidas);
+router.put("/api/notificaciones/marcar-leida/:id", marcarNotificacionLeida);
+router.put("/api/notificaciones/marcar-todas-leidas/:uid", marcarTodasNotificacionesLeidas);
+router.delete("/api/notificaciones/eliminar/:id", eliminarNotificacion);
+
 export default router;
+
