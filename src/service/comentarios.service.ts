@@ -1,9 +1,66 @@
 import { db, fieldValue } from "../config/firebase.ts";
 import { enviarPushAUsuario } from "./notification.service.ts";
 
+// Función auxiliar para resolver el ID canónico de la historia
+const resolverIdCanonicoHistoria = async (
+  publicacionId: string
+): Promise<{ canonicalId: string; autorUid: string | null; tituloHistoria: string }> => {
+  let canonicalId = publicacionId;
+  let autorUid: string | null = null;
+  let tituloHistoria = "tu historia";
+
+  try {
+    // 1. Buscar por campo 'id'
+    const cardSnap = await db.collection("CardHistoria").where("id", "==", publicacionId).get();
+    if (!cardSnap.empty) {
+      const cardData = cardSnap.docs[0].data();
+      canonicalId = cardData.id || publicacionId;
+      autorUid = cardData.idAutor || null;
+      if (cardData.titulo) tituloHistoria = cardData.titulo;
+      return { canonicalId, autorUid, tituloHistoria };
+    }
+
+    // 2. Buscar por doc ID directo
+    const directCard = await db.collection("CardHistoria").doc(publicacionId).get();
+    if (directCard.exists) {
+      const cardData = directCard.data();
+      canonicalId = cardData?.id || publicacionId;
+      autorUid = cardData?.idAutor || null;
+      if (cardData?.titulo) tituloHistoria = cardData.titulo;
+      return { canonicalId, autorUid, tituloHistoria };
+    }
+
+    // 3. Buscar por campo 'customId'
+    const customSnap = await db.collection("CardHistoria").where("customId", "==", publicacionId).get();
+    if (!customSnap.empty) {
+      const cardData = customSnap.docs[0].data();
+      canonicalId = cardData.id || publicacionId;
+      autorUid = cardData.idAutor || null;
+      if (cardData.titulo) tituloHistoria = cardData.titulo;
+      return { canonicalId, autorUid, tituloHistoria };
+    }
+
+    // 4. Buscar en HistoriaInfo
+    const infoSnap = await db.collection("HistoriaInfo").where("id", "==", publicacionId).get();
+    if (!infoSnap.empty) {
+      const infoData = infoSnap.docs[0].data();
+      canonicalId = infoData.id || publicacionId;
+      autorUid = infoData.idAutor || null;
+      if (infoData.titulo) tituloHistoria = infoData.titulo;
+      return { canonicalId, autorUid, tituloHistoria };
+    }
+  } catch (err) {
+    console.warn("⚠️ Error resolviendo ID canónico de historia:", err);
+  }
+
+  return { canonicalId, autorUid, tituloHistoria };
+};
+
 export const guardarComentarioService = async (publicacionId: string, comentario: any) => {
   try {
-    const docRef = db.collection("Comentarios").doc(publicacionId);
+    const { canonicalId, autorUid } = await resolverIdCanonicoHistoria(publicacionId);
+
+    const docRef = db.collection("Comentarios").doc(canonicalId);
     await docRef.set({
       comentarios: fieldValue.arrayUnion(comentario),
     }, { merge: true });
@@ -11,33 +68,8 @@ export const guardarComentarioService = async (publicacionId: string, comentario
     // Disparar Notificación Push e Historial de Notificaciones al autor de la historia
     try {
       const idComentador = comentario?.idAutor;
-      let autorUid: string | null = null;
-      let tituloHistoria = "tu historia";
 
-      // 1. Buscar el autor de la historia en CardHistoria
-      const cardSnap = await db.collection("CardHistoria").where("id", "==", publicacionId).get();
-      if (!cardSnap.empty) {
-        const cardData = cardSnap.docs[0].data();
-        autorUid = cardData.idAutor;
-        if (cardData.titulo) tituloHistoria = cardData.titulo;
-      } else {
-        const directCard = await db.collection("CardHistoria").doc(publicacionId).get();
-        if (directCard.exists) {
-          const cardData = directCard.data();
-          autorUid = cardData?.idAutor;
-          if (cardData?.titulo) tituloHistoria = cardData.titulo;
-        } else {
-          // Buscar en HistoriaInfo por si acaso
-          const infoSnap = await db.collection("HistoriaInfo").where("id", "==", publicacionId).get();
-          if (!infoSnap.empty) {
-            const infoData = infoSnap.docs[0].data();
-            autorUid = infoData.idAutor;
-            if (infoData.titulo) tituloHistoria = infoData.titulo;
-          }
-        }
-      }
-
-      // 2. Notificar solo si el autor existe y no es la misma persona que comenta
+      // Notificar solo si el autor existe y no es la misma persona que comenta
       if (autorUid && autorUid !== idComentador) {
         let nombreComentador = comentario?.nombre || comentario?.autor || "Un usuario";
 
@@ -67,7 +99,7 @@ export const guardarComentarioService = async (publicacionId: string, comentario
           "💬 ¡Nuevo Comentario!",
           mensajePush,
           {
-            idHistoria: publicacionId,
+            idHistoria: canonicalId,
             tipo: "comentario",
             idComentador: idComentador || "",
             nombreComentador: nombreComentador,
@@ -88,9 +120,17 @@ export const guardarComentarioService = async (publicacionId: string, comentario
 
 export const obtenerComentariosService = async (publicacionId: string) => {
   try {
-    const docSnap = await db.collection("Comentarios").doc(publicacionId).get();
+    const { canonicalId } = await resolverIdCanonicoHistoria(publicacionId);
 
-    if (!docSnap.exists) return [];
+    const docSnap = await db.collection("Comentarios").doc(canonicalId).get();
+
+    if (!docSnap.exists) {
+      if (canonicalId !== publicacionId) {
+        const origSnap = await db.collection("Comentarios").doc(publicacionId).get();
+        if (origSnap.exists) return origSnap.data()?.comentarios || [];
+      }
+      return [];
+    }
 
     return docSnap.data()?.comentarios || [];
   } catch (error) {
