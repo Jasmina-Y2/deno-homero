@@ -97,6 +97,11 @@ import {
   obtenerConteoNoLeidas,
   obtenerNotificacionesUsuario,
 } from "../controllers/notificaciones.controller.ts";
+import {
+  actualizarEstadoReporteController,
+  crearReporteController,
+  obtenerReportesController,
+} from "../controllers/soporte.controller.ts";
 
 const router = new Router();
 
@@ -189,6 +194,12 @@ router.get("/api/notificaciones/no-leidas/:uid", obtenerConteoNoLeidas);
 router.put("/api/notificaciones/marcar-leida/:id", marcarNotificacionLeida);
 router.put("/api/notificaciones/marcar-todas-leidas/:uid", marcarTodasNotificacionesLeidas);
 router.delete("/api/notificaciones/eliminar/:id", eliminarNotificacion);
+
+// Soporte y Reportes de Error
+router.post("/api/soporte/reporte", crearReporteController);
+router.post("/soporte/reporte", crearReporteController);
+router.get("/api/soporte/reportes", obtenerReportesController);
+router.put("/api/soporte/reporte/:id/estado", actualizarEstadoReporteController);
 
 export default router;
 
