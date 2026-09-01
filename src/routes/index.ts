@@ -101,7 +101,10 @@ import {
   actualizarEstadoReporteController,
   crearReporteController,
   obtenerReportesController,
+  obtenerReportesUsuarioController,
+  responderReporteController,
 } from "../controllers/soporte.controller.ts";
+
 
 const router = new Router();
 
@@ -199,7 +202,10 @@ router.delete("/api/notificaciones/eliminar/:id", eliminarNotificacion);
 router.post("/api/soporte/reporte", crearReporteController);
 router.post("/soporte/reporte", crearReporteController);
 router.get("/api/soporte/reportes", obtenerReportesController);
+router.get("/api/soporte/reportes/usuario/:uid", obtenerReportesUsuarioController);
+router.post("/api/soporte/reporte/:id/responder", responderReporteController);
 router.put("/api/soporte/reporte/:id/estado", actualizarEstadoReporteController);
 
 export default router;
+
 

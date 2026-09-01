@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.ts";
 import { ReporteSoporte } from "../models/soporte.model.ts";
+import { enviarPushAUsuario } from "./notification.service.ts";
 
 /**
  * Envía una notificación a un chat/canal de Telegram si las variables de entorno están configuradas
@@ -47,14 +48,16 @@ export const crearReporteService = async (datos: Partial<ReporteSoporte>) => {
 
     const nuevoReporte: ReporteSoporte = {
       uid: datos.uid || "anonimo",
-      nombreUsuario: datos.nombreUsuario || "Usuario no identificado",
-      email: datos.email || "Sin email",
-      categoria: datos.categoria || "general",
-      asunto: datos.asunto || "Sin asunto",
+      nombreUsuario: datos.nombreUsuario || "Usuario",
+      email: datos.email || "",
+      categoria: datos.categoria || "otro",
+      asunto: datos.asunto || "Reporte de soporte",
       descripcion: datos.descripcion || "",
-      fecha: datos.fecha || fechaActual,
-      estado: datos.estado || "pendiente",
+      userAgent: datos.userAgent || "",
+      plataforma: datos.plataforma || "web",
       appVersion: datos.appVersion || "1.0.0",
+      estado: datos.estado || "pendiente",
+      fecha: datos.fecha || fechaActual,
       createdAt: fechaActual,
       metadata: datos.metadata || {},
     };
@@ -84,6 +87,7 @@ export const crearReporteService = async (datos: Partial<ReporteSoporte>) => {
     });
 
     return {
+      id: docRef.id,
       idDoc: docRef.id,
       ...nuevoReporte,
     };
@@ -94,7 +98,7 @@ export const crearReporteService = async (datos: Partial<ReporteSoporte>) => {
 };
 
 /**
- * Obtiene lista de reportes con filtros opcionales
+ * Obtiene lista de reportes con filtros opcionales ordenados por fecha descendente
  */
 export const obtenerReportesService = async (filtros?: {
   uid?: string;
@@ -122,13 +126,135 @@ export const obtenerReportesService = async (filtros?: {
     }
 
     const snapshot = await query.get();
-    return snapshot.docs.map((doc: any) => ({
+    const reportes = snapshot.docs.map((doc: any) => ({
+      id: doc.id,
       idDoc: doc.id,
       ...doc.data(),
     }));
+
+    // Ordenar por fecha descendente
+    reportes.sort((a: any, b: any) => {
+      const timeA = new Date(a.fecha || a.createdAt || 0).getTime();
+      const timeB = new Date(b.fecha || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return reportes;
   } catch (error) {
     console.error("❌ Error en obtenerReportesService:", error);
     throw new Error("Error al obtener los reportes");
+  }
+};
+
+/**
+ * Obtiene los reportes de un usuario específico ordenados por fecha descendente
+ */
+export const obtenerReportesUsuarioService = async (uid: string) => {
+  try {
+    const snapshot = await db
+      .collection("reportes_soporte")
+      .where("uid", "==", uid)
+      .get();
+
+    const reportes = snapshot.docs.map((doc: any) => ({
+      id: doc.id,
+      idDoc: doc.id,
+      ...doc.data(),
+    }));
+
+    // Ordenar de más reciente a más antiguo
+    reportes.sort((a: any, b: any) => {
+      const timeA = new Date(a.fecha || a.createdAt || 0).getTime();
+      const timeB = new Date(b.fecha || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return reportes;
+  } catch (error) {
+    console.error("❌ Error en obtenerReportesUsuarioService:", error);
+    throw new Error("Error al obtener los reportes del usuario");
+  }
+};
+
+/**
+ * Responde a un reporte y genera la notificación en Firestore para el usuario
+ */
+export const responderReporteService = async (
+  idDoc: string,
+  respuesta: string,
+  estado: string = "resuelto",
+  respondidoPor: string = "Equipo de Homero",
+) => {
+  try {
+    const reporteRef = db.collection("reportes_soporte").doc(idDoc);
+    const reporteDoc = await reporteRef.get();
+
+    if (!reporteDoc.exists) {
+      return null;
+    }
+
+    const reporteData = reporteDoc.data() || {};
+    const fechaRespuesta = new Date().toISOString();
+
+    // 1. Actualizar el reporte con la respuesta
+    await reporteRef.update({
+      respuesta,
+      estado,
+      fechaRespuesta,
+      respondidoPor,
+      updatedAt: fechaRespuesta,
+    });
+
+    // 2. Crear la notificación en la colección 'notificaciones' del usuario
+    if (reporteData.uid) {
+      const tituloNotif = "Respuesta de Soporte 🛠️";
+      const asuntoTexto = reporteData.asunto || "Reporte de soporte";
+      const mensajeNotif = `Hemos respondido a tu reporte "${asuntoTexto}": ${respuesta}`;
+
+      await db.collection("notificaciones").add({
+        uid: reporteData.uid,
+        idUsuario: reporteData.uid,
+        uidUsuario: reporteData.uid,
+        idDestinatario: reporteData.uid,
+        titulo: tituloNotif,
+        mensaje: mensajeNotif,
+        tipo: "soporte",
+        leido: false,
+        fecha: fechaRespuesta,
+        createdAt: fechaRespuesta,
+        data: {
+          tipo: "soporte",
+          idReporte: idDoc,
+          asunto: asuntoTexto,
+          respuesta: respuesta,
+        },
+      });
+
+      // 3. Enviar Push Notification adicional si el usuario cuenta con token FCM
+      try {
+        await enviarPushAUsuario(reporteData.uid, tituloNotif, mensajeNotif, {
+          tipo: "soporte",
+          idReporte: idDoc,
+          asunto: asuntoTexto,
+        });
+      } catch (pushErr) {
+        console.warn("⚠️ [Soporte] No se pudo enviar notificación push:", pushErr);
+      }
+    }
+
+    return {
+      id: idDoc,
+      idDoc,
+      ...reporteData,
+      respuesta,
+      estado,
+      fechaRespuesta,
+      respondidoPor,
+      updatedAt: fechaRespuesta,
+    };
+  } catch (error) {
+    console.error("❌ Error en responderReporteService:", error);
+    throw new Error("Error al responder el reporte de soporte");
   }
 };
 
@@ -137,7 +263,7 @@ export const obtenerReportesService = async (filtros?: {
  */
 export const actualizarEstadoReporteService = async (
   idDoc: string,
-  estado: "pendiente" | "en_revision" | "resuelto" | "rechazado",
+  estado: "pendiente" | "en_revision" | "resuelto" | "rechazado" | string,
 ) => {
   try {
     const docRef = db.collection("reportes_soporte").doc(idDoc);
@@ -154,6 +280,7 @@ export const actualizarEstadoReporteService = async (
     });
 
     return {
+      id: idDoc,
       idDoc,
       estado,
       updatedAt,
@@ -163,3 +290,4 @@ export const actualizarEstadoReporteService = async (
     throw new Error("Error al actualizar el estado del reporte");
   }
 };
+
