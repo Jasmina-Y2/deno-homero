@@ -83,7 +83,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     const creadorDoc = await transaction.get(creadorRef);
 
     const oyenteData = oyenteDoc.data() || {};
-    const rawSaldoOyente = oyenteData.saldoMonedas ?? oyenteData.walletBalance ?? oyenteData.monedas ?? oyenteData.coins ?? 0;
+    const rawSaldoOyente = oyenteData.walletBalance ?? 0;
     const saldoActualOyente = Number(rawSaldoOyente);
 
     // Validación de fondos suficientes
@@ -94,7 +94,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     const nuevoSaldoOyente = saldoActualOyente - cantidadMonedas;
 
     const creadorData = creadorDoc.exists ? (creadorDoc.data() || {}) : {};
-    const rawSaldoCreador = creadorData.saldoMonedas ?? creadorData.walletBalance ?? creadorData.monedas ?? creadorData.coins ?? 0;
+    const rawSaldoCreador = creadorData.walletBalance ?? 0;
     const saldoActualCreador = Number(rawSaldoCreador);
     const nuevoSaldoCreador = saldoActualCreador + cantidadMonedas;
 
@@ -122,8 +122,6 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     // Comando 1: Restar monedas al oyente
     transaction.update(oyenteRef, {
       walletBalance: nuevoSaldoOyente,
-      saldoMonedas: nuevoSaldoOyente,
-      monedas: nuevoSaldoOyente,
       fechaActualizacion: fechaActual,
     });
 
@@ -131,8 +129,6 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     if (creadorDoc.exists) {
       transaction.update(creadorRef, {
         walletBalance: nuevoSaldoCreador,
-        saldoMonedas: nuevoSaldoCreador,
-        monedas: nuevoSaldoCreador,
         fechaActualizacion: fechaActual,
       });
     } else {
@@ -141,8 +137,6 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
         {
           uid: idCreador,
           walletBalance: nuevoSaldoCreador,
-          saldoMonedas: nuevoSaldoCreador,
-          monedas: nuevoSaldoCreador,
           fechaCreacion: fechaActual,
           fechaActualizacion: fechaActual,
         },
