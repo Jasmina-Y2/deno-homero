@@ -1,6 +1,9 @@
 import { db } from "../config/firebase.ts";
 
-export const guardarComentarioService = async (publicacionId: string, comentario: any) => {
+export const guardarComentarioService = async (
+  publicacionId: string,
+  comentario: any,
+) => {
   try {
     const docRef = await db.collection("Comentarios").add({
       publicacionId,
@@ -21,7 +24,7 @@ export const guardarComentarioService = async (publicacionId: string, comentario
 export const obtenerComentariosService = async (publicacionId: string) => {
   try {
     const snapshot = await db
-      .collection("comentarios")
+      .collection("Comentarios")
       .where("publicacionId", "==", publicacionId)
       .get();
 
