@@ -30,10 +30,28 @@ export const obtenerComentariosService = async (publicacionId: string) => {
 
     return snapshot.docs.map((doc: any) => ({
       idDoc: doc.id,
+      id: doc.id,
       ...doc.data(),
     }));
   } catch (error) {
     console.error("❌ Error en obtenerComentariosService:", error);
     throw new Error("Error al obtener comentarios");
+  }
+};
+
+export const eliminarComentarioService = async (idComentario: string) => {
+  try {
+    const docRef = db.collection("Comentarios").doc(idComentario);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return false;
+    }
+
+    await docRef.delete();
+    return true;
+  } catch (error) {
+    console.error("❌ Error en eliminarComentarioService:", error);
+    throw new Error("Error al eliminar el comentario de la base de datos");
   }
 };

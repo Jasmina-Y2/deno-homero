@@ -73,6 +73,7 @@ import {
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
 import {
+  eliminarComentario,
   guardarComentario,
   obtenerComentarios,
 } from "../controllers/comentarios.controller.ts";
@@ -160,6 +161,8 @@ router.get("/api/historias-card/mostrar-id/:id", getHistoriaCardById);
 
 router.post("/api/comentarios/guardar", guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
+router.delete("/api/comentarios/eliminar/:id", eliminarComentario);
+router.delete("/api/comentarios/:id", eliminarComentario);
 router.get("/api/historia-info/:id", getHistoriaById);
 
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);

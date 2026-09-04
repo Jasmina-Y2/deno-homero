@@ -5,6 +5,7 @@ import {
   propinaRateLimiter,
   reclamarRecompensaAnuncioController,
 } from "../controllers/propina.controller.ts";
+import { eliminarComentario } from "../controllers/comentarios.controller.ts";
 
 function createMockContext(bodyData: any = {}, params: any = {}, searchParams: Record<string, string> = {}) {
   const urlParams = new URLSearchParams(searchParams);
@@ -167,4 +168,17 @@ Deno.test("Recompensa Anuncio: Requiere adId", async () => {
   assertEquals(ctx.response.status, 400);
   assertEquals(ctx.response.body.success, false);
   assertEquals(ctx.response.body.message, "El identificador del anuncio (adId) es requerido");
+});
+
+// ----------------------------------------------------
+// PRUEBAS DE ELIMINAR COMENTARIOS
+// ----------------------------------------------------
+
+Deno.test("Comentarios: Eliminar requiere ID del comentario", async () => {
+  const ctx = createMockContext({}, { id: "" });
+
+  await eliminarComentario(ctx);
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(ctx.response.body.message, "El ID del comentario es requerido");
 });

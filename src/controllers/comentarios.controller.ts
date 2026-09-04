@@ -1,5 +1,6 @@
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
+  eliminarComentarioService,
   guardarComentarioService,
   obtenerComentariosService,
 } from "../service/comentarios.service.ts";
@@ -44,6 +45,47 @@ export const obtenerComentarios = async (ctx: RouterContext<string>) => {
       error: error instanceof Error
         ? error.message
         : "Error al obtener comentarios",
+    };
+  }
+};
+
+export const eliminarComentario = async (ctx: RouterContext<string>) => {
+  try {
+    const idComentario = ctx.params?.id || ctx.request.url.searchParams.get("id");
+
+    if (!idComentario || idComentario.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El ID del comentario es requerido",
+      };
+      return;
+    }
+
+    const eliminado = await eliminarComentarioService(idComentario.trim());
+
+    if (eliminado) {
+      ctx.response.status = 200;
+      ctx.response.body = {
+        success: true,
+        message: "Comentario eliminado exitosamente",
+        id: idComentario,
+      };
+    } else {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "No se encontró ningún comentario con ese ID",
+      };
+    }
+  } catch (error) {
+    console.error("❌ Error en eliminarComentario controller:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      error: error instanceof Error
+        ? error.message
+        : "Error interno al eliminar el comentario",
     };
   }
 };
