@@ -49,8 +49,13 @@ export const getUsuarioPerfil = async (ctx: RouterContext<string>) => {
     const user = await getUsuarioByUidService(uid);
 
     if (!user) {
-      ctx.response.status = 404;
-      ctx.response.body = { success: false, message: "Usuario no encontrado" };
+      ctx.response.status = 200;
+      ctx.response.body = {
+        success: false,
+        exists: false,
+        data: null,
+        message: "Usuario no encontrado",
+      };
       return;
     }
 
@@ -86,8 +91,13 @@ export const verificarUsuarioEmail = async (ctx: RouterContext<string>) => {
     const user = await getUsuarioByEmailService(email);
 
     if (!user) {
-      ctx.response.status = 404;
-      ctx.response.body = { success: false, message: "Usuario no encontrado" };
+      ctx.response.status = 200;
+      ctx.response.body = {
+        success: false,
+        exists: false,
+        data: null,
+        message: "Usuario no encontrado",
+      };
       return;
     }
 
