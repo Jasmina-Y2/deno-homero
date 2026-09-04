@@ -1,5 +1,10 @@
-import type { Context } from "https://deno.land/x/oak/mod.ts";
-import { enviarPropinaService } from "../service/propina.service.ts";
+import type { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
+import {
+  enviarPropinaService,
+  obtenerHistorialUsuarioService,
+  obtenerRankingCreadoresService,
+  reclamarRecompensaAnuncioService,
+} from "../service/propina.service.ts";
 
 /**
  * Función utilitaria para extraer el body JSON de forma segura y compatible con Oak.
@@ -21,14 +26,47 @@ const extraerBodyJson = async (ctx: Context): Promise<any> => {
 };
 
 /**
+ * Limitador de tasa (Rate Limiter) en memoria para evitar toques repetitivos o spam de propinas.
+ * Permite un máximo de 2 peticiones cada 3000 ms por usuario.
+ */
+export class RateLimiter {
+  private requests = new Map<string, number[]>();
+  private readonly windowMs: number;
+  private readonly maxRequests: number;
+
+  constructor(windowMs = 3000, maxRequests = 2) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+  }
+
+  isAllowed(key: string): boolean {
+    const now = Date.now();
+    const timestamps = this.requests.get(key) || [];
+    const validTimestamps = timestamps.filter((t) => now - t < this.windowMs);
+
+    if (validTimestamps.length >= this.maxRequests) {
+      return false;
+    }
+
+    validTimestamps.push(now);
+    this.requests.set(key, validTimestamps);
+    return true;
+  }
+
+  reset(key?: string) {
+    if (key) {
+      this.requests.delete(key);
+    } else {
+      this.requests.clear();
+    }
+  }
+}
+
+export const propinaRateLimiter = new RateLimiter(3000, 2);
+
+/**
  * Controlador para procesar el envío de propinas entre usuarios.
  * POST /api/enviar-propina
- * 
- * Espera en el body:
- * - idOyente (o oyenteId)
- * - idCreador (o creadorId)
- * - cantidadMonedas (o monedas, costoSticker)
- * - tipoSticker (o stickerType, sticker)
  */
 export const enviarPropinaController = async (ctx: Context) => {
   try {
@@ -59,11 +97,24 @@ export const enviarPropinaController = async (ctx: Context) => {
       return;
     }
 
+    // Filtro Anti-Fraude 1: Validar que el remitente no sea el mismo creador
     if (idOyente === idCreador) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
-        message: "El oyente y el creador no pueden ser el mismo usuario",
+        message: "No puedes enviarte propinas a ti mismo",
+        error: "AUTO_DONATION_FORBIDDEN",
+      };
+      return;
+    }
+
+    // Filtro Anti-Fraude 2: Rate Limiting para evitar spam de toques repetitivos
+    if (!propinaRateLimiter.isAllowed(idOyente)) {
+      ctx.response.status = 429;
+      ctx.response.body = {
+        success: false,
+        message: "Demasiadas peticiones consecutivas. Por favor, espera unos segundos antes de enviar otra propina.",
+        error: "RATE_LIMIT_EXCEEDED",
       };
       return;
     }
@@ -114,7 +165,6 @@ export const enviarPropinaController = async (ctx: Context) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Error desconocido";
 
-    // Si el error es específicamente por saldo insuficiente
     if (errorMessage === "Saldo insuficiente") {
       ctx.response.status = 400;
       ctx.response.body = {
@@ -125,7 +175,6 @@ export const enviarPropinaController = async (ctx: Context) => {
       return;
     }
 
-    // Si el usuario no fue encontrado
     if (errorMessage.includes("no encontrado")) {
       ctx.response.status = 404;
       ctx.response.body = {
@@ -136,12 +185,162 @@ export const enviarPropinaController = async (ctx: Context) => {
       return;
     }
 
-    // Error general de servidor o transacción
     console.error("❌ Error en enviarPropinaController:", error);
     ctx.response.status = 500;
     ctx.response.body = {
       success: false,
       message: "Error al procesar la propina",
+      error: errorMessage,
+    };
+  }
+};
+
+/**
+ * Controlador para obtener el historial de gastos y ganancias de un usuario.
+ * GET /api/historial o GET /api/historial/:uid
+ */
+export const obtenerHistorialController = async (ctx: RouterContext<string> | Context) => {
+  try {
+    const params = (ctx as RouterContext<string>).params;
+    const uidFromParam = params ? params.uid : null;
+    const uidFromQuery = ctx.request.url.searchParams.get("uid") || ctx.request.url.searchParams.get("idUsuario");
+    const uid = uidFromParam || uidFromQuery;
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El UID del usuario es requerido (en ruta o parámetro ?uid=...)",
+      };
+      return;
+    }
+
+    const data = await obtenerHistorialUsuarioService(uid.trim());
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Historial obtenido exitosamente",
+      data,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en obtenerHistorialController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener el historial",
+      error: errorMessage,
+    };
+  }
+};
+
+/**
+ * Controlador para consultar el ranking mensual de creadores más apoyados.
+ * GET /api/ranking o GET /api/ranking?mes=YYYY-MM
+ */
+export const obtenerRankingController = async (ctx: Context) => {
+  try {
+    const mes = ctx.request.url.searchParams.get("mes") || ctx.request.url.searchParams.get("periodo") || undefined;
+
+    const data = await obtenerRankingCreadoresService(mes);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Ranking de creadores obtenido exitosamente",
+      data,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en obtenerRankingController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al calcular el ranking",
+      error: errorMessage,
+    };
+  }
+};
+
+/**
+ * Controlador para acreditar monedas por visualización de anuncio recompensado (AdMob).
+ * POST /api/recompensa-anuncio
+ */
+export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
+  try {
+    const body = await extraerBodyJson(ctx);
+
+    const idUsuario = body.idUsuario || body.uid || body.userId;
+    const adId = body.adId || body.transactionId || body.adUnitId || body.adToken;
+    const cantidadMonedas = body.cantidadMonedas ?? body.monedas ?? body.rewardAmount;
+    const adNetwork = body.adNetwork || "admob";
+
+    if (!idUsuario || typeof idUsuario !== "string") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El ID del usuario (idUsuario) es requerido",
+      };
+      return;
+    }
+
+    if (!adId || typeof adId !== "string" || adId.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El identificador del anuncio (adId) es requerido",
+      };
+      return;
+    }
+
+    const resultado = await reclamarRecompensaAnuncioService({
+      idUsuario: idUsuario.trim(),
+      adId: adId.trim(),
+      cantidadMonedas: cantidadMonedas !== undefined ? Number(cantidadMonedas) : undefined,
+      adNetwork,
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Recompensa otorgada exitosamente",
+      data: {
+        transactionId: resultado.recibo.id,
+        idUsuario,
+        cantidadOtorgada: resultado.monedasOtorgadas,
+        nuevoSaldo: resultado.nuevoSaldo,
+        fecha: resultado.recibo.fecha,
+      },
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+
+    if (errorMessage.includes("ya fue reclamada")) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Esta recompensa de anuncio ya fue reclamada",
+        error: errorMessage,
+      };
+      return;
+    }
+
+    if (errorMessage.includes("no encontrado")) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: errorMessage,
+        error: errorMessage,
+      };
+      return;
+    }
+
+    console.error("❌ Error en reclamarRecompensaAnuncioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al procesar la recompensa del anuncio",
       error: errorMessage,
     };
   }

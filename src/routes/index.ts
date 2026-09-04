@@ -104,11 +104,14 @@ import {
   obtenerReportesUsuarioController,
   responderReporteController,
 } from "../controllers/soporte.controller.ts";
-import { enviarPropinaController } from "../controllers/propina.controller.ts";
-
+import {
+  enviarPropinaController,
+  obtenerHistorialController,
+  obtenerRankingController,
+  reclamarRecompensaAnuncioController,
+} from "../controllers/propina.controller.ts";
 
 const router = new Router();
-
 
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 
@@ -147,7 +150,6 @@ router.post("/api/historias/like", darLikeHistoriaController);
 router.post("/api/seguiruser/seguir", seguirUsuario);
 router.post("/api/seguiruser/dejar-seguir", dejarDeSeguir);
 router.post("/api/users/guardar-token", guardarFcmToken);
-
 
 router.get("/api/seguiruser/seguidores/:uid", getGenteQueMeSigue);
 router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);
@@ -196,21 +198,40 @@ router.post("/api/ia/multivoz", generateMultivoiceAudio);
 router.get("/api/notificaciones/:uid", obtenerNotificacionesUsuario);
 router.get("/api/notificaciones/no-leidas/:uid", obtenerConteoNoLeidas);
 router.put("/api/notificaciones/marcar-leida/:id", marcarNotificacionLeida);
-router.put("/api/notificaciones/marcar-todas-leidas/:uid", marcarTodasNotificacionesLeidas);
+router.put(
+  "/api/notificaciones/marcar-todas-leidas/:uid",
+  marcarTodasNotificacionesLeidas,
+);
 router.delete("/api/notificaciones/eliminar/:id", eliminarNotificacion);
 
 // Soporte y Reportes de Error
 router.post("/api/soporte/reporte", crearReporteController);
 router.post("/soporte/reporte", crearReporteController);
 router.get("/api/soporte/reportes", obtenerReportesController);
-router.get("/api/soporte/reportes/usuario/:uid", obtenerReportesUsuarioController);
+router.get(
+  "/api/soporte/reportes/usuario/:uid",
+  obtenerReportesUsuarioController,
+);
 router.post("/api/soporte/reporte/:id/responder", responderReporteController);
-router.put("/api/soporte/reporte/:id/estado", actualizarEstadoReporteController);
+router.put(
+  "/api/soporte/reporte/:id/estado",
+  actualizarEstadoReporteController,
+);
 
-// Propinas y stickers
+// Propinas, stickers, billetera y ranking
 router.post("/api/enviar-propina", enviarPropinaController);
 router.post("/api/propina/enviar", enviarPropinaController);
 
+// Historial de gastos y ganancias
+router.get("/api/historial", obtenerHistorialController);
+router.get("/api/historial/:uid", obtenerHistorialController);
+
+// Ranking mensual de creadores destacados
+router.get("/api/ranking", obtenerRankingController);
+router.get("/api/ranking/creadores", obtenerRankingController);
+
+// Recarga de saldo por anuncios recompensados
+router.post("/api/recompensa-anuncio", reclamarRecompensaAnuncioController);
+router.post("/api/anuncios/recompensar", reclamarRecompensaAnuncioController);
+
 export default router;
-
-

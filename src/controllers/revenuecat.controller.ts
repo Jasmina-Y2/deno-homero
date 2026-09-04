@@ -1,5 +1,6 @@
 import { Context } from "https://deno.land/x/oak/mod.ts";
 import { actualizarSuscripcionUsuarioService } from "../service/users.service.ts";
+import { acreditarMonedasCompraRevenueCatService } from "../service/propina.service.ts";
 
 export interface RevenueCatWebhookEvent {
   id?: string;
@@ -119,17 +120,37 @@ export const revenueCatWebhookController = async (ctx: Context) => {
       case "RENEWAL":
       case "UNCANCELLATION":
       case "NON_RENEWING_PURCHASE": {
-        // Activar suscripción y créditos
-        await actualizarSuscripcionUsuarioService(
-          uid,
-          true,
-          true,
-          fechaSuscripcion,
-          fechaVencimiento,
-          diasDuracion,
-          15, // 15 audios de ElevenLabs para suscriptores PRO
-        );
-        console.log(`[RevenueCat Webhook] Suscripción activada/renovada para ${uid}`);
+        const productIdLower = (event.product_id || "").toLowerCase();
+        const esCompraMonedas =
+          productIdLower.includes("coin") ||
+          productIdLower.includes("moneda") ||
+          productIdLower.includes("paquete") ||
+          productIdLower.includes("sticker") ||
+          (type === "NON_RENEWING_PURCHASE" && !productIdLower.includes("pro") && !productIdLower.includes("sub"));
+
+        if (esCompraMonedas) {
+          // Acreditar paquete de monedas de forma atómica y segura
+          const resultadoMonedas = await acreditarMonedasCompraRevenueCatService({
+            uid,
+            productId: event.product_id || "paquete_monedas",
+            eventId: event.id,
+            precio: (event as any).price_in_purchased_currency,
+            moneda: (event as any).currency,
+          });
+          console.log(`[RevenueCat Webhook] Paquete de monedas procesado para ${uid}:`, resultadoMonedas);
+        } else {
+          // Activar suscripción y créditos PRO
+          await actualizarSuscripcionUsuarioService(
+            uid,
+            true,
+            true,
+            fechaSuscripcion,
+            fechaVencimiento,
+            diasDuracion,
+            15, // 15 audios de ElevenLabs para suscriptores PRO
+          );
+          console.log(`[RevenueCat Webhook] Suscripción activada/renovada para ${uid}`);
+        }
         break;
       }
 
