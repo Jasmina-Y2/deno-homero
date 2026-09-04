@@ -104,6 +104,7 @@ import {
   obtenerReportesUsuarioController,
   responderReporteController,
 } from "../controllers/soporte.controller.ts";
+import { enviarPropinaController } from "../controllers/propina.controller.ts";
 
 
 const router = new Router();
@@ -205,6 +206,10 @@ router.get("/api/soporte/reportes", obtenerReportesController);
 router.get("/api/soporte/reportes/usuario/:uid", obtenerReportesUsuarioController);
 router.post("/api/soporte/reporte/:id/responder", responderReporteController);
 router.put("/api/soporte/reporte/:id/estado", actualizarEstadoReporteController);
+
+// Propinas y stickers
+router.post("/api/enviar-propina", enviarPropinaController);
+router.post("/api/propina/enviar", enviarPropinaController);
 
 export default router;
 
