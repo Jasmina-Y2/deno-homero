@@ -9,19 +9,22 @@ import {
 /**
  * Función utilitaria para extraer el body JSON de forma segura y compatible con Oak.
  */
-const extraerBodyJson = async (ctx: Context): Promise<any> => {
+const extraerBodyJson = async (ctx: Context): Promise<Record<string, any>> => {
   try {
     if (typeof (ctx.request.body as any)?.json === "function") {
-      return await (ctx.request.body as any).json();
+      const res = await (ctx.request.body as any).json();
+      if (res && typeof res === "object") return res;
     }
-    const bodyResult = (ctx.request.body as any)({ type: "json" });
-    return await bodyResult.value;
+    if (typeof (ctx.request as any)?.body === "function") {
+      const bodyResult = (ctx.request as any).body({ type: "json" });
+      const res = await bodyResult.value;
+      if (res && typeof res === "object") return res;
+    }
+    const val = await (ctx.request.body as any)?.value;
+    if (val && typeof val === "object") return val;
+    return {};
   } catch (_err) {
-    try {
-      return await (ctx.request.body as any).value;
-    } catch (_err2) {
-      return {};
-    }
+    return {};
   }
 };
 
@@ -70,7 +73,8 @@ export const propinaRateLimiter = new RateLimiter(3000, 2);
  */
 export const enviarPropinaController = async (ctx: Context) => {
   try {
-    const body = await extraerBodyJson(ctx);
+    const rawBody = await extraerBodyJson(ctx);
+    const body = (rawBody && typeof rawBody === "object") ? rawBody : {};
 
     // Extraer los 4 datos clave con soporte de variantes comunes
     const idOyente = body.idOyente || body.oyenteId || body.listenerId || body.idUsuario || body.uidOyente || body.uid;
@@ -269,7 +273,8 @@ export const obtenerRankingController = async (ctx: Context) => {
  */
 export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
   try {
-    const body = await extraerBodyJson(ctx);
+    const rawBody = await extraerBodyJson(ctx);
+    const body = (rawBody && typeof rawBody === "object") ? rawBody : {};
 
     const idUsuario = body.idUsuario || body.uid || body.userId;
     const adId = body.adId || body.transactionId || body.adUnitId || body.adToken;
