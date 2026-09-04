@@ -4,6 +4,7 @@ import {
   obtenerHistorialUsuarioService,
   obtenerRankingCreadoresService,
   reclamarRecompensaAnuncioService,
+  resetearLimiteAnunciosService,
 } from "../service/propina.service.ts";
 
 /**
@@ -322,6 +323,8 @@ export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
         idUsuario,
         cantidadOtorgada: resultado.monedasOtorgadas,
         nuevoSaldo: resultado.nuevoSaldo,
+        anunciosVistosHoy: resultado.anunciosVistosHoy,
+        anunciosRestantes: resultado.anunciosRestantes,
         fecha: resultado.recibo.fecha,
       },
     };
@@ -333,6 +336,16 @@ export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
       ctx.response.body = {
         success: false,
         message: "Esta recompensa de anuncio ya fue reclamada",
+        error: errorMessage,
+      };
+      return;
+    }
+
+    if (errorMessage.includes("límite") || errorMessage.includes("limite")) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: errorMessage,
         error: errorMessage,
       };
       return;
@@ -357,3 +370,39 @@ export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
     };
   }
 };
+
+/**
+ * Endpoint para restablecer el límite diario de anuncios de un usuario (para desarrollo/pruebas).
+ * POST /api/anuncios/reset-limite o POST /api/anuncios/reset-limite/:uid
+ */
+export const resetearLimiteAnunciosController = async (ctx: RouterContext<any> | Context) => {
+  try {
+    const params = (ctx as any).params || {};
+    const body = await extraerBodyJson(ctx);
+    const idUsuario = params.uid || body.idUsuario || body.uid || body.userId;
+
+    if (!idUsuario) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El parámetro uid o idUsuario es obligatorio",
+      };
+      return;
+    }
+
+    const resultado = await resetearLimiteAnunciosService(String(idUsuario).trim());
+
+    ctx.response.status = 200;
+    ctx.response.body = resultado;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en resetearLimiteAnunciosController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al restablecer el límite diario de anuncios",
+      error: errorMessage,
+    };
+  }
+};
+

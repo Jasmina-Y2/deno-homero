@@ -431,12 +431,12 @@ export const obtenerRankingCreadoresService = async (mesParam?: string) => {
 
 /**
  * Reclama la recarga de saldo por ver un anuncio recompensado (AdMob).
- * Utiliza transacción atómica e impide el fraude mediante validación anti-replay del adId.
+ * Utiliza transacción atómica, validación de límite diario (máx 3/día) e impide el fraude mediante validación anti-replay del adId.
  */
 export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioDto) => {
   const { idUsuario, adId, adNetwork } = datos;
 
-  if (!idUsuario || typeof idUsuario !== "string") {
+  if (!idUsuario || typeof idUsuario !== "string" || idUsuario.trim() === "") {
     throw new Error("El ID del usuario es requerido");
   }
 
@@ -444,7 +444,7 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     throw new Error("El identificador del anuncio (adId) es requerido");
   }
 
-  // Protección anti-replay: verificar si este anuncio ya fue recompensado
+  // Protección anti-replay: verificar si este anuncio individual ya fue recompensado
   const existingRewardSnap = await db.collection("transactions")
     .where("adId", "==", adId.trim())
     .limit(1)
@@ -466,8 +466,25 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     }
 
     const userData = userDoc.data() || {};
+
+    // Obtener fecha actual en formato YYYY-MM-DD
+    const hoyStr = new Date().toISOString().split("T")[0];
+    const fechaUltimoAnuncio = userData.fechaUltimoAnuncio || "";
+    let anunciosVistosHoy = Number(userData.anunciosVistosHoy || 0);
+
+    // Si es un nuevo día, reiniciar contador a 0
+    if (fechaUltimoAnuncio !== hoyStr) {
+      anunciosVistosHoy = 0;
+    }
+
+    // ⛔ Validar límite diario (máximo 3 anuncios por día)
+    if (anunciosVistosHoy >= 3) {
+      throw new Error("Has alcanzado el límite de 3 anuncios por hoy. Vuelve mañana.");
+    }
+
     const saldoActual = Number(userData.walletBalance ?? 0);
     const nuevoSaldo = saldoActual + monedasOtorgadas;
+    const nuevoConteoHoy = anunciosVistosHoy + 1;
     const fechaActual = new Date().toISOString();
 
     const transactionRef = db.collection("transactions").doc();
@@ -485,9 +502,11 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       nuevoSaldoOyente: nuevoSaldo,
     };
 
-    // Actualizar saldo del usuario
+    // Actualizar usuario con saldo y nuevo conteo diario
     transaction.update(userRef, {
       walletBalance: nuevoSaldo,
+      fechaUltimoAnuncio: hoyStr,
+      anunciosVistosHoy: nuevoConteoHoy,
       fechaActualizacion: fechaActual,
     });
 
@@ -497,15 +516,42 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     return {
       nuevoSaldo,
       monedasOtorgadas,
+      anunciosVistosHoy: nuevoConteoHoy,
+      anunciosRestantes: Math.max(0, 3 - nuevoConteoHoy),
       recibo,
     };
   });
 
   console.log(
-    `🎬 [Anuncio Recompensado] Usuario ${idUsuario} recibió +${monedasOtorgadas} monedas (adId: ${adId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
+    `🎬 [Anuncio Recompensado] Usuario ${idUsuario} recibió +${monedasOtorgadas} monedas (adId: ${adId}). Vistos hoy: ${resultado.anunciosVistosHoy}/3. Nuevo saldo: ${resultado.nuevoSaldo}`,
   );
 
   return resultado;
+};
+
+/**
+ * Restablece el límite diario de anuncios de un usuario (para pruebas o desarrollo).
+ */
+export const resetearLimiteAnunciosService = async (idUsuario: string) => {
+  if (!idUsuario || typeof idUsuario !== "string") {
+    throw new Error("El ID del usuario es requerido");
+  }
+
+  const userRef = await obtenerDocRefUsuario(idUsuario);
+  await userRef.set(
+    {
+      anunciosVistosHoy: 0,
+      fechaUltimoAnuncio: "",
+    },
+    { merge: true },
+  );
+
+  return {
+    success: true,
+    message: `Límite diario de anuncios restablecido a 0/3 para el usuario ${idUsuario}`,
+    anunciosVistosHoy: 0,
+    anunciosRestantes: 3,
+  };
 };
 
 /**

@@ -110,6 +110,7 @@ import {
   obtenerHistorialController,
   obtenerRankingController,
   reclamarRecompensaAnuncioController,
+  resetearLimiteAnunciosController,
 } from "../controllers/propina.controller.ts";
 
 const router = new Router();
@@ -235,5 +236,7 @@ router.get("/api/ranking/creadores", obtenerRankingController);
 // Recarga de saldo por anuncios recompensados
 router.post("/api/recompensa-anuncio", reclamarRecompensaAnuncioController);
 router.post("/api/anuncios/recompensar", reclamarRecompensaAnuncioController);
+router.post("/api/anuncios/reset-limite", resetearLimiteAnunciosController);
+router.post("/api/anuncios/reset-limite/:uid", resetearLimiteAnunciosController);
 
 export default router;
