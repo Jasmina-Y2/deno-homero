@@ -3,6 +3,9 @@ export interface EnviarPropinaDto {
   idCreador: string;
   cantidadMonedas: number;
   tipoSticker: string;
+  idHistoria?: string;
+  publicacionId?: string;
+  texto?: string;
 }
 
 export interface ReciboTransaccion {
@@ -10,6 +13,8 @@ export interface ReciboTransaccion {
   idOyente?: string;
   idCreador?: string;
   idUsuario?: string;
+  idHistoria?: string;
+  publicacionId?: string;
   cantidadMonedas: number;
   tipoSticker?: string;
   tipo: "propina" | "recompensa_anuncio" | "recarga";

@@ -219,7 +219,7 @@ router.put(
 );
 
 // Propinas, stickers, billetera y ranking
-router.post("/api/propina/enviar", enviarPropinaController);
+router.post("/api/enviar-propina", enviarPropinaController);
 
 // Historial de gastos y ganancias
 router.get("/api/historial", obtenerHistorialController);

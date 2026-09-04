@@ -142,12 +142,18 @@ export const enviarPropinaController = async (ctx: Context) => {
       return;
     }
 
+    const idHistoria = body.idHistoria || body.publicacionId || body.idPublicacion || "";
+    const texto = body.texto || "";
+
     // Ejecutar transacción atómica en Firestore
     const resultado = await enviarPropinaService({
       idOyente,
       idCreador,
       cantidadMonedas,
       tipoSticker,
+      idHistoria,
+      publicacionId: idHistoria,
+      texto,
     });
 
     // Paso 6: Conectar respuesta de éxito (código 200) con Ionic
@@ -161,6 +167,7 @@ export const enviarPropinaController = async (ctx: Context) => {
         idCreador,
         cantidadMonedas,
         tipoSticker,
+        idHistoria,
         nuevoSaldo: resultado.nuevoSaldoOyente,
         nuevoSaldoOyente: resultado.nuevoSaldoOyente,
         recibo: resultado.recibo,

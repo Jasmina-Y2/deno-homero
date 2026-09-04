@@ -205,32 +205,12 @@ export const responderReporteService = async (
       updatedAt: fechaRespuesta,
     });
 
-    // 2. Crear la notificación en la colección 'notificaciones' del usuario
+    // 2. Enviar Push Notification si el usuario cuenta con token FCM
     if (reporteData.uid) {
       const tituloNotif = "Respuesta de Soporte 🛠️";
       const asuntoTexto = reporteData.asunto || "Reporte de soporte";
       const mensajeNotif = `Hemos respondido a tu reporte "${asuntoTexto}": ${respuesta}`;
 
-      await db.collection("notificaciones").add({
-        uid: reporteData.uid,
-        idUsuario: reporteData.uid,
-        uidUsuario: reporteData.uid,
-        idDestinatario: reporteData.uid,
-        titulo: tituloNotif,
-        mensaje: mensajeNotif,
-        tipo: "soporte",
-        leido: false,
-        fecha: fechaRespuesta,
-        createdAt: fechaRespuesta,
-        data: {
-          tipo: "soporte",
-          idReporte: idDoc,
-          asunto: asuntoTexto,
-          respuesta: respuesta,
-        },
-      });
-
-      // 3. Enviar Push Notification adicional si el usuario cuenta con token FCM
       try {
         await enviarPushAUsuario(reporteData.uid, tituloNotif, mensajeNotif, {
           tipo: "soporte",

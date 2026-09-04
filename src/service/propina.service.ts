@@ -6,7 +6,7 @@ import {
   ReciboTransaccion,
   RecompensaAnuncioDto,
 } from "../models/propina.model.ts";
-import { enviarPushAUsuario } from "./notification.service.ts";
+import { enviarPush } from "./notification.service.ts";
 
 /**
  * Obtiene la referencia directa del documento de un usuario en Firestore.
@@ -164,24 +164,55 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     `✅ [Propina] Transacción completada. Oyente: ${idOyente} (-${cantidadMonedas}), Creador: ${idCreador} (+${cantidadMonedas})`,
   );
 
-  // Intentar notificar al creador en segundo plano de manera no bloqueante
+  // 1. Guardar automáticamente el sticker/propina en la colección 'comentarios'
   try {
-    enviarPushAUsuario(
-      idCreador,
-      "¡Nueva propina recibida! 🎉",
-      `¡Alguien te envió el sticker '${tipoSticker}' y ganaste ${cantidadMonedas} monedas!`,
-      {
-        tipo: "propina",
-        tipoSticker,
-        cantidadMonedas: String(cantidadMonedas),
-        idOyente,
-        transactionId: resultado.recibo.id,
-      },
-    ).catch((notifError) => {
-      console.warn("⚠️ No se pudo enviar notificación push al creador:", notifError);
+    const publicacionId = datos.idHistoria || datos.publicacionId || "";
+    const infoOyente = await obtenerInfoUsuario(idOyente);
+    const fechaAhora = new Date().toISOString();
+
+    await db.collection("Comentarios").add({
+      publicacionId: publicacionId,
+      idAutor: idOyente,
+      idCreador: idCreador,
+      nombre: infoOyente.nombre || "Usuario",
+      photoURL: infoOyente.photoURL || "",
+      texto: datos.texto || `Envió un sticker (${tipoSticker}) de ${cantidadMonedas} monedas 🪙`,
+      tipoSticker: tipoSticker,
+      cantidadMonedas: cantidadMonedas,
+      esPropina: true,
+      tipo: "sticker",
+      fecha: fechaAhora,
+      createdAt: fechaAhora,
     });
+    console.log(`💬 [Comentario Propina] Registrado en colección 'comentarios' para publicación: ${publicacionId || 'general'}`);
+  } catch (errComentario) {
+    console.warn("⚠️ Error al guardar comentario de propina:", errComentario);
+  }
+
+  // 2. Enviar notificación push directa al celular del creador (vía FCM puro, sin subcolecciones en users)
+  try {
+    const creadorSnap = await creadorRef.get();
+    const creadorToken = creadorSnap.data()?.fcmToken;
+
+    if (creadorToken) {
+      enviarPush(
+        creadorToken,
+        "¡Nueva propina recibida! 🎉",
+        `¡Alguien te envió el sticker '${tipoSticker}' y ganaste ${cantidadMonedas} monedas!`,
+        {
+          tipo: "propina",
+          tipoSticker,
+          cantidadMonedas: String(cantidadMonedas),
+          idOyente,
+          idHistoria: datos.idHistoria || datos.publicacionId || "",
+          transactionId: resultado.recibo.id,
+        },
+      ).catch((notifError) => {
+        console.warn("⚠️ No se pudo enviar notificación push al creador:", notifError);
+      });
+    }
   } catch (err) {
-    console.warn("⚠️ Error al invocar envío de notificación:", err);
+    console.warn("⚠️ Error al obtener token para push:", err);
   }
 
   return resultado;
@@ -587,18 +618,22 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     `💰 [RevenueCat Monedas] Compra acreditada a ${uid}: +${cantidadMonedas} monedas (productId: ${productId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
   );
 
-  // 4. Notificar al usuario por Push FCM
+  // 4. Notificar al usuario por Push FCM directo
   try {
-    enviarPushAUsuario(
-      uid,
-      "¡Compra acreditada! 🪙",
-      `Se han acreditado con éxito ${cantidadMonedas} monedas a tu billetera.`,
-      {
-        tipo: "compra_monedas",
-        cantidadMonedas: String(cantidadMonedas),
-        productId,
-      },
-    ).catch((e) => console.warn("⚠️ Error enviando push de compra de monedas:", e));
+    const userDocSnap = await userRef.get();
+    const userToken = userDocSnap.data()?.fcmToken;
+    if (userToken) {
+      enviarPush(
+        userToken,
+        "¡Compra acreditada! 🪙",
+        `Se han acreditado con éxito ${cantidadMonedas} monedas a tu billetera.`,
+        {
+          tipo: "compra_monedas",
+          cantidadMonedas: String(cantidadMonedas),
+          productId,
+        },
+      ).catch((e) => console.warn("⚠️ Error enviando push de compra de monedas:", e));
+    }
   } catch (_e) {
     // Ignorar si falla push
   }

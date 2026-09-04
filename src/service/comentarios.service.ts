@@ -2,7 +2,7 @@ import { db } from "../config/firebase.ts";
 
 export const guardarComentarioService = async (publicacionId: string, comentario: any) => {
   try {
-    const docRef = await db.collection("comentarios").add({
+    const docRef = await db.collection("Comentarios").add({
       publicacionId,
       ...(typeof comentario === "object" ? comentario : { comentario }),
       createdAt: new Date().toISOString(),
