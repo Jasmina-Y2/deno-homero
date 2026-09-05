@@ -6,18 +6,25 @@ import {
 } from "../service/deviceAdLimit.service.ts";
 
 /**
- * Helper para extraer body en formato JSON con Oak
+ * Helper para extraer body en formato JSON con Oak (compatible con Oak v10, v12 y v14+)
  */
-async function extraerBodyJson(ctx: Context): Promise<any> {
+async function extraerBodyJson(ctx: Context): Promise<Record<string, any>> {
   try {
-    const bodyObj = ctx.request.body();
-    if (bodyObj.type === "json") {
-      return await bodyObj.value;
+    if (typeof (ctx.request.body as any)?.json === "function") {
+      const res = await (ctx.request.body as any).json();
+      if (res && typeof res === "object") return res;
     }
+    if (typeof (ctx.request as any)?.body === "function") {
+      const bodyResult = (ctx.request as any).body({ type: "json" });
+      const res = await bodyResult.value;
+      if (res && typeof res === "object") return res;
+    }
+    const val = await (ctx.request.body as any)?.value;
+    if (val && typeof val === "object") return val;
+    return {};
   } catch (_err) {
-    // Si no se puede parsear JSON, retornar null
+    return {};
   }
-  return null;
 }
 
 /**
