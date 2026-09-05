@@ -26,6 +26,7 @@ export interface ReciboTransaccion {
   nuevoSaldoCreador?: number;
   adId?: string;
   adNetwork?: string;
+  deviceId?: string;
   [key: string]: any;
 }
 
@@ -60,6 +61,7 @@ export interface ItemRankingCreador {
 export interface RecompensaAnuncioDto {
   idUsuario: string;
   adId: string;
+  deviceId?: string;
   cantidadMonedas?: number;
   adNetwork?: string;
 }

@@ -112,6 +112,11 @@ import {
   reclamarRecompensaAnuncioController,
   resetearLimiteAnunciosController,
 } from "../controllers/propina.controller.ts";
+import {
+  consultarEstadoDispositivoController,
+  resetearLimiteDispositivoController,
+  validarYRecompensarDispositivoController,
+} from "../controllers/deviceAdLimit.controller.ts";
 
 const router = new Router();
 
@@ -238,5 +243,13 @@ router.post("/api/recompensa-anuncio", reclamarRecompensaAnuncioController);
 router.post("/api/anuncios/recompensar", reclamarRecompensaAnuncioController);
 router.post("/api/anuncios/reset-limite", resetearLimiteAnunciosController);
 router.post("/api/anuncios/reset-limite/:uid", resetearLimiteAnunciosController);
+
+// Control de límites por dispositivo físico (device_ad_limits)
+router.post("/api/device-ad-limits/recompensar", validarYRecompensarDispositivoController);
+router.post("/api/anuncios/validar-dispositivo", validarYRecompensarDispositivoController);
+router.get("/api/device-ad-limits/:deviceId", consultarEstadoDispositivoController);
+router.get("/api/anuncios/estado-dispositivo/:deviceId", consultarEstadoDispositivoController);
+router.post("/api/device-ad-limits/:deviceId/reset", resetearLimiteDispositivoController);
+router.post("/api/anuncios/reset-dispositivo", resetearLimiteDispositivoController);
 
 export default router;

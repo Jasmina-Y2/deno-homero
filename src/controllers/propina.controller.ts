@@ -285,6 +285,7 @@ export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
     const body = (rawBody && typeof rawBody === "object") ? rawBody : {};
 
     const idUsuario = body.idUsuario || body.uid || body.userId;
+    const deviceId = body.deviceId || body.idDispositivo || body.hardwareId || body.uuid;
     const adId = body.adId || body.transactionId || body.adUnitId || body.adToken;
     const cantidadMonedas = body.cantidadMonedas ?? body.monedas ?? body.rewardAmount;
     const adNetwork = body.adNetwork || "admob";
@@ -309,6 +310,7 @@ export const reclamarRecompensaAnuncioController = async (ctx: Context) => {
 
     const resultado = await reclamarRecompensaAnuncioService({
       idUsuario: idUsuario.trim(),
+      deviceId: deviceId ? String(deviceId).trim() : undefined,
       adId: adId.trim(),
       cantidadMonedas: cantidadMonedas !== undefined ? Number(cantidadMonedas) : undefined,
       adNetwork,

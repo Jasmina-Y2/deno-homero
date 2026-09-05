@@ -431,10 +431,11 @@ export const obtenerRankingCreadoresService = async (mesParam?: string) => {
 
 /**
  * Reclama la recarga de saldo por ver un anuncio recompensado (AdMob).
- * Utiliza transacción atómica, validación de límite diario (máx 3/día) e impide el fraude mediante validación anti-replay del adId.
+ * Utiliza transacción atómica, validación de límite diario (máx 3/día por dispositivo y usuario)
+ * e impide el fraude mediante validación anti-replay del adId y control en "device_ad_limits".
  */
 export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioDto) => {
-  const { idUsuario, adId, adNetwork } = datos;
+  const { idUsuario, adId, adNetwork, deviceId } = datos;
 
   if (!idUsuario || typeof idUsuario !== "string" || idUsuario.trim() === "") {
     throw new Error("El ID del usuario es requerido");
@@ -444,9 +445,15 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     throw new Error("El identificador del anuncio (adId) es requerido");
   }
 
+  const cleanUid = idUsuario.trim();
+  const cleanAdId = adId.trim();
+  const cleanDeviceId = (deviceId && typeof deviceId === "string" && deviceId.trim() !== "")
+    ? deviceId.trim()
+    : undefined;
+
   // Protección anti-replay: verificar si este anuncio individual ya fue recompensado
   const existingRewardSnap = await db.collection("transactions")
-    .where("adId", "==", adId.trim())
+    .where("adId", "==", cleanAdId)
     .limit(1)
     .get();
 
@@ -457,43 +464,104 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
   // Establecer recompensa segura de monedas (entre 1 y 50 monedas, default 10)
   const monedasOtorgadas = Math.min(Math.max(Number(datos.cantidadMonedas || 10), 1), 50);
 
-  const userRef = await obtenerDocRefUsuario(idUsuario);
+  const userRef = await obtenerDocRefUsuario(cleanUid);
+  const deviceRef = cleanDeviceId ? db.collection("device_ad_limits").doc(cleanDeviceId) : null;
+  const transactionRef = db.collection("transactions").doc();
+
+  const hoyStr = new Date().toISOString().split("T")[0];
+  const fechaActual = new Date().toISOString();
 
   const resultado = await db.runTransaction(async (transaction: any) => {
+    // --- FASE 1: LECTURAS ATÓMICAS (Antes de cualquier escritura) ---
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists) {
       throw new Error("Usuario no encontrado");
     }
 
+    let deviceDoc: any = null;
+    if (deviceRef) {
+      deviceDoc = await transaction.get(deviceRef);
+    }
+
     const userData = userDoc.data() || {};
+    const saldoActual = Number(userData.walletBalance ?? 0);
+    const nuevoSaldo = (isNaN(saldoActual) ? 0 : saldoActual) + monedasOtorgadas;
 
-    // Obtener fecha actual en formato YYYY-MM-DD
-    const hoyStr = new Date().toISOString().split("T")[0];
-    const fechaUltimoAnuncio = userData.fechaUltimoAnuncio || "";
-    let anunciosVistosHoy = Number(userData.anunciosVistosHoy || 0);
+    // --- FASE 2: VALIDACIÓN DE LÍMITES DIARIOS (MÁX 3/DÍA) ---
+    let anunciosVistosHoy = 0;
+    let totalHistoricoDispositivo = 0;
+    let uidsList: string[] = [];
 
-    // Si es un nuevo día, reiniciar contador a 0
-    if (fechaUltimoAnuncio !== hoyStr) {
-      anunciosVistosHoy = 0;
+    // Si hay deviceId, el límite prioritario es el del hardware/dispositivo
+    if (deviceDoc && deviceDoc.exists) {
+      const deviceData = deviceDoc.data() || {};
+      const fechaUltimoDevice = deviceData.fechaUltimoAnuncio || "";
+      totalHistoricoDispositivo = Number(deviceData.totalAnunciosHistoricos || 0);
+      uidsList = Array.isArray(deviceData.historialUids) ? [...deviceData.historialUids] : [];
+
+      if (fechaUltimoDevice === hoyStr) {
+        anunciosVistosHoy = Number(deviceData.anunciosVistosHoy || 0);
+      } else {
+        anunciosVistosHoy = 0;
+      }
+    } else if (!deviceDoc) {
+      // Fallback a nivel de usuario si no se envió deviceId
+      const fechaUltimoAnuncio = userData.fechaUltimoAnuncio || "";
+      if (fechaUltimoAnuncio === hoyStr) {
+        anunciosVistosHoy = Number(userData.anunciosVistosHoy || 0);
+      } else {
+        anunciosVistosHoy = 0;
+      }
     }
 
     // ⛔ Validar límite diario (máximo 3 anuncios por día)
     if (anunciosVistosHoy >= 3) {
-      throw new Error("Has alcanzado el límite de 3 anuncios por hoy. Vuelve mañana.");
+      if (cleanDeviceId) {
+        throw new Error("El dispositivo ha alcanzado el límite de 3 anuncios por hoy. Vuelve mañana.");
+      } else {
+        throw new Error("Has alcanzado el límite de 3 anuncios por hoy. Vuelve mañana.");
+      }
     }
 
-    const saldoActual = Number(userData.walletBalance ?? 0);
-    const nuevoSaldo = saldoActual + monedasOtorgadas;
     const nuevoConteoHoy = anunciosVistosHoy + 1;
-    const fechaActual = new Date().toISOString();
+    const nuevoTotalHistorico = totalHistoricoDispositivo + 1;
 
-    const transactionRef = db.collection("transactions").doc();
+    if (cleanDeviceId && !uidsList.includes(cleanUid)) {
+      uidsList.push(cleanUid);
+    }
 
+    // --- FASE 3: ESCRITURAS ATÓMICAS ---
+
+    // 1. Si existe deviceId, actualizar documento en "device_ad_limits/{deviceId}"
+    if (deviceRef) {
+      transaction.set(deviceRef, {
+        deviceId: cleanDeviceId,
+        fechaUltimoAnuncio: hoyStr,
+        anunciosVistosHoy: nuevoConteoHoy,
+        totalAnunciosHistoricos: nuevoTotalHistorico,
+        ultimoUid: cleanUid,
+        historialUids: uidsList,
+        fechaActualizacion: fechaActual,
+        ...((deviceDoc && deviceDoc.exists) ? {} : { fechaCreacion: fechaActual }),
+      }, { merge: true });
+    }
+
+    // 2. Actualizar usuario con saldo y nuevo conteo diario
+    transaction.update(userRef, {
+      walletBalance: nuevoSaldo,
+      fechaUltimoAnuncio: hoyStr,
+      anunciosVistosHoy: nuevoConteoHoy,
+      ...(cleanDeviceId ? { ultimoDeviceId: cleanDeviceId } : {}),
+      fechaActualizacion: fechaActual,
+    });
+
+    // 3. Guardar recibo en transactions
     const recibo: ReciboTransaccion = {
       id: transactionRef.id,
-      idUsuario,
+      idUsuario: cleanUid,
+      ...(cleanDeviceId ? { deviceId: cleanDeviceId } : {}),
       tipo: "recompensa_anuncio",
-      adId: adId.trim(),
+      adId: cleanAdId,
       adNetwork: adNetwork || "admob",
       cantidadMonedas: monedasOtorgadas,
       fecha: fechaActual,
@@ -502,15 +570,6 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       nuevoSaldoOyente: nuevoSaldo,
     };
 
-    // Actualizar usuario con saldo y nuevo conteo diario
-    transaction.update(userRef, {
-      walletBalance: nuevoSaldo,
-      fechaUltimoAnuncio: hoyStr,
-      anunciosVistosHoy: nuevoConteoHoy,
-      fechaActualizacion: fechaActual,
-    });
-
-    // Guardar recibo en transactions
     transaction.set(transactionRef, recibo);
 
     return {
@@ -523,7 +582,7 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
   });
 
   console.log(
-    `🎬 [Anuncio Recompensado] Usuario ${idUsuario} recibió +${monedasOtorgadas} monedas (adId: ${adId}). Vistos hoy: ${resultado.anunciosVistosHoy}/3. Nuevo saldo: ${resultado.nuevoSaldo}`,
+    `🎬 [Anuncio Recompensado] Usuario ${cleanUid} (Device: ${cleanDeviceId || "N/A"}) recibió +${monedasOtorgadas} monedas (adId: ${cleanAdId}). Vistos hoy: ${resultado.anunciosVistosHoy}/3. Nuevo saldo: ${resultado.nuevoSaldo}`,
   );
 
   return resultado;
