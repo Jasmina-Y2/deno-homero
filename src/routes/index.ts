@@ -117,6 +117,10 @@ import {
   resetearLimiteDispositivoController,
   validarYRecompensarDispositivoController,
 } from "../controllers/deviceAdLimit.controller.ts";
+import {
+  guardarPinBovedaController,
+  obtenerPinBovedaController,
+} from "../controllers/boveda.controller.ts";
 
 const router = new Router();
 
@@ -251,5 +255,13 @@ router.get("/api/device-ad-limits/:deviceId", consultarEstadoDispositivoControll
 router.get("/api/anuncios/estado-dispositivo/:deviceId", consultarEstadoDispositivoController);
 router.post("/api/device-ad-limits/:deviceId/reset", resetearLimiteDispositivoController);
 router.post("/api/anuncios/reset-dispositivo", resetearLimiteDispositivoController);
+
+// Bóveda / PIN de seguridad
+router.get("/api/boveda/pin/:uid", obtenerPinBovedaController);
+router.get("/api/boveda/pin", obtenerPinBovedaController);
+router.post("/api/boveda/obtener-pin", obtenerPinBovedaController);
+router.get("/api/bovedapins/:uid", obtenerPinBovedaController);
+router.post("/api/boveda/guardar-pin", guardarPinBovedaController);
+router.put("/api/boveda/guardar-pin", guardarPinBovedaController);
 
 export default router;
