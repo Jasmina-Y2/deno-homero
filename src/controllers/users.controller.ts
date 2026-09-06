@@ -356,6 +356,7 @@ export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
       ADMIN: valorAdmin,
       admin: valorAdmin,
       isAdmin: valorAdmin,
+      activo: body.activo !== undefined ? Boolean(body.activo) : undefined,
       rol: body.rol,
       dias: body.dias ?? body.diasDuracion,
       diasDuracion: body.diasDuracion ?? body.dias,

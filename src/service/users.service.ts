@@ -258,6 +258,7 @@ export interface ParametrosPrivilegiosUsuario {
   ADMIN?: boolean;
   admin?: boolean;
   isAdmin?: boolean;
+  activo?: boolean;
   rol?: "admin" | "usuario" | string;
   dias?: number;
   diasDuracion?: number;
@@ -272,6 +273,7 @@ export interface ParametrosPrivilegiosUsuario {
  * - Suscripción por días personalizados (ej. 2 o 5 días enteros con cálculo automático de fechaVencimiento)
  * - Insignia de Verificado (true / false)
  * - Permisos de Administrador con campo booleano `ADMIN: true / false`
+ * - Estado Activo / Inactivo `activo: true / false` (para desactivar o activar usuarios)
  * - Saldo de generaciones de ElevenLabs (set o suma)
  */
 export const asignarPrivilegiosUsuarioService = async (
@@ -286,6 +288,7 @@ export const asignarPrivilegiosUsuarioService = async (
       ADMIN,
       admin,
       isAdmin,
+      activo,
       rol,
       dias,
       diasDuracion,
@@ -381,7 +384,12 @@ export const asignarPrivilegiosUsuarioService = async (
       dataActualizada.admin = valorAdmin;
     }
 
-    // 4. Manejo de saldo de ElevensLab
+    // 4. Manejo de estado Activo / Desactivado (activo: true / false)
+    if (activo !== undefined) {
+      dataActualizada.activo = Boolean(activo);
+    }
+
+    // 5. Manejo de saldo de ElevensLab
     if (elevensLab !== undefined) {
       dataActualizada.ElevensLab = Number(elevensLab);
     } else if (sumarElevensLab !== undefined) {
