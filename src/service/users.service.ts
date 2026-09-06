@@ -212,14 +212,21 @@ export const actualizarSuscripcionUsuarioService = async (
     const ahora = new Date();
     const fechaActualizacion = ahora.toISOString();
     const elevensLabFinal = nuevaSuscripcion ? elevensLab : 0;
+    const finalFechaSuscripcion = fechaSuscripcion || (nuevaSuscripcion ? ahora.toISOString() : null);
+
+    let finalFechaVencimiento = fechaVencimiento;
+    if (nuevaSuscripcion && !fechaVencimiento && diasDuracion && diasDuracion > 0) {
+      const venc = new Date(ahora.getTime() + Number(diasDuracion) * 24 * 60 * 60 * 1000);
+      finalFechaVencimiento = venc.toISOString();
+    }
 
     const dataActualizada = {
       suscription: nuevaSuscripcion,
       verificado: verificado,
       ElevensLab: elevensLabFinal,
       fechaActualizacion: fechaActualizacion,
-      fechaSuscripcion: fechaSuscripcion,
-      fechaVencimiento: fechaVencimiento,
+      fechaSuscripcion: finalFechaSuscripcion,
+      fechaVencimiento: finalFechaVencimiento,
       diasDuracion: nuevaSuscripcion ? diasDuracion : 0,
     };
 
@@ -230,7 +237,7 @@ export const actualizarSuscripcionUsuarioService = async (
     await Promise.all(promesas);
 
     console.log(
-      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLabFinal}. Vencimiento: ${fechaVencimiento}`,
+      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLabFinal}. Vencimiento: ${finalFechaVencimiento}`,
     );
 
     return {
@@ -242,6 +249,159 @@ export const actualizarSuscripcionUsuarioService = async (
     throw new Error(
       "Error al modificar la suscripción del usuario en la base de datos",
     );
+  }
+};
+
+export interface ParametrosPrivilegiosUsuario {
+  uid?: string;
+  email?: string;
+  suscription?: boolean;
+  verificado?: boolean;
+  rol?: "admin" | "usuario" | string;
+  dias?: number;
+  diasDuracion?: number;
+  fechaSuscripcion?: string | null;
+  fechaVencimiento?: string | null;
+  elevensLab?: number;
+  sumarElevensLab?: number;
+}
+
+/**
+ * Asigna de forma personalizada privilegios a cualquier usuario:
+ * - Suscripción por días personalizados (ej. 2 o 5 días enteros con cálculo automático de fechaVencimiento)
+ * - Insignia de Verificado (true / false)
+ * - Rol de Administrador ("admin" / "usuario")
+ * - Saldo de generaciones de ElevenLabs (set o suma)
+ */
+export const asignarPrivilegiosUsuarioService = async (
+  params: ParametrosPrivilegiosUsuario,
+) => {
+  try {
+    const {
+      uid,
+      email,
+      suscription,
+      verificado,
+      rol,
+      dias,
+      diasDuracion,
+      elevensLab,
+      sumarElevensLab,
+    } = params;
+
+    if (!uid && !email) {
+      throw new Error("Se requiere al menos el UID o el Email del usuario");
+    }
+
+    let snapshot: any;
+    if (uid) {
+      snapshot = await db.collection("users").where("uid", "==", uid).get();
+      if (snapshot.empty) {
+        const docSnap = await db.collection("users").doc(uid).get();
+        if (docSnap.exists) {
+          snapshot = { docs: [docSnap], empty: false };
+        }
+      }
+    } else if (email) {
+      snapshot = await db.collection("users").where("email", "==", email).get();
+    }
+
+    if (!snapshot || snapshot.empty) {
+      throw new Error(
+        `No se encontró ningún usuario con ${uid ? `UID: ${uid}` : `Email: ${email}`}`,
+      );
+    }
+
+    const userDoc = snapshot.docs[0];
+    const userData = userDoc.data();
+    const ahora = new Date();
+    const fechaActualizacion = ahora.toISOString();
+
+    const dataActualizada: Record<string, any> = {
+      fechaActualizacion,
+    };
+
+    // 1. Manejo de Suscripción y Días (ej: 2 días, 5 días, 30 días)
+    const cantidadDias = dias !== undefined
+      ? Number(dias)
+      : (diasDuracion !== undefined ? Number(diasDuracion) : undefined);
+
+    if (suscription !== undefined) {
+      dataActualizada.suscription = Boolean(suscription);
+      if (suscription) {
+        const fechaInicio = params.fechaSuscripcion || ahora.toISOString();
+        dataActualizada.fechaSuscripcion = fechaInicio;
+
+        if (params.fechaVencimiento) {
+          dataActualizada.fechaVencimiento = params.fechaVencimiento;
+        } else if (cantidadDias !== undefined && cantidadDias > 0) {
+          const fechaVenc = new Date(
+            ahora.getTime() + cantidadDias * 24 * 60 * 60 * 1000,
+          );
+          dataActualizada.fechaVencimiento = fechaVenc.toISOString();
+          dataActualizada.diasDuracion = cantidadDias;
+        } else if (!userData.fechaVencimiento) {
+          const fechaVenc = new Date(
+            ahora.getTime() + 30 * 24 * 60 * 60 * 1000,
+          );
+          dataActualizada.fechaVencimiento = fechaVenc.toISOString();
+          dataActualizada.diasDuracion = 30;
+        }
+      } else {
+        dataActualizada.fechaVencimiento = null;
+        dataActualizada.diasDuracion = 0;
+      }
+    } else if (cantidadDias !== undefined && cantidadDias > 0) {
+      dataActualizada.suscription = true;
+      dataActualizada.fechaSuscripcion = ahora.toISOString();
+      const fechaVenc = new Date(
+        ahora.getTime() + cantidadDias * 24 * 60 * 60 * 1000,
+      );
+      dataActualizada.fechaVencimiento = fechaVenc.toISOString();
+      dataActualizada.diasDuracion = cantidadDias;
+    }
+
+    // 2. Manejo de Verificación
+    if (verificado !== undefined) {
+      dataActualizada.verificado = Boolean(verificado);
+    }
+
+    // 3. Manejo de Rol (admin / usuario)
+    if (rol !== undefined && typeof rol === "string" && rol.trim() !== "") {
+      dataActualizada.rol = rol.trim().toLowerCase();
+    }
+
+    // 4. Manejo de saldo de ElevensLab
+    if (elevensLab !== undefined) {
+      dataActualizada.ElevensLab = Number(elevensLab);
+    } else if (sumarElevensLab !== undefined) {
+      const saldoActual = Number(userData.ElevensLab || 0);
+      dataActualizada.ElevensLab = Math.max(0, saldoActual + Number(sumarElevensLab));
+    } else if (suscription === true && userData.ElevensLab === undefined) {
+      dataActualizada.ElevensLab = 15;
+    }
+
+    const promesas = snapshot.docs.map((doc: any) =>
+      doc.ref.update(dataActualizada)
+    );
+    await Promise.all(promesas);
+
+    console.log(
+      `✅ Privilegios actualizados para usuario ${userData.uid || uid}:`,
+      dataActualizada,
+    );
+
+    return {
+      idDoc: userDoc.id,
+      uid: userData.uid || uid,
+      email: userData.email,
+      name: userData.name,
+      ...userData,
+      ...dataActualizada,
+    };
+  } catch (error) {
+    console.error("❌ Error en asignarPrivilegiosUsuarioService:", error);
+    throw error;
   }
 };
 

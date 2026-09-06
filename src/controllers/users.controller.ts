@@ -4,6 +4,7 @@ import {
   actualizarFotoUsuarioService,
   actualizarNombreUsuarioService,
   actualizarSuscripcionUsuarioService,
+  asignarPrivilegiosUsuarioService,
   crearUsuarioService,
   getUsuarioByEmailService,
   getUsuarioByUidService,
@@ -306,6 +307,70 @@ export const actualizarSuscripcionUsuario = async (
     ctx.response.body = {
       success: false,
       message: "Error actualizando la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+// ==========================================
+// ASIGNAR PRIVILEGIOS DE USUARIO (ADMIN / MOD)
+// ==========================================
+export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
+  try {
+    let body: Record<string, any> = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const uid = body.uid || params.uid || searchParams.get("uid");
+    const email = body.email || searchParams.get("email");
+
+    if (!uid && !email) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Se requiere 'uid' o 'email' del usuario",
+      };
+      return;
+    }
+
+    const resultado = await asignarPrivilegiosUsuarioService({
+      uid,
+      email,
+      suscription: body.suscription ?? body.nuevaSuscripcion,
+      verificado: body.verificado,
+      rol: body.rol,
+      dias: body.dias ?? body.diasDuracion,
+      diasDuracion: body.diasDuracion ?? body.dias,
+      fechaSuscripcion: body.fechaSuscripcion,
+      fechaVencimiento: body.fechaVencimiento,
+      elevensLab: body.elevensLab ?? body.ElevensLab,
+      sumarElevensLab: body.sumarElevensLab,
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Privilegios actualizados exitosamente",
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en asignarPrivilegiosUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al asignar privilegios al usuario",
       error: errorMessage,
     };
   }

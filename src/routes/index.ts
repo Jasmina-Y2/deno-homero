@@ -65,6 +65,7 @@ import {
   actualizarFotoUsuario,
   actualizarNombreUsuario,
   actualizarSuscripcionUsuario,
+  asignarPrivilegiosUsuarioController,
   crearUsuario,
   getUsuarioPerfil,
   getUsuarios,
@@ -197,6 +198,9 @@ router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
 router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
 router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
 router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
+router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
+router.post("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
+router.put("/api/users/asignar-privilegios/:uid", asignarPrivilegiosUsuarioController);
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
 router.post("/api/sonido/crear", crearSonido);
