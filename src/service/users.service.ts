@@ -16,12 +16,10 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
     const fechaVenc = new Date(data.fechaVencimiento);
     if (ahora > fechaVenc) {
       data.suscription = false;
-      data.verificado = false;
       data.ElevensLab = 0;
       try {
         await docRef.update({
           suscription: false,
-          verificado: false,
           ElevensLab: 0,
           fechaActualizacion: ahora.toISOString(),
         });
