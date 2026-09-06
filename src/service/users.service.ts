@@ -255,6 +255,9 @@ export interface ParametrosPrivilegiosUsuario {
   email?: string;
   suscription?: boolean;
   verificado?: boolean;
+  ADMIN?: boolean;
+  admin?: boolean;
+  isAdmin?: boolean;
   rol?: "admin" | "usuario" | string;
   dias?: number;
   diasDuracion?: number;
@@ -268,7 +271,7 @@ export interface ParametrosPrivilegiosUsuario {
  * Asigna de forma personalizada privilegios a cualquier usuario:
  * - Suscripción por días personalizados (ej. 2 o 5 días enteros con cálculo automático de fechaVencimiento)
  * - Insignia de Verificado (true / false)
- * - Rol de Administrador ("admin" / "usuario")
+ * - Permisos de Administrador con campo booleano `ADMIN: true / false`
  * - Saldo de generaciones de ElevenLabs (set o suma)
  */
 export const asignarPrivilegiosUsuarioService = async (
@@ -280,6 +283,9 @@ export const asignarPrivilegiosUsuarioService = async (
       email,
       suscription,
       verificado,
+      ADMIN,
+      admin,
+      isAdmin,
       rol,
       dias,
       diasDuracion,
@@ -359,14 +365,20 @@ export const asignarPrivilegiosUsuarioService = async (
       dataActualizada.diasDuracion = cantidadDias;
     }
 
-    // 2. Manejo de Verificación
+    // 2. Manejo de Verificación (true / false)
     if (verificado !== undefined) {
       dataActualizada.verificado = Boolean(verificado);
     }
 
-    // 3. Manejo de Rol (admin / usuario)
-    if (rol !== undefined && typeof rol === "string" && rol.trim() !== "") {
-      dataActualizada.rol = rol.trim().toLowerCase();
+    // 3. Manejo de campo ADMIN Booleano en mayúscula ("ADMIN": true / false)
+    if (ADMIN !== undefined || admin !== undefined || isAdmin !== undefined) {
+      const valorAdmin = Boolean(ADMIN ?? admin ?? isAdmin);
+      dataActualizada.ADMIN = valorAdmin;
+      dataActualizada.admin = valorAdmin;
+    } else if (rol !== undefined && typeof rol === "string" && rol.trim() !== "") {
+      const valorAdmin = rol.trim().toLowerCase() === "admin";
+      dataActualizada.ADMIN = valorAdmin;
+      dataActualizada.admin = valorAdmin;
     }
 
     // 4. Manejo de saldo de ElevensLab

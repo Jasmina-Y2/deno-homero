@@ -344,11 +344,18 @@ export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
       return;
     }
 
+    const valorAdmin = body.ADMIN !== undefined
+      ? body.ADMIN
+      : (body.admin !== undefined ? body.admin : body.isAdmin);
+
     const resultado = await asignarPrivilegiosUsuarioService({
       uid,
       email,
       suscription: body.suscription ?? body.nuevaSuscripcion,
       verificado: body.verificado,
+      ADMIN: valorAdmin,
+      admin: valorAdmin,
+      isAdmin: valorAdmin,
       rol: body.rol,
       dias: body.dias ?? body.diasDuracion,
       diasDuracion: body.diasDuracion ?? body.dias,
