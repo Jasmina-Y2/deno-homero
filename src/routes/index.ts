@@ -123,6 +123,13 @@ import {
   guardarPinBovedaController,
   obtenerPinBovedaController,
 } from "../controllers/boveda.controller.ts";
+import {
+  actualizarEstadoPagoController,
+  obtenerPagoPorIdController,
+  obtenerPagosUsuarioController,
+  obtenerTodosPagosController,
+  solicitarRetiroController,
+} from "../controllers/pago.controller.ts";
 
 const router = new Router();
 
@@ -240,6 +247,16 @@ router.put(
 
 // Propinas, stickers, billetera y ranking
 router.post("/api/enviar-propina", enviarPropinaController);
+
+// Retiros y Pagos (Envío de dinero a Homero / Colección 'pagos')
+router.post("/api/solicitar-retiro", solicitarRetiroController);
+router.post("/api/solicitar-pago", solicitarRetiroController);
+router.post("/api/pagos/solicitar-retiro", solicitarRetiroController);
+router.post("/api/pagos/enviar", solicitarRetiroController);
+router.get("/api/pagos", obtenerTodosPagosController);
+router.get("/api/pagos/usuario/:uid", obtenerPagosUsuarioController);
+router.get("/api/pagos/:id", obtenerPagoPorIdController);
+router.put("/api/pagos/:id/estado", actualizarEstadoPagoController);
 
 // Historial de gastos y ganancias
 router.get("/api/historial", obtenerHistorialController);

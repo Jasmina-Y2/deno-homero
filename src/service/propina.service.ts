@@ -276,7 +276,17 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
       let contraparteUid = "";
       let descripcion = "";
 
-      if (esRecompensa) {
+      if (t.tipo === "solicitud_retiro" || t.tipo === "retiro") {
+        tipoMovimiento = "gasto";
+        totalGastos += cantidad;
+        contraparteUid = t.idDestino || t.idCreador || "";
+        descripcion = t.descripcion || `Solicitud de retiro de fondos (${cantidad} monedas)`;
+      } else if (t.tipo === "reembolso_retiro") {
+        tipoMovimiento = "ganancia";
+        totalGanancias += cantidad;
+        contraparteUid = t.idRemitente || "";
+        descripcion = "Reembolso por solicitud de retiro cancelada/rechazada";
+      } else if (esRecompensa) {
         tipoMovimiento = "recompensa";
         totalRecompensas += cantidad;
         descripcion = `Recompensa por video de anuncio (${t.adNetwork || "AdMob"})`;

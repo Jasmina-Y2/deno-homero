@@ -17,7 +17,7 @@ export interface ReciboTransaccion {
   publicacionId?: string;
   cantidadMonedas: number;
   tipoSticker?: string;
-  tipo: "propina" | "recompensa_anuncio" | "recarga";
+  tipo: "propina" | "recompensa_anuncio" | "recarga" | "solicitud_retiro" | "retiro" | "reembolso_retiro";
   fecha: string;
   estado: "completado" | "fallido";
   saldoAnteriorOyente?: number;
