@@ -2,6 +2,7 @@ import type { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
   actualizarEstadoReporteService,
   crearReporteService,
+  obtenerReportePorIdService,
   obtenerReportesService,
   obtenerReportesUsuarioService,
   responderReporteService,
@@ -42,6 +43,7 @@ export const crearReporteController = async (ctx: Context) => {
       fecha,
       appVersion,
       metadata,
+      comprobanteUrl,
     } = body || {};
 
     if (!descripcion && !asunto) {
@@ -66,6 +68,7 @@ export const crearReporteController = async (ctx: Context) => {
       fecha,
       appVersion: appVersion || "1.0.0",
       metadata,
+      comprobanteUrl,
     });
 
     ctx.response.status = 201;
@@ -90,7 +93,7 @@ export const crearReporteController = async (ctx: Context) => {
 };
 
 /**
- * Obtener listado de reportes (opcional para dashboard/admin)
+ * Obtener listado de reportes (para dashboard/admin)
  * GET /api/soporte/reportes
  */
 export const obtenerReportesController = async (ctx: RouterContext<string>) => {
@@ -165,8 +168,55 @@ export const obtenerReportesUsuarioController = async (ctx: RouterContext<string
 };
 
 /**
- * Responder reporte de soporte y generar notificación en Firestore
- * POST /api/soporte/reporte/:id/responder
+ * Obtener un reporte individual por su ID
+ * GET /api/soporte/reporte/:id
+ */
+export const obtenerReportePorIdController = async (ctx: RouterContext<string>) => {
+  try {
+    const { id } = ctx.params;
+    if (!id) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        ok: false,
+        success: false,
+        message: "El parámetro ID de reporte es obligatorio",
+      };
+      return;
+    }
+
+    const reporte = await obtenerReportePorIdService(id);
+    if (!reporte) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        ok: false,
+        success: false,
+        error: "Reporte no encontrado",
+        message: "Reporte no encontrado",
+      };
+      return;
+    }
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      ok: true,
+      success: true,
+      data: reporte,
+    };
+  } catch (error: unknown) {
+    console.error("❌ Error en obtenerReportePorIdController:", error);
+    const errorMessage = error instanceof Error ? error.message : "Error interno";
+    ctx.response.status = 500;
+    ctx.response.body = {
+      ok: false,
+      success: false,
+      error: errorMessage,
+    };
+  }
+};
+
+/**
+ * Responder reporte de soporte o enviar mensaje en el chat del ticket
+ * POST /api/soporte/reporte/:id/responder y POST /api/soporte/reporte/:id/mensaje
  */
 export const responderReporteController = async (ctx: RouterContext<string>) => {
   try {
@@ -182,24 +232,44 @@ export const responderReporteController = async (ctx: RouterContext<string>) => 
     }
 
     const body = await extraerBodyJson(ctx);
-    const { respuesta, estado = "resuelto", respondidoPor = "Equipo de Homero" } = body || {};
+    const {
+      respuesta,
+      texto,
+      mensaje,
+      estado = "respondido",
+      respondidoPor = "Equipo de Homero",
+      metadata,
+      remitente,
+      autorId,
+      autorNombre,
+      comprobanteUrl,
+      imagenUrl,
+    } = body || {};
 
-    if (!respuesta || typeof respuesta !== "string" || !respuesta.trim()) {
+    const textoFinal = (respuesta || texto || mensaje || "").trim();
+
+    if (!textoFinal && !comprobanteUrl && !imagenUrl) {
       ctx.response.status = 400;
       ctx.response.body = {
         ok: false,
         success: false,
-        message: "El texto de la respuesta es obligatorio",
+        message: "El texto del mensaje o comprobante es obligatorio",
       };
       return;
     }
 
-    const resultado = await responderReporteService(
-      id,
-      respuesta.trim(),
+    const resultado = await responderReporteService({
+      idDoc: id,
+      respuesta: textoFinal || (comprobanteUrl ? "Se adjuntó comprobante de pago." : "Mensaje"),
       estado,
       respondidoPor,
-    );
+      metadata,
+      remitente,
+      autorId,
+      autorNombre,
+      comprobanteUrl,
+      imagenUrl,
+    });
 
     if (!resultado) {
       ctx.response.status = 404;
@@ -216,7 +286,7 @@ export const responderReporteController = async (ctx: RouterContext<string>) => 
     ctx.response.body = {
       ok: true,
       success: true,
-      message: "Respuesta guardada y notificación creada con éxito",
+      message: "Mensaje y actualización registrados con éxito",
       data: resultado,
     };
   } catch (error: unknown) {
@@ -247,12 +317,12 @@ export const actualizarEstadoReporteController = async (ctx: RouterContext<strin
     const body = await extraerBodyJson(ctx);
     const { estado } = body || {};
 
-    if (!estado || !["pendiente", "en_revision", "resuelto", "rechazado", "respondido"].includes(estado)) {
+    if (!estado || !["pendiente", "en_revision", "resuelto", "rechazado", "respondido", "cerrado"].includes(estado)) {
       ctx.response.status = 400;
       ctx.response.body = {
         ok: false,
         success: false,
-        message: "Estado inválido. Debe ser: pendiente, en_revision, resuelto, respondido o rechazado",
+        message: "Estado inválido. Debe ser: pendiente, en_revision, resuelto, respondido, cerrado o rechazado",
       };
       return;
     }
@@ -282,4 +352,3 @@ export const actualizarEstadoReporteController = async (ctx: RouterContext<strin
     };
   }
 };
-

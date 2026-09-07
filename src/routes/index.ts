@@ -102,6 +102,7 @@ import {
 import {
   actualizarEstadoReporteController,
   crearReporteController,
+  obtenerReportePorIdController,
   obtenerReportesController,
   obtenerReportesUsuarioController,
   responderReporteController,
@@ -229,7 +230,9 @@ router.get(
   "/api/soporte/reportes/usuario/:uid",
   obtenerReportesUsuarioController,
 );
+router.get("/api/soporte/reporte/:id", obtenerReportePorIdController);
 router.post("/api/soporte/reporte/:id/responder", responderReporteController);
+router.post("/api/soporte/reporte/:id/mensaje", responderReporteController);
 router.put(
   "/api/soporte/reporte/:id/estado",
   actualizarEstadoReporteController,
