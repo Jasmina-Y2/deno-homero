@@ -509,3 +509,79 @@ export const guardarFcmTokenService = async (
   }
 };
 
+export interface ParametrosMarcoUsuario {
+  userId?: string;
+  uid?: string;
+  marco_perfil?: string;
+  marco_perfil_id?: string | number;
+  selectedFrame?: string | number;
+  frame?: {
+    id?: string | number;
+    src?: string;
+    [key: string]: any;
+  };
+}
+
+/**
+ * Actualiza o asigna el marco de perfil seleccionado de un usuario en Firestore:
+ * marco_perfil: frame.src
+ * marco_perfil_id: frame.id
+ * selectedFrame: frame.id
+ */
+export const actualizarMarcoUsuarioService = async (
+  params: ParametrosMarcoUsuario,
+) => {
+  try {
+    const userId = params.userId || params.uid;
+    if (!userId) {
+      throw new Error("El ID de usuario (userId o uid) es requerido");
+    }
+
+    const marcoPerfil = params.frame?.src ?? params.marco_perfil ?? "";
+    const marcoPerfilId = params.frame?.id ?? params.marco_perfil_id ?? params.selectedFrame ?? "";
+    const selectedFrame = params.frame?.id ?? params.selectedFrame ?? params.marco_perfil_id ?? "";
+    const fechaActualizacion = new Date().toISOString();
+
+    const dataToUpdate: Record<string, any> = {
+      marco_perfil: marcoPerfil,
+      marco_perfil_id: marcoPerfilId,
+      selectedFrame: selectedFrame,
+      fechaActualizacion: fechaActualizacion,
+    };
+
+    const userDocRef = db.collection("users").doc(userId);
+    const docSnap = await userDocRef.get();
+
+    if (docSnap.exists) {
+      await userDocRef.set(dataToUpdate, { merge: true });
+    } else {
+      const snapshot = await db.collection("users").where("uid", "==", userId).get();
+      if (!snapshot.empty) {
+        const promesas = snapshot.docs.map((doc: any) =>
+          doc.ref.set(dataToUpdate, { merge: true })
+        );
+        await Promise.all(promesas);
+      } else {
+        await userDocRef.set({
+          uid: userId,
+          ...dataToUpdate,
+        }, { merge: true });
+      }
+    }
+
+    console.log(`✅ Marco de perfil actualizado para usuario: ${userId}`, dataToUpdate);
+
+    return {
+      userId,
+      uid: userId,
+      ...dataToUpdate,
+    };
+  } catch (error) {
+    console.error("❌ Error en actualizarMarcoUsuarioService:", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Error al actualizar el marco del perfil",
+    );
+  }
+};
+
+

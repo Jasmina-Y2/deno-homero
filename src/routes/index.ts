@@ -63,6 +63,8 @@ import { getGenteQueMeSigue } from "../controllers/seguir.controller.ts";
 import {
   actualizarDescripcionUsuario,
   actualizarFotoUsuario,
+  actualizarMarcoUsuario,
+  actualizarMarcoUsuarioController,
   actualizarNombreUsuario,
   actualizarSuscripcionUsuario,
   asignarPrivilegiosUsuarioController,
@@ -205,6 +207,12 @@ router.post("/api/users/crear", crearUsuario);
 router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
 router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
 router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
+router.put("/api/users/actualizar-marco", actualizarMarcoUsuarioController);
+router.post("/api/users/actualizar-marco", actualizarMarcoUsuarioController);
+router.put("/api/users/actualizar-marco/:uid", actualizarMarcoUsuarioController);
+router.put("/api/users/marco-perfil", actualizarMarcoUsuarioController);
+router.post("/api/users/marco-perfil", actualizarMarcoUsuarioController);
+router.put("/api/users/marco-perfil/:uid", actualizarMarcoUsuarioController);
 router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
 router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
 router.post("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);

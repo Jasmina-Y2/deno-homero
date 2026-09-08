@@ -2,6 +2,7 @@ import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
   actualizarDescripcionUsuarioService,
   actualizarFotoUsuarioService,
+  actualizarMarcoUsuarioService,
   actualizarNombreUsuarioService,
   actualizarSuscripcionUsuarioService,
   asignarPrivilegiosUsuarioService,
@@ -422,4 +423,72 @@ export const guardarFcmToken = async (ctx: Context) => {
     };
   }
 };
+
+// ==========================================
+// ACTUALIZAR MARCO DE PERFIL
+// ==========================================
+export const actualizarMarcoUsuarioController = async (ctx: Context) => {
+  try {
+    let body: Record<string, any> = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const userId = body.userId || body.uid || params.uid || params.userId || searchParams.get("userId") || searchParams.get("uid");
+
+    if (!userId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el parámetro requerido: userId o uid",
+      };
+      return;
+    }
+
+    const frame = body.frame;
+    const marco_perfil = frame?.src ?? body.marco_perfil ?? body.marcoUrl ?? body.src;
+    const marco_perfil_id = frame?.id ?? body.marco_perfil_id ?? body.frameId ?? body.selectedFrame ?? body.id;
+    const selectedFrame = frame?.id ?? body.selectedFrame ?? body.marco_perfil_id ?? body.frameId ?? body.id;
+
+    const resultado = await actualizarMarcoUsuarioService({
+      userId,
+      uid: userId,
+      marco_perfil,
+      marco_perfil_id,
+      selectedFrame,
+      frame,
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Marco de perfil actualizado correctamente",
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+    console.error("❌ Error en actualizarMarcoUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al actualizar el marco del perfil",
+      error: errorMessage,
+    };
+  }
+};
+
+export const actualizarMarcoUsuario = actualizarMarcoUsuarioController;
+
 
