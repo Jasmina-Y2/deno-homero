@@ -1,6 +1,5 @@
-import { RouterContext } from "https://deno.land/x/oak/mod.ts";
+import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { BUCKET_NAME, pollyClient, s3Client } from "../config/aws.ts";
-import { Context } from "node:vm";
 import { SynthesizeSpeechCommand, VoiceId } from "npm:@aws-sdk/client-polly";
 import { uploadToS3 } from "../controllers/aws.controller.ts";
 
@@ -48,114 +47,6 @@ const validarHistoriaCoherencia = async (
     return JSON.parse(data.choices[0].message.content);
   } catch {
     return { valida: false, razon: "Error en el motor de validación." };
-  }
-};
-
-export const transformarHistoriaSSML = async (ctx: any) => {
-  try {
-    const body = await ctx.request.body.json();
-    const personajesOriginales = body.personajes;
-    const textoOriginal = body.historia;
-
-    const apiKey = Deno.env.get("IA_KEY") || "";
-
-    if (!personajesOriginales || !textoOriginal) {
-      ctx.response.status = 400;
-      ctx.response.body = {
-        success: false,
-        error: "Faltan personajes o historia",
-      };
-      return;
-    }
-
-    // PROMPT MEJORADO Y DICTATORIAL
-    const promptSistema =
-      `Eres un procesador de texto estricto para un motor Text-to-Speech.
-Tu ÚNICA tarea es dividir la historia en fragmentos secuenciales y asignar el "voice_id" correcto.
-
-REGLAS ABSOLUTAS E INQUEBRANTABLES:
-1. PROHIBIDO ELIMINAR TEXTO: Debes procesar el 100% de las palabras y signos de puntuación originales. No resumas, no omitas, ni modifiques una sola letra. Si juntas todos los fragmentos generados, el texto debe ser idéntico al original.
-2. ORDEN CRONOLÓGICO ESTRICTO: El arreglo debe seguir el orden exacto del texto de principio a fin. NUNCA pongas un diálogo antes de la narración que lo precede en el texto original.
-3. IDENTIFICACIÓN DE VOCES: Usa estrictamente los "voice_id" enviados por el usuario. La narración SIEMPRE lleva la voz del "Narrador". El diálogo entre comillas o comillas simples lleva la voz del personaje que habla.
-4. PUNTUACIÓN INTACTA: Si hay signos de puntuación (comas, puntos, guiones) después de un diálogo, pertenecen al narrador. 
-Ejemplo de corte perfecto para: "'Hola', dijo ella en voz baja."
-- Fragmento 1 (Personaje): "Hola"
-- Fragmento 2 (Narrador): ", dijo ella en voz baja."
-5. AUDITORÍA DE TEXTO (OBLIGATORIA): Antes de generar el JSON, compara tu resultado con el texto original. Presta especial atención a las palabras que conectan los diálogos (ej: "remató ella", "preguntó con tono robótico") y a los signos de puntuación. Está ESTRICTAMENTE PROHIBIDO que el texto resultante tenga una sola palabra menos o una coma menos que el texto original.
-
-FORMATO DE SALIDA (JSON PURO OBLIGATORIO):
-{
-  "dialogos": [
-    { "t": "fragmento exacto", "v": "VOICE_ID" }
-  ]
-}`;
-
-    const mensajeUsuario = `
-PERSONAJES DISPONIBLES:
-${
-      JSON.stringify(
-        personajesOriginales.map((p: any) => ({
-          personaje: p.nombre,
-          voice_id: p.voice_id,
-        })),
-      )
-    }
-
-HISTORIA A SEGMENTAR (Procesa el 100% de este texto de principio a fin sin saltarte nada):
-"""
-${textoOriginal}
-"""
-`;
-
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: promptSistema },
-            { role: "user", content: mensajeUsuario },
-          ],
-          temperature: 0, // Temperatura 0 es perfecta para esto
-          response_format: { type: "json_object" },
-        }),
-      },
-    );
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error("❌ Detalle del error de Groq:", data.error);
-      throw new Error(`Groq falló: ${data.error.message}`);
-    }
-
-    if (!data.choices || !data.choices[0]) {
-      console.error("❌ Respuesta extraña completa:", data);
-      throw new Error("Groq no devolvió el array 'choices'");
-    }
-
-    const resultadoEstructurado = JSON.parse(
-      data.choices[0].message.content.trim(),
-    );
-
-    ctx.response.status = 200;
-    ctx.response.body = {
-      success: true,
-      personajes: personajesOriginales,
-      dialogos: resultadoEstructurado.dialogos,
-    };
-  } catch (error) {
-    console.error("❌ Error con Groq/IA:", error);
-    ctx.response.status = 500;
-    ctx.response.body = {
-      success: false,
-      error: error instanceof Error ? error.message : "Error fatal",
-    };
   }
 };
 
@@ -207,13 +98,15 @@ const prepararSSMLParaPolly = (rawText: string, engine: string): string => {
 export const generateMultivoiceAudio = async (ctx: any) => {
   try {
     const body = await ctx.request.body.json();
-    const dialogos = body.HISTORIA || body.historia || body.dialogos || body.segments;
+    const dialogos = body.HISTORIA || body.historia || body.dialogos ||
+      body.segments;
 
     if (!Array.isArray(dialogos) || dialogos.length === 0) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
-        error: "Debes enviar un array 'HISTORIA' o 'dialogos' válido y no vacío",
+        error:
+          "Debes enviar un array 'HISTORIA' o 'dialogos' válido y no vacío",
       };
       return;
     }
@@ -353,3 +246,196 @@ export const generateMultivoiceAudio = async (ctx: any) => {
     };
   }
 };
+
+// ==========================================
+// DETECTAR IDIOMA CON IA
+// ==========================================
+/**
+ * Detecta el idioma de un fragmento de texto usando IA (Groq LLaMA)
+ */
+export const detectarIdiomaIA = async (ctx: any) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof ctx.request.body?.json === "function") {
+        body = await ctx.request.body.json();
+      } else if (typeof ctx.request.body === "function") {
+        const result = ctx.request.body({ type: "json" });
+        body = await result.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const texto = body.texto || body.text || body.fragmento || body.content || "";
+
+    if (!texto || typeof texto !== "string" || texto.trim().length === 0) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        error: "Debes proporcionar un texto o fragmento para detectar el idioma.",
+      };
+      return;
+    }
+
+    const apiKey = Deno.env.get("IA_KEY") || "";
+    if (!apiKey) {
+      throw new Error("No se ha configurado la variable de entorno IA_KEY");
+    }
+
+    const promptSistema = `Eres un detector lingüístico de alta precisión. Tu tarea es identificar el idioma principal del texto proporcionado.
+Responde ÚNICAMENTE un objeto JSON válido con la siguiente estructura:
+{
+  "idioma": "Nombre del idioma en español (ej: Español, Inglés, Portugués, Francés, Alemán, Italiano, Japonés, etc.)",
+  "codigo": "Código ISO 639-1 en minúsculas (ej: es, en, pt, fr, de, it, ja, etc.)",
+  "confianza": 0.99,
+  "nombreNativo": "Nombre del idioma en su propia lengua (ej: Español, English, Português, Français, Deutsch, etc.)"
+}`;
+
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: promptSistema },
+          { role: "user", content: `Analiza este texto y detecta su idioma:\n"""\n${texto.slice(0, 3000)}\n"""` },
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(`Error en Groq: ${data.error.message || JSON.stringify(data.error)}`);
+    }
+
+    const resultado = JSON.parse(data.choices[0].message.content.trim());
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: {
+        idioma: resultado.idioma,
+        codigo: resultado.codigo,
+        confianza: resultado.confianza ?? 1.0,
+        nombreNativo: resultado.nombreNativo || resultado.idioma,
+        longitudTexto: texto.length,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en detectarIdiomaIA:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al detectar el idioma con IA",
+    };
+  }
+};
+
+export const detectarIdiomaController = detectarIdiomaIA;
+
+// ==========================================
+// GENERAR DESCRIPCIÓN CON IA (200 CARACTERES)
+// ==========================================
+/**
+ * Genera una descripción/sinopsis atractiva de máximo 200 caracteres para un texto/historia
+ */
+export const generarDescripcionIA = async (ctx: any) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof ctx.request.body?.json === "function") {
+        body = await ctx.request.body.json();
+      } else if (typeof ctx.request.body === "function") {
+        const result = ctx.request.body({ type: "json" });
+        body = await result.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const texto = body.texto || body.historia || body.text || body.content || "";
+    const limiteCaracteres = Math.min(Math.max(Number(body.maxCaracteres || body.limite || 200), 50), 500);
+
+    if (!texto || typeof texto !== "string" || texto.trim().length === 0) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        error: "Debes proporcionar el texto o historia para generar la descripción.",
+      };
+      return;
+    }
+
+    const apiKey = Deno.env.get("IA_KEY") || "";
+    if (!apiKey) {
+      throw new Error("No se ha configurado la variable de entorno IA_KEY");
+    }
+
+    const promptSistema = `Eres un redactor editorial experto en sintetizar historias en micro-sinopsis y ganchos fascinantes para lectores.
+Tu objetivo es crear una descripción atractiva, intrigante y concisa que resuma la esencia del texto.
+
+REGLAS OBLIGATORIAS:
+1. LONGITUD: La descripción debe tener como MÁXIMO ${limiteCaracteres} caracteres (incluyendo espacios y signos de puntuación). No te pases jamás de ${limiteCaracteres} caracteres.
+2. IDIOMA: Escribe la descripción en el MISMO IDIOMA en el que está escrito el texto original.
+3. TONO: Intrigante, profesional y cautivador (ideal para la portada/tarjeta de una historia o artículo).
+4. FORMATO: Responde ÚNICAMENTE un objeto JSON válido:
+{
+  "descripcion": "Texto de la sinopsis generado aquí..."
+}`;
+
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: promptSistema },
+          { role: "user", content: `Genera la sinopsis corta (máx ${limiteCaracteres} caracteres) para este texto:\n"""\n${texto.slice(0, 6000)}\n"""` },
+        ],
+        temperature: 0.6,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(`Error en Groq: ${data.error.message || JSON.stringify(data.error)}`);
+    }
+
+    const resultado = JSON.parse(data.choices[0].message.content.trim());
+    let descripcionFinal = String(resultado.descripcion || "").trim();
+
+    // Asegurar recorte estricto a limiteCaracteres si por alguna razón la IA se pasa
+    if (descripcionFinal.length > limiteCaracteres) {
+      descripcionFinal = descripcionFinal.slice(0, limiteCaracteres - 3).trim() + "...";
+    }
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: {
+        descripcion: descripcionFinal,
+        caracteres: descripcionFinal.length,
+        limiteMaximo: limiteCaracteres,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en generarDescripcionIA:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al generar la descripción con IA",
+    };
+  }
+};
+
+export const generarDescripcionController = generarDescripcionIA;
+

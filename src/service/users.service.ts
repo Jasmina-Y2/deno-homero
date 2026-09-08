@@ -32,15 +32,20 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
     necesitaLimpieza = true;
   }
 
+  const ahora = new Date();
+  const mesActual = ahora.toISOString().slice(0, 7); // e.g. "2026-09"
+
+  // 1. Manejo de expiración de suscripción PRO
   if (data && data.suscription && data.fechaVencimiento) {
-    const ahora = new Date();
     const fechaVenc = new Date(data.fechaVencimiento);
     if (ahora > fechaVenc) {
       data.suscription = false;
-      data.ElevensLab = 0;
+      data.ElevensLab = 2; // Vuelve a los 2 gratuitos del mes
+      data.mesRecargaFreeElevenLabs = mesActual;
 
       updateData.suscription = false;
-      updateData.ElevensLab = 0;
+      updateData.ElevensLab = 2;
+      updateData.mesRecargaFreeElevenLabs = mesActual;
       updateData.fechaActualizacion = ahora.toISOString();
       necesitaLimpieza = true;
 
@@ -50,6 +55,22 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
         data.marco_perfil_id = null;
         updateData.marco_perfil_id = null;
       }
+    }
+  }
+
+  // 2. Usuarios sin suscripción activa: 2 créditos gratis de ElevenLabs al mes
+  if (!data?.suscription) {
+    const mesUltimaRecarga = data?.mesRecargaFreeElevenLabs;
+    const saldoActual = data?.ElevensLab !== undefined && data?.ElevensLab !== null
+      ? Number(data.ElevensLab)
+      : null;
+
+    if (saldoActual === null || mesUltimaRecarga !== mesActual) {
+      data.ElevensLab = 2;
+      data.mesRecargaFreeElevenLabs = mesActual;
+      updateData.ElevensLab = 2;
+      updateData.mesRecargaFreeElevenLabs = mesActual;
+      necesitaLimpieza = true;
     }
   }
 
@@ -127,15 +148,19 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
   try {
     const metodoRegistro = datos.metodo || "email";
 
+    const ahora = new Date();
+    const mesActual = ahora.toISOString().slice(0, 7);
+
     await db.collection("users").doc(datos.uid).set({
       ...datos,
-      fechaRegistro: datos.fechaRegistro || new Date().toISOString(),
+      fechaRegistro: datos.fechaRegistro || ahora.toISOString(),
       rol: "usuario",
       activo: true,
       metodo: metodoRegistro,
       suscription: false,
       verificado: false,
-      ElevensLab: 0,
+      ElevensLab: 2, // 2 créditos gratis de ElevenLabs al mes
+      mesRecargaFreeElevenLabs: mesActual,
       fechaSuscripcion: null,
       fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
@@ -153,7 +178,8 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
       metodo: metodoRegistro,
       suscription: false,
       verificado: false,
-      ElevensLab: 0,
+      ElevensLab: 2,
+      mesRecargaFreeElevenLabs: mesActual,
       fechaSuscripcion: null,
       fechaVencimiento: null,
       descripcion: "Soy creador original de homero",
@@ -258,7 +284,8 @@ export const actualizarSuscripcionUsuarioService = async (
 
     const ahora = new Date();
     const fechaActualizacion = ahora.toISOString();
-    const elevensLabFinal = nuevaSuscripcion ? elevensLab : 0;
+    const mesActual = ahora.toISOString().slice(0, 7);
+    const elevensLabFinal = nuevaSuscripcion ? elevensLab : 2;
     const finalFechaSuscripcion = fechaSuscripcion || (nuevaSuscripcion ? ahora.toISOString() : null);
 
     let finalFechaVencimiento = fechaVencimiento;
@@ -271,6 +298,7 @@ export const actualizarSuscripcionUsuarioService = async (
       suscription: nuevaSuscripcion,
       verificado: verificado,
       ElevensLab: elevensLabFinal,
+      mesRecargaFreeElevenLabs: mesActual,
       fechaActualizacion: fechaActualizacion,
       fechaSuscripcion: finalFechaSuscripcion,
       fechaVencimiento: finalFechaVencimiento,
@@ -806,6 +834,70 @@ export const obtenerDiaRachaUsuarioService = async (uid: string) => {
     );
   }
 };
+
+/**
+ * Descuenta 1 crédito del saldo de ElevensLab del usuario si tiene disponibilidad
+ * @param uid - ID del usuario
+ */
+export const descontarUsoElevenLabsService = async (uid: string) => {
+  try {
+    if (!uid) {
+      throw new Error("El UID del usuario es requerido");
+    }
+
+    let docRef: any = null;
+    let userData: any = null;
+
+    const userDocDirect = await db.collection("users").doc(uid).get();
+    if (userDocDirect.exists) {
+      docRef = userDocDirect.ref;
+      userData = userDocDirect.data();
+    } else {
+      const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (!snapshot.empty) {
+        docRef = snapshot.docs[0].ref;
+        userData = snapshot.docs[0].data();
+      }
+    }
+
+    if (!docRef || !userData) {
+      throw new Error(`Usuario no encontrado con UID: ${uid}`);
+    }
+
+    userData = await verificarExpiracionSuscripcion(docRef, userData);
+
+    const saldoActual = Number(userData.ElevensLab ?? 0);
+    if (saldoActual <= 0) {
+      return {
+        success: false,
+        permitido: false,
+        saldoRestante: 0,
+        mensaje: "Has alcanzado el límite de usos de ElevenLabs para este mes.",
+      };
+    }
+
+    const nuevoSaldo = Math.max(0, saldoActual - 1);
+    await docRef.update({
+      ElevensLab: nuevoSaldo,
+      fechaActualizacion: new Date().toISOString(),
+    });
+
+    console.log(`🎙️ Uso de ElevenLabs descontado para usuario ${uid}. Saldo restante: ${nuevoSaldo}`);
+
+    return {
+      success: true,
+      permitido: true,
+      saldoRestante: nuevoSaldo,
+      mensaje: "Uso de ElevenLabs descontado correctamente",
+    };
+  } catch (error) {
+    console.error("❌ Error en descontarUsoElevenLabsService:", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Error al descontar uso de ElevenLabs",
+    );
+  }
+};
+
 
 
 

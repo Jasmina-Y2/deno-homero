@@ -74,6 +74,7 @@ import {
   getUsuarios,
   guardarFcmToken,
   obtenerDiaRachaUsuarioController,
+  descontarUsoElevenLabsController,
   verificarUsuarioEmail,
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
@@ -86,8 +87,9 @@ import { checkStoryViewed } from "../controllers/vistasuser.controller.ts";
 import { getHistoriasPorCategoria } from "../controllers/categoriahistoria.controller.ts";
 import { loginAndSync } from "../controllers/auth.controller.ts";
 import {
+  detectarIdiomaController,
   generateMultivoiceAudio,
-  transformarHistoriaSSML,
+  generarDescripcionController,
 } from "../controllers/ia.controller.ts";
 import {
   crearSonido,
@@ -211,17 +213,31 @@ router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
 router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
 router.put("/api/users/actualizar-marco", actualizarMarcoUsuarioController);
 router.post("/api/users/actualizar-marco", actualizarMarcoUsuarioController);
-router.put("/api/users/actualizar-marco/:uid", actualizarMarcoUsuarioController);
+router.put(
+  "/api/users/actualizar-marco/:uid",
+  actualizarMarcoUsuarioController,
+);
 router.put("/api/users/marco-perfil", actualizarMarcoUsuarioController);
 router.post("/api/users/marco-perfil", actualizarMarcoUsuarioController);
 router.put("/api/users/marco-perfil/:uid", actualizarMarcoUsuarioController);
 router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
-router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
-router.post("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
-router.put("/api/users/asignar-privilegios/:uid", asignarPrivilegiosUsuarioController);
+router.put(
+  "/api/users/asignar-privilegios",
+  asignarPrivilegiosUsuarioController,
+);
+router.post(
+  "/api/users/asignar-privilegios",
+  asignarPrivilegiosUsuarioController,
+);
+router.put(
+  "/api/users/asignar-privilegios/:uid",
+  asignarPrivilegiosUsuarioController,
+);
 router.post("/api/users/dia-racha", actualizarDiaRachaUsuarioController);
 router.get("/api/users/dia-racha/:uid", obtenerDiaRachaUsuarioController);
 router.get("/api/users/dia-racha", obtenerDiaRachaUsuarioController);
+router.post("/api/users/consumir-elevenslab", descontarUsoElevenLabsController);
+router.post("/api/users/descontar-elevenslab", descontarUsoElevenLabsController);
 
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
@@ -230,8 +246,9 @@ router.get("/api/sonido/obtener", obtenerSonidos);
 router.get("/api/sonido/obtener/:id", obtenerSonidoPorId);
 router.put("/api/sonido/modificar/:id", modificarSonido);
 
-router.post("/api/ia/automatizar-ssml", transformarHistoriaSSML);
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
+router.post("/api/ia/detectar-idioma", detectarIdiomaController);
+router.post("/api/ia/generar-descripcion", generarDescripcionController);
 
 // Notificaciones
 router.get("/api/notificaciones/:uid", obtenerNotificacionesUsuario);
@@ -284,15 +301,36 @@ router.get("/api/ranking/creadores", obtenerRankingController);
 router.post("/api/recompensa-anuncio", reclamarRecompensaAnuncioController);
 router.post("/api/anuncios/recompensar", reclamarRecompensaAnuncioController);
 router.post("/api/anuncios/reset-limite", resetearLimiteAnunciosController);
-router.post("/api/anuncios/reset-limite/:uid", resetearLimiteAnunciosController);
+router.post(
+  "/api/anuncios/reset-limite/:uid",
+  resetearLimiteAnunciosController,
+);
 
 // Control de límites por dispositivo físico (device_ad_limits)
-router.post("/api/device-ad-limits/recompensar", validarYRecompensarDispositivoController);
-router.post("/api/anuncios/validar-dispositivo", validarYRecompensarDispositivoController);
-router.get("/api/device-ad-limits/:deviceId", consultarEstadoDispositivoController);
-router.get("/api/anuncios/estado-dispositivo/:deviceId", consultarEstadoDispositivoController);
-router.post("/api/device-ad-limits/:deviceId/reset", resetearLimiteDispositivoController);
-router.post("/api/anuncios/reset-dispositivo", resetearLimiteDispositivoController);
+router.post(
+  "/api/device-ad-limits/recompensar",
+  validarYRecompensarDispositivoController,
+);
+router.post(
+  "/api/anuncios/validar-dispositivo",
+  validarYRecompensarDispositivoController,
+);
+router.get(
+  "/api/device-ad-limits/:deviceId",
+  consultarEstadoDispositivoController,
+);
+router.get(
+  "/api/anuncios/estado-dispositivo/:deviceId",
+  consultarEstadoDispositivoController,
+);
+router.post(
+  "/api/device-ad-limits/:deviceId/reset",
+  resetearLimiteDispositivoController,
+);
+router.post(
+  "/api/anuncios/reset-dispositivo",
+  resetearLimiteDispositivoController,
+);
 
 // Bóveda / PIN de seguridad
 router.get("/api/boveda/pin/:uid", obtenerPinBovedaController);

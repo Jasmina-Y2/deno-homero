@@ -13,6 +13,7 @@ import {
   getUsuariosService,
   guardarFcmTokenService,
   obtenerDiaRachaUsuarioService,
+  descontarUsoElevenLabsService,
 } from "../service/users.service.ts";
 
 // ==========================================
@@ -594,6 +595,57 @@ export const obtenerDiaRachaUsuarioController = async (ctx: Context) => {
 };
 
 export const obtenerDiaRachaUsuario = obtenerDiaRachaUsuarioController;
+
+// ==========================================
+// DESCONTAR / CONSUMIR USO DE ELEVENSLAB
+// ==========================================
+export const descontarUsoElevenLabsController = async (ctx: Context) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+    const uid = body.uid || body.userId || params.uid || searchParams.get("uid");
+
+    if (!uid) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el parámetro requerido: uid o userId",
+      };
+      return;
+    }
+
+    const resultado = await descontarUsoElevenLabsService(uid);
+
+    ctx.response.status = resultado.success ? 200 : 403;
+    ctx.response.body = resultado;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+    console.error("❌ Error en descontarUsoElevenLabsController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al procesar el uso de ElevenLabs",
+      error: errorMessage,
+    };
+  }
+};
+
+export const consumirElevenLabsController = descontarUsoElevenLabsController;
+
 
 
 

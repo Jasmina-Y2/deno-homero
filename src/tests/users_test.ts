@@ -3,6 +3,7 @@ import {
   actualizarDiaRachaUsuarioController,
   actualizarMarcoUsuarioController,
   asignarPrivilegiosUsuarioController,
+  descontarUsoElevenLabsController,
   guardarFcmToken,
   obtenerDiaRachaUsuarioController,
 } from "../controllers/users.controller.ts";
@@ -91,6 +92,20 @@ Deno.test("Obtener Día de Racha: Falla si no se proporciona UID", async () => {
   assertEquals(ctx.response.body.success, false);
   assertEquals(ctx.response.body.message, "Falta el parámetro requerido: uid o userId");
 });
+
+// ----------------------------------------------------
+// PRUEBAS DE CONSUMO ELEVENSLAB
+// ----------------------------------------------------
+
+Deno.test("Consumir ElevenLabs: Falla si no se proporciona UID", async () => {
+  const ctx = createMockContext({});
+  await descontarUsoElevenLabsController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(ctx.response.body.message, "Falta el parámetro requerido: uid o userId");
+});
+
 
 
 
