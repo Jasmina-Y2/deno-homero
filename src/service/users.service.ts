@@ -12,6 +12,26 @@ export const getUsuariosService = async () => {
 };
 
 const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
+  let necesitaLimpieza = false;
+  const updateData: Record<string, any> = {};
+
+  // Limpiar campos fantasmas si existen en el documento
+  if ("admin" in data) {
+    updateData.admin = fieldValue.delete();
+    delete data.admin;
+    necesitaLimpieza = true;
+  }
+  if ("marco_perfil" in data) {
+    updateData.marco_perfil = fieldValue.delete();
+    delete data.marco_perfil;
+    necesitaLimpieza = true;
+  }
+  if ("selectedFrame" in data) {
+    updateData.selectedFrame = fieldValue.delete();
+    delete data.selectedFrame;
+    necesitaLimpieza = true;
+  }
+
   if (data && data.suscription && data.fechaVencimiento) {
     const ahora = new Date();
     const fechaVenc = new Date(data.fechaVencimiento);
@@ -19,41 +39,41 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
       data.suscription = false;
       data.ElevensLab = 0;
 
-      const updateData: Record<string, any> = {
-        suscription: false,
-        ElevensLab: 0,
-        fechaActualizacion: ahora.toISOString(),
-      };
+      updateData.suscription = false;
+      updateData.ElevensLab = 0;
+      updateData.fechaActualizacion = ahora.toISOString();
+      necesitaLimpieza = true;
 
       // Si por defecto estaba con marco_perfil_id "pro_gold", ponerlo en null al expirar suscripción
-      const marcoId = String(data.marco_perfil_id ?? data.selectedFrame ?? "");
+      const marcoId = String(data.marco_perfil_id ?? "");
       if (marcoId.toLowerCase() === "pro_gold") {
-        data.marco_perfil = null;
         data.marco_perfil_id = null;
-        data.selectedFrame = null;
-        updateData.marco_perfil = null;
         updateData.marco_perfil_id = null;
-        updateData.selectedFrame = null;
       }
+    }
+  }
 
-      try {
-        await docRef.update(updateData);
-        console.log(
-          `⏱️ Suscripción expirada para usuario ${data.uid || docRef.id}. Marco pro_gold removido: ${marcoId.toLowerCase() === "pro_gold"}`,
-        );
+  if (necesitaLimpieza) {
+    try {
+      await docRef.update(updateData);
+      console.log(
+        `🧹 Documento actualizado/limpiado para usuario ${data.uid || docRef.id}`,
+      );
 
-        // Notificar en segundo plano mediante FCM data-only
+      // Notificar en segundo plano mediante FCM data-only si expiró
+      if (updateData.suscription === false) {
         const fcmToken = data.fcm_token || data.fcmToken;
         if (fcmToken) {
           enviarPushActualizarPerfil(fcmToken).catch((err) =>
             console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras expiración de suscripción:", err)
           );
         }
-      } catch (err) {
-        console.error("Error al actualizar expiración de suscripción:", err);
       }
+    } catch (err) {
+      console.error("Error al actualizar expiración/limpieza de suscripción:", err);
     }
   }
+
   return data;
 };
 
@@ -258,11 +278,20 @@ export const actualizarSuscripcionUsuarioService = async (
     };
 
     // Si el usuario se queda sin suscripción y tenía el marco "pro_gold", se le quita (null)
-    const marcoId = String(userData.marco_perfil_id ?? userData.selectedFrame ?? "");
+    const marcoId = String(userData.marco_perfil_id ?? "");
     if (!nuevaSuscripcion && marcoId.toLowerCase() === "pro_gold") {
-      dataActualizada.marco_perfil = null;
       dataActualizada.marco_perfil_id = null;
-      dataActualizada.selectedFrame = null;
+    }
+
+    // Limpiar campos fantasmas si existían en el documento
+    if ("admin" in userData) {
+      dataActualizada.admin = fieldValue.delete();
+    }
+    if ("marco_perfil" in userData) {
+      dataActualizada.marco_perfil = fieldValue.delete();
+    }
+    if ("selectedFrame" in userData) {
+      dataActualizada.selectedFrame = fieldValue.delete();
     }
 
     const promesas = snapshot.docs.map((doc) => {
@@ -403,11 +432,9 @@ export const asignarPrivilegiosUsuarioService = async (
         dataActualizada.diasDuracion = 0;
 
         // Si se quita la suscripción y tenía el marco "pro_gold", se le quita (null)
-        const marcoId = String(userData.marco_perfil_id ?? userData.selectedFrame ?? "");
+        const marcoId = String(userData.marco_perfil_id ?? "");
         if (marcoId.toLowerCase() === "pro_gold") {
-          dataActualizada.marco_perfil = null;
           dataActualizada.marco_perfil_id = null;
-          dataActualizada.selectedFrame = null;
         }
       }
     } else if (cantidadDias !== undefined && cantidadDias > 0) {
@@ -429,11 +456,20 @@ export const asignarPrivilegiosUsuarioService = async (
     if (ADMIN !== undefined || admin !== undefined || isAdmin !== undefined) {
       const valorAdmin = Boolean(ADMIN ?? admin ?? isAdmin);
       dataActualizada.ADMIN = valorAdmin;
-      dataActualizada.admin = valorAdmin;
     } else if (rol !== undefined && typeof rol === "string" && rol.trim() !== "") {
       const valorAdmin = rol.trim().toLowerCase() === "admin";
       dataActualizada.ADMIN = valorAdmin;
-      dataActualizada.admin = valorAdmin;
+    }
+
+    // Limpiar campos fantasmas si existían
+    if ("admin" in userData || admin !== undefined) {
+      dataActualizada.admin = fieldValue.delete();
+    }
+    if ("marco_perfil" in userData) {
+      dataActualizada.marco_perfil = fieldValue.delete();
+    }
+    if ("selectedFrame" in userData) {
+      dataActualizada.selectedFrame = fieldValue.delete();
     }
 
     // 4. Manejo de estado Activo / Desactivado (activo: true / false)
@@ -570,21 +606,17 @@ export const guardarFcmTokenService = async (
 export interface ParametrosMarcoUsuario {
   userId?: string;
   uid?: string;
-  marco_perfil?: string;
-  marco_perfil_id?: string | number;
-  selectedFrame?: string | number;
+  marco_perfil_id?: string | number | null;
+  selectedFrame?: string | number | null;
   frame?: {
     id?: string | number;
-    src?: string;
     [key: string]: any;
   };
 }
 
 /**
  * Actualiza o asigna el marco de perfil seleccionado de un usuario en Firestore:
- * marco_perfil: frame.src
- * marco_perfil_id: frame.id
- * selectedFrame: frame.id
+ * Solo guarda marco_perfil_id y elimina campos fantasmas (marco_perfil y selectedFrame)
  */
 export const actualizarMarcoUsuarioService = async (
   params: ParametrosMarcoUsuario,
@@ -595,15 +627,13 @@ export const actualizarMarcoUsuarioService = async (
       throw new Error("El ID de usuario (userId o uid) es requerido");
     }
 
-    const marcoPerfil = params.frame?.src ?? params.marco_perfil ?? "";
-    const marcoPerfilId = params.frame?.id ?? params.marco_perfil_id ?? params.selectedFrame ?? "";
-    const selectedFrame = params.frame?.id ?? params.selectedFrame ?? params.marco_perfil_id ?? "";
+    const marcoPerfilId = params.frame?.id ?? params.marco_perfil_id ?? params.selectedFrame ?? null;
     const fechaActualizacion = new Date().toISOString();
 
     const dataToUpdate: Record<string, any> = {
-      marco_perfil: marcoPerfil,
-      marco_perfil_id: marcoPerfilId,
-      selectedFrame: selectedFrame,
+      marco_perfil_id: marcoPerfilId ? String(marcoPerfilId) : null,
+      marco_perfil: fieldValue.delete(),
+      selectedFrame: fieldValue.delete(),
       fechaActualizacion: fechaActualizacion,
     };
 
@@ -633,7 +663,10 @@ export const actualizarMarcoUsuarioService = async (
       }
     }
 
-    console.log(`✅ Marco de perfil actualizado para usuario: ${userId}`, dataToUpdate);
+    console.log(`✅ Marco de perfil actualizado para usuario: ${userId}`, {
+      marco_perfil_id: dataToUpdate.marco_perfil_id,
+      fechaActualizacion,
+    });
 
     // Notificar en segundo plano al dispositivo mediante FCM data-only
     if (fcmToken) {
@@ -645,7 +678,8 @@ export const actualizarMarcoUsuarioService = async (
     return {
       userId,
       uid: userId,
-      ...dataToUpdate,
+      marco_perfil_id: dataToUpdate.marco_perfil_id,
+      fechaActualizacion,
     };
   } catch (error) {
     console.error("❌ Error en actualizarMarcoUsuarioService:", error);

@@ -358,8 +358,6 @@ export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
       suscription: body.suscription ?? body.nuevaSuscripcion,
       verificado: body.verificado,
       ADMIN: valorAdmin,
-      admin: valorAdmin,
-      isAdmin: valorAdmin,
       activo: body.activo !== undefined ? Boolean(body.activo) : undefined,
       rol: body.rol,
       dias: body.dias ?? body.diasDuracion,
@@ -460,16 +458,12 @@ export const actualizarMarcoUsuarioController = async (ctx: Context) => {
     }
 
     const frame = body.frame;
-    const marco_perfil = frame?.src ?? body.marco_perfil ?? body.marcoUrl ?? body.src;
-    const marco_perfil_id = frame?.id ?? body.marco_perfil_id ?? body.frameId ?? body.selectedFrame ?? body.id;
-    const selectedFrame = frame?.id ?? body.selectedFrame ?? body.marco_perfil_id ?? body.frameId ?? body.id;
+    const marco_perfil_id = frame?.id ?? body.marco_perfil_id ?? body.selectedFrame ?? body.frameId ?? body.id ?? null;
 
     const resultado = await actualizarMarcoUsuarioService({
       userId,
       uid: userId,
-      marco_perfil,
       marco_perfil_id,
-      selectedFrame,
       frame,
     });
 
