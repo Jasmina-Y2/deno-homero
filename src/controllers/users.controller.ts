@@ -12,6 +12,7 @@ import {
   getUsuarioByUidService,
   getUsuariosService,
   guardarFcmTokenService,
+  obtenerDiaRachaUsuarioService,
 } from "../service/users.service.ts";
 
 // ==========================================
@@ -552,5 +553,47 @@ export const actualizarDiaRachaUsuarioController = async (ctx: Context) => {
 };
 
 export const actualizarDiaRachaUsuario = actualizarDiaRachaUsuarioController;
+
+// ==========================================
+// OBTENER DÍA DE RACHA DEL USUARIO
+// ==========================================
+export const obtenerDiaRachaUsuarioController = async (ctx: Context) => {
+  try {
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+    const uid = params.uid || searchParams.get("uid") || searchParams.get("userId");
+
+    if (!uid) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el parámetro requerido: uid o userId",
+      };
+      return;
+    }
+
+    const resultado = await obtenerDiaRachaUsuarioService(uid);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+    console.error("❌ Error en obtenerDiaRachaUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener el día de racha del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+export const obtenerDiaRachaUsuario = obtenerDiaRachaUsuarioController;
+
 
 

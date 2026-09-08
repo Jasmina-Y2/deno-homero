@@ -766,5 +766,47 @@ export const actualizarDiaRachaUsuarioService = async (
   }
 };
 
+/**
+ * Obtiene el 'dia_racha' de un usuario
+ * @param uid - ID del usuario
+ */
+export const obtenerDiaRachaUsuarioService = async (uid: string) => {
+  try {
+    if (!uid) {
+      throw new Error("El UID del usuario es requerido");
+    }
+
+    let userData: any = null;
+    const userDocDirect = await db.collection("users").doc(uid).get();
+    if (userDocDirect.exists) {
+      userData = userDocDirect.data();
+    } else {
+      const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (!snapshot.empty) {
+        userData = snapshot.docs[0].data();
+      }
+    }
+
+    if (!userData) {
+      throw new Error(`No se encontró usuario con el UID: ${uid}`);
+    }
+
+    const diaRacha = Number(userData?.dia_racha ?? 0);
+    const fechaUltimaRacha = userData?.fechaUltimaRacha || null;
+
+    return {
+      uid,
+      dia_racha: diaRacha,
+      fechaUltimaRacha,
+    };
+  } catch (error) {
+    console.error("❌ Error en obtenerDiaRachaUsuarioService:", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Error al obtener la racha del usuario",
+    );
+  }
+};
+
+
 
 

@@ -4,6 +4,7 @@ import {
   actualizarMarcoUsuarioController,
   asignarPrivilegiosUsuarioController,
   guardarFcmToken,
+  obtenerDiaRachaUsuarioController,
 } from "../controllers/users.controller.ts";
 
 function createMockContext(
@@ -81,6 +82,16 @@ Deno.test("Día de Racha: Falla si no se proporciona UID", async () => {
   assertEquals(ctx.response.body.success, false);
   assertEquals(ctx.response.body.message, "Falta el parámetro requerido: uid o userId");
 });
+
+Deno.test("Obtener Día de Racha: Falla si no se proporciona UID", async () => {
+  const ctx = createMockContext({});
+  await obtenerDiaRachaUsuarioController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(ctx.response.body.message, "Falta el parámetro requerido: uid o userId");
+});
+
 
 
 

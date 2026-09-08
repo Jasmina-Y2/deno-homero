@@ -73,6 +73,7 @@ import {
   getUsuarioPerfil,
   getUsuarios,
   guardarFcmToken,
+  obtenerDiaRachaUsuarioController,
   verificarUsuarioEmail,
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
@@ -219,6 +220,9 @@ router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController
 router.post("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
 router.put("/api/users/asignar-privilegios/:uid", asignarPrivilegiosUsuarioController);
 router.post("/api/users/dia-racha", actualizarDiaRachaUsuarioController);
+router.get("/api/users/dia-racha/:uid", obtenerDiaRachaUsuarioController);
+router.get("/api/users/dia-racha", obtenerDiaRachaUsuarioController);
+
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
 router.post("/api/sonido/crear", crearSonido);
