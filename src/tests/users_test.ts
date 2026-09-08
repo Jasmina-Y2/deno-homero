@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   actualizarMarcoUsuarioController,
   asignarPrivilegiosUsuarioController,
+  guardarFcmToken,
 } from "../controllers/users.controller.ts";
 
 function createMockContext(
@@ -53,4 +54,18 @@ Deno.test("Actualizar Marco: Falla si no se proporciona userId o uid", async () 
   assertEquals(ctx.response.body.success, false);
   assertEquals(ctx.response.body.message, "Falta el parámetro requerido: userId o uid");
 });
+
+// ----------------------------------------------------
+// PRUEBAS DE GUARDAR FCM TOKEN
+// ----------------------------------------------------
+
+Deno.test("Guardar FCM Token: Falla si falta uid o token", async () => {
+  const ctx = createMockContext({ uid: "user_test_123" });
+  await guardarFcmToken(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(ctx.response.body.message, "Falta uid o fcmToken (o fcm_token)");
+});
+
 

@@ -391,13 +391,14 @@ export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
 export const guardarFcmToken = async (ctx: Context) => {
   try {
     const body = await ctx.request.body.json();
-    const { uid, fcmToken } = body;
+    const uid = body.uid || body.userId;
+    const fcmToken = body.fcmToken || body.fcm_token || body.token;
 
     if (!uid || !fcmToken) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
-        message: "Falta uid o fcmToken",
+        message: "Falta uid o fcmToken (o fcm_token)",
       };
       return;
     }

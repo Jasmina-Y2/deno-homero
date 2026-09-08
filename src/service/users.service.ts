@@ -1,5 +1,6 @@
 import { db, fieldValue } from "../config/firebase.ts";
 import { DatosUsuario } from "../models/users.model.ts";
+import { enviarPushActualizarPerfil } from "./notification.service.ts";
 export const getUsuariosService = async () => {
   try {
     const snapshot = await db.collection("users").get();
@@ -207,6 +208,9 @@ export const actualizarSuscripcionUsuarioService = async (
       throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
     }
 
+    const userData = snapshot.docs[0].data();
+    const fcmToken = userData?.fcm_token || userData?.fcmToken || null;
+
     const ahora = new Date();
     const fechaActualizacion = ahora.toISOString();
     const elevensLabFinal = nuevaSuscripcion ? elevensLab : 0;
@@ -237,6 +241,13 @@ export const actualizarSuscripcionUsuarioService = async (
     console.log(
       `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLabFinal}. Vencimiento: ${finalFechaVencimiento}`,
     );
+
+    // Notificar en segundo plano al dispositivo mediante FCM data-only
+    if (fcmToken) {
+      enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
+        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar suscripción:", pushErr);
+      });
+    }
 
     return {
       uid: uid,
@@ -409,6 +420,14 @@ export const asignarPrivilegiosUsuarioService = async (
       dataActualizada,
     );
 
+    // Notificar en segundo plano al dispositivo mediante FCM data-only
+    const fcmTokenPriv = userData?.fcm_token || userData?.fcmToken;
+    if (fcmTokenPriv) {
+      enviarPushActualizarPerfil(fcmTokenPriv).catch((pushErr) => {
+        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras asignar privilegios:", pushErr);
+      });
+    }
+
     return {
       idDoc: userDoc.id,
       uid: userData.uid || uid,
@@ -470,29 +489,26 @@ export const guardarFcmTokenService = async (
     const userDocRef = db.collection("users").doc(uid);
     const docSnap = await userDocRef.get();
 
+    const tokenData = {
+      fcmToken: fcmToken,
+      fcm_token: fcmToken,
+      tokenActualizadoEn: fechaActualizacion,
+      fechaActualizacion: fechaActualizacion,
+    };
+
     if (docSnap.exists) {
-      await userDocRef.update({
-        fcmToken: fcmToken,
-        tokenActualizadoEn: fechaActualizacion,
-        fechaActualizacion: fechaActualizacion,
-      });
+      await userDocRef.update(tokenData);
     } else {
       const snapshot = await db.collection("users").where("uid", "==", uid).get();
       if (!snapshot.empty) {
         const promesas = snapshot.docs.map((doc) =>
-          doc.ref.update({
-            fcmToken: fcmToken,
-            tokenActualizadoEn: fechaActualizacion,
-            fechaActualizacion: fechaActualizacion,
-          })
+          doc.ref.update(tokenData)
         );
         await Promise.all(promesas);
       } else {
         await userDocRef.set({
           uid: uid,
-          fcmToken: fcmToken,
-          tokenActualizadoEn: fechaActualizacion,
-          fechaActualizacion: fechaActualizacion,
+          ...tokenData,
         }, { merge: true });
       }
     }
@@ -501,6 +517,7 @@ export const guardarFcmTokenService = async (
     return {
       uid,
       fcmToken,
+      fcm_token: fcmToken,
       tokenActualizadoEn: fechaActualizacion,
     };
   } catch (error) {
@@ -552,11 +569,17 @@ export const actualizarMarcoUsuarioService = async (
     const userDocRef = db.collection("users").doc(userId);
     const docSnap = await userDocRef.get();
 
+    let fcmToken: string | null = null;
+
     if (docSnap.exists) {
+      const userData = docSnap.data();
+      fcmToken = userData?.fcm_token || userData?.fcmToken || null;
       await userDocRef.set(dataToUpdate, { merge: true });
     } else {
       const snapshot = await db.collection("users").where("uid", "==", userId).get();
       if (!snapshot.empty) {
+        const userData = snapshot.docs[0].data();
+        fcmToken = userData?.fcm_token || userData?.fcmToken || null;
         const promesas = snapshot.docs.map((doc: any) =>
           doc.ref.set(dataToUpdate, { merge: true })
         );
@@ -570,6 +593,13 @@ export const actualizarMarcoUsuarioService = async (
     }
 
     console.log(`✅ Marco de perfil actualizado para usuario: ${userId}`, dataToUpdate);
+
+    // Notificar en segundo plano al dispositivo mediante FCM data-only
+    if (fcmToken) {
+      enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
+        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar marco:", pushErr);
+      });
+    }
 
     return {
       userId,

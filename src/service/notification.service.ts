@@ -133,6 +133,93 @@ export const enviarPushAUsuario = async (
 };
 
 /**
+ * Envía un mensaje Push data-only (sin bloque notification: { title, body })
+ * para indicarle al frontend o app móvil que actualice el perfil del usuario inmediatamente.
+ * @param fcmToken - Token FCM del dispositivo del usuario
+ * @param extraData - Datos adicionales opcionales en el payload data
+ */
+export const enviarPushActualizarPerfil = async (
+  fcmToken: string,
+  extraData: Record<string, string> = {},
+) => {
+  if (!fcmToken || fcmToken.trim() === "") {
+    console.warn("⚠️ [FCM] No se proporcionó un fcm_token válido para ACTUALIZAR_PERFIL.");
+    return null;
+  }
+
+  const payload = {
+    token: fcmToken,
+    data: {
+      tipo: "ACTUALIZAR_PERFIL",
+      ...extraData,
+    },
+    android: {
+      priority: "high" as const,
+    },
+    apns: {
+      headers: {
+        "apns-priority": "5",
+        "apns-push-type": "background",
+      },
+      payload: {
+        aps: {
+          contentAvailable: true,
+        },
+      },
+    },
+  };
+
+  try {
+    const res = await messaging.send(payload);
+    console.log("🔔 [FCM] Mensaje data-only ACTUALIZAR_PERFIL enviado con éxito:", res);
+    return res;
+  } catch (err) {
+    console.error("❌ [FCM] Error enviando mensaje data-only ACTUALIZAR_PERFIL:", err);
+    return null;
+  }
+};
+
+/**
+ * Busca el token FCM del usuario y le envía el mensaje data-only ACTUALIZAR_PERFIL
+ * @param uid - ID del usuario a notificar
+ * @param extraData - Datos adicionales opcionales
+ */
+export const notificarActualizacionPerfilUsuario = async (
+  uid: string,
+  extraData: Record<string, string> = {},
+) => {
+  if (!uid) return null;
+  try {
+    let fcmToken: string | null = null;
+    const userDocDirect = await db.collection("users").doc(uid).get();
+    if (userDocDirect.exists) {
+      fcmToken = userDocDirect.data()?.fcm_token || userDocDirect.data()?.fcmToken || null;
+    }
+
+    if (!fcmToken) {
+      const snapshot = await db.collection("users")
+        .where("uid", "==", uid)
+        .limit(1)
+        .get();
+
+      if (!snapshot.empty) {
+        fcmToken = snapshot.docs[0].data()?.fcm_token || snapshot.docs[0].data()?.fcmToken || null;
+      }
+    }
+
+    if (fcmToken) {
+      return await enviarPushActualizarPerfil(fcmToken, extraData);
+    } else {
+      console.log(`ℹ️ [FCM] El usuario ${uid} no tiene fcm_token registrado para ACTUALIZAR_PERFIL.`);
+      return null;
+    }
+  } catch (error) {
+    console.error("❌ [FCM] Error en notificarActualizacionPerfilUsuario:", error);
+    return null;
+  }
+};
+
+/**
  * Métodos de consulta y compatibilidad que retornan vacío sin crear colecciones
  */
 export const obtenerNotificacionesPorUsuarioService = async (_uid: string): Promise<Notificacion[]> => {
