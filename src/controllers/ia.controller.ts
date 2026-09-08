@@ -299,7 +299,7 @@ Responde ÚNICAMENTE un objeto JSON válido con la siguiente estructura:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [
           { role: "system", content: promptSistema },
           { role: "user", content: `Analiza este texto y detecta su idioma:\n"""\n${texto.slice(0, 3000)}\n"""` },
@@ -395,7 +395,7 @@ REGLAS OBLIGATORIAS:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [
           { role: "system", content: promptSistema },
           { role: "user", content: `Genera la sinopsis corta (máx ${limiteCaracteres} caracteres) para este texto:\n"""\n${texto.slice(0, 6000)}\n"""` },
