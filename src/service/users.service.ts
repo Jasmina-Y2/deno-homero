@@ -689,4 +689,82 @@ export const actualizarMarcoUsuarioService = async (
   }
 };
 
+/**
+ * Actualiza o incrementa el campo 'dia_racha' en el documento del usuario
+ * @param uid - ID del usuario
+ * @param diaRacha - Número de días de racha (opcional si se incrementa)
+ * @param incrementar - Si es true, suma +1 a la racha actual
+ */
+export const actualizarDiaRachaUsuarioService = async (
+  uid: string,
+  diaRacha?: number,
+  incrementar: boolean = false,
+) => {
+  try {
+    if (!uid) {
+      throw new Error("El UID del usuario es requerido");
+    }
+
+    const fechaActualizacion = new Date().toISOString();
+    let docRef: any = null;
+    let userData: any = null;
+
+    const userDocDirect = await db.collection("users").doc(uid).get();
+    if (userDocDirect.exists) {
+      docRef = userDocDirect.ref;
+      userData = userDocDirect.data();
+    } else {
+      const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (!snapshot.empty) {
+        docRef = snapshot.docs[0].ref;
+        userData = snapshot.docs[0].data();
+      }
+    }
+
+    if (!docRef) {
+      throw new Error(`No se encontró usuario con el UID: ${uid}`);
+    }
+
+    let nuevoDiaRacha: number;
+
+    if (diaRacha !== undefined && !isNaN(Number(diaRacha)) && !incrementar) {
+      nuevoDiaRacha = Math.max(0, Number(diaRacha));
+    } else {
+      const rachaActual = Number(userData?.dia_racha ?? 0);
+      nuevoDiaRacha = rachaActual + 1;
+    }
+
+    const dataToUpdate: Record<string, any> = {
+      dia_racha: nuevoDiaRacha,
+      fechaActualizacion,
+      fechaUltimaRacha: fechaActualizacion,
+    };
+
+    await docRef.update(dataToUpdate);
+
+    console.log(`🔥 Racha actualizada para usuario ${uid}: ${nuevoDiaRacha} días`);
+
+    // Notificar en segundo plano mediante FCM data-only
+    const fcmToken = userData?.fcm_token || userData?.fcmToken;
+    if (fcmToken) {
+      enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
+        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar racha:", pushErr);
+      });
+    }
+
+    return {
+      uid,
+      dia_racha: nuevoDiaRacha,
+      fechaUltimaRacha: fechaActualizacion,
+      fechaActualizacion,
+    };
+  } catch (error) {
+    console.error("❌ Error en actualizarDiaRachaUsuarioService:", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Error al actualizar la racha del usuario",
+    );
+  }
+};
+
+
 

@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
+  actualizarDiaRachaUsuarioController,
   actualizarMarcoUsuarioController,
   asignarPrivilegiosUsuarioController,
   guardarFcmToken,
@@ -67,5 +68,19 @@ Deno.test("Guardar FCM Token: Falla si falta uid o token", async () => {
   assertEquals(ctx.response.body.success, false);
   assertEquals(ctx.response.body.message, "Falta uid o fcmToken (o fcm_token)");
 });
+
+// ----------------------------------------------------
+// PRUEBAS DE DÍA DE RACHA
+// ----------------------------------------------------
+
+Deno.test("Día de Racha: Falla si no se proporciona UID", async () => {
+  const ctx = createMockContext({ dia_racha: 3 });
+  await actualizarDiaRachaUsuarioController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(ctx.response.body.message, "Falta el parámetro requerido: uid o userId");
+});
+
 
 

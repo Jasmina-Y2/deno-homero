@@ -1,6 +1,7 @@
 import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import {
   actualizarDescripcionUsuarioService,
+  actualizarDiaRachaUsuarioService,
   actualizarFotoUsuarioService,
   actualizarMarcoUsuarioService,
   actualizarNombreUsuarioService,
@@ -488,5 +489,68 @@ export const actualizarMarcoUsuarioController = async (ctx: Context) => {
 };
 
 export const actualizarMarcoUsuario = actualizarMarcoUsuarioController;
+
+// ==========================================
+// ACTUALIZAR DÍA DE RACHA DEL USUARIO
+// ==========================================
+export const actualizarDiaRachaUsuarioController = async (ctx: Context) => {
+  try {
+    let body: Record<string, any> = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const uid = body.uid || body.userId || params.uid || searchParams.get("uid");
+
+    if (!uid) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el parámetro requerido: uid o userId",
+      };
+      return;
+    }
+
+    const diaRachaRaw = body.dia_racha ?? body["dia racha"] ?? body.diaRacha ?? body.racha ?? body.dias_racha;
+    const diaRacha = diaRachaRaw !== undefined && diaRachaRaw !== null ? Number(diaRachaRaw) : undefined;
+    const incrementar = Boolean(body.incrementar ?? body.sumar ?? (diaRacha === undefined));
+
+    const resultado = await actualizarDiaRachaUsuarioService(
+      uid,
+      diaRacha,
+      incrementar,
+    );
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Día de racha actualizado correctamente",
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Error desconocido";
+    console.error("❌ Error en actualizarDiaRachaUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al actualizar el día de racha del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+export const actualizarDiaRachaUsuario = actualizarDiaRachaUsuarioController;
 
 

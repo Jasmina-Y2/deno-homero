@@ -62,6 +62,7 @@ import {
 import { getGenteQueMeSigue } from "../controllers/seguir.controller.ts";
 import {
   actualizarDescripcionUsuario,
+  actualizarDiaRachaUsuarioController,
   actualizarFotoUsuario,
   actualizarMarcoUsuario,
   actualizarMarcoUsuarioController,
@@ -217,6 +218,7 @@ router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
 router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
 router.post("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
 router.put("/api/users/asignar-privilegios/:uid", asignarPrivilegiosUsuarioController);
+router.post("/api/users/dia-racha", actualizarDiaRachaUsuarioController);
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
 router.post("/api/sonido/crear", crearSonido);
