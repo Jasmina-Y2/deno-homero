@@ -18,12 +18,37 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
     if (ahora > fechaVenc) {
       data.suscription = false;
       data.ElevensLab = 0;
+
+      const updateData: Record<string, any> = {
+        suscription: false,
+        ElevensLab: 0,
+        fechaActualizacion: ahora.toISOString(),
+      };
+
+      // Si por defecto estaba con marco_perfil_id "pro_gold", ponerlo en null al expirar suscripción
+      const marcoId = String(data.marco_perfil_id ?? data.selectedFrame ?? "");
+      if (marcoId.toLowerCase() === "pro_gold") {
+        data.marco_perfil = null;
+        data.marco_perfil_id = null;
+        data.selectedFrame = null;
+        updateData.marco_perfil = null;
+        updateData.marco_perfil_id = null;
+        updateData.selectedFrame = null;
+      }
+
       try {
-        await docRef.update({
-          suscription: false,
-          ElevensLab: 0,
-          fechaActualizacion: ahora.toISOString(),
-        });
+        await docRef.update(updateData);
+        console.log(
+          `⏱️ Suscripción expirada para usuario ${data.uid || docRef.id}. Marco pro_gold removido: ${marcoId.toLowerCase() === "pro_gold"}`,
+        );
+
+        // Notificar en segundo plano mediante FCM data-only
+        const fcmToken = data.fcm_token || data.fcmToken;
+        if (fcmToken) {
+          enviarPushActualizarPerfil(fcmToken).catch((err) =>
+            console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras expiración de suscripción:", err)
+          );
+        }
       } catch (err) {
         console.error("Error al actualizar expiración de suscripción:", err);
       }
@@ -222,7 +247,7 @@ export const actualizarSuscripcionUsuarioService = async (
       finalFechaVencimiento = venc.toISOString();
     }
 
-    const dataActualizada = {
+    const dataActualizada: Record<string, any> = {
       suscription: nuevaSuscripcion,
       verificado: verificado,
       ElevensLab: elevensLabFinal,
@@ -231,6 +256,14 @@ export const actualizarSuscripcionUsuarioService = async (
       fechaVencimiento: finalFechaVencimiento,
       diasDuracion: nuevaSuscripcion ? diasDuracion : 0,
     };
+
+    // Si el usuario se queda sin suscripción y tenía el marco "pro_gold", se le quita (null)
+    const marcoId = String(userData.marco_perfil_id ?? userData.selectedFrame ?? "");
+    if (!nuevaSuscripcion && marcoId.toLowerCase() === "pro_gold") {
+      dataActualizada.marco_perfil = null;
+      dataActualizada.marco_perfil_id = null;
+      dataActualizada.selectedFrame = null;
+    }
 
     const promesas = snapshot.docs.map((doc) => {
       return doc.ref.update(dataActualizada);
@@ -368,6 +401,14 @@ export const asignarPrivilegiosUsuarioService = async (
       } else {
         dataActualizada.fechaVencimiento = null;
         dataActualizada.diasDuracion = 0;
+
+        // Si se quita la suscripción y tenía el marco "pro_gold", se le quita (null)
+        const marcoId = String(userData.marco_perfil_id ?? userData.selectedFrame ?? "");
+        if (marcoId.toLowerCase() === "pro_gold") {
+          dataActualizada.marco_perfil = null;
+          dataActualizada.marco_perfil_id = null;
+          dataActualizada.selectedFrame = null;
+        }
       }
     } else if (cantidadDias !== undefined && cantidadDias > 0) {
       dataActualizada.suscription = true;
