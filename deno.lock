@@ -2938,6 +2938,7 @@
     }
   },
   "redirects": {
+    "https://deno.land/x/cors/cors.ts": "https://deno.land/x/cors@v1.2.2/cors.ts",
     "https://deno.land/x/cors/mod.ts": "https://deno.land/x/cors@v1.2.2/mod.ts",
     "https://deno.land/x/oak/mod.ts": "https://deno.land/x/oak@v17.2.0/mod.ts"
   },

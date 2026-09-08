@@ -11,9 +11,24 @@ const PORT = 8000;
 app.use(oakCors({
   origin: "*",
   optionsSuccessStatus: 200,
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "x-api-key"],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "x-api-key",
+    "Cache-Control",
+    "cache-control",
+    "Pragma",
+    "Expires",
+    "X-Requested-With",
+    "Origin",
+    "Range",
+    "*",
+  ],
+  exposedHeaders: ["Content-Length", "Content-Range", "X-Response-Time"],
 }));
+
 
 app.use(async (ctx, next) => {
   await next();

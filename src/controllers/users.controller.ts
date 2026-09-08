@@ -61,6 +61,9 @@ export const getUsuarioPerfil = async (ctx: RouterContext<string>) => {
       return;
     }
 
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.headers.set("Pragma", "no-cache");
+    ctx.response.headers.set("Expires", "0");
     ctx.response.status = 200;
     ctx.response.body = { success: true, data: user };
   } catch (error: unknown) {
