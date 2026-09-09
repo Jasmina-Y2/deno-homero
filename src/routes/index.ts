@@ -70,11 +70,11 @@ import {
   actualizarSuscripcionUsuario,
   asignarPrivilegiosUsuarioController,
   crearUsuario,
+  descontarUsoElevenLabsController,
   getUsuarioPerfil,
   getUsuarios,
   guardarFcmToken,
   obtenerDiaRachaUsuarioController,
-  descontarUsoElevenLabsController,
   verificarUsuarioEmail,
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
@@ -88,8 +88,15 @@ import { getHistoriasPorCategoria } from "../controllers/categoriahistoria.contr
 import { loginAndSync } from "../controllers/auth.controller.ts";
 import {
   detectarIdiomaController,
-  generateMultivoiceAudio,
   generarDescripcionController,
+  generarVozAzureController,
+  generarVozGeminiController,
+  generateMultivoiceAudio,
+  obtenerVocesAwsController,
+  obtenerVocesAzureController,
+  obtenerVocesGeminiController,
+  verificarEstadoAzureController,
+  verificarEstadoGeminiController,
 } from "../controllers/ia.controller.ts";
 import {
   crearSonido,
@@ -237,7 +244,10 @@ router.post("/api/users/dia-racha", actualizarDiaRachaUsuarioController);
 router.get("/api/users/dia-racha/:uid", obtenerDiaRachaUsuarioController);
 router.get("/api/users/dia-racha", obtenerDiaRachaUsuarioController);
 router.post("/api/users/consumir-elevenslab", descontarUsoElevenLabsController);
-router.post("/api/users/descontar-elevenslab", descontarUsoElevenLabsController);
+router.post(
+  "/api/users/descontar-elevenslab",
+  descontarUsoElevenLabsController,
+);
 
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
 
@@ -247,6 +257,14 @@ router.get("/api/sonido/obtener/:id", obtenerSonidoPorId);
 router.put("/api/sonido/modificar/:id", modificarSonido);
 
 router.post("/api/ia/multivoz", generateMultivoiceAudio);
+router.get("/api/ia/aws-voces", obtenerVocesAwsController);
+router.post("/api/ia/gemini-voz", generarVozGeminiController);
+router.get("/api/ia/gemini-voces", obtenerVocesGeminiController);
+router.get("/api/ia/gemini-voz", obtenerVocesGeminiController);
+router.get("/api/ia/gemini-estado", verificarEstadoGeminiController);
+router.get("/api/ia/azure-estado", verificarEstadoAzureController);
+router.get("/api/ia/azure-voces", obtenerVocesAzureController);
+router.post("/api/ia/azure-voz", generarVozAzureController);
 router.post("/api/ia/detectar-idioma", detectarIdiomaController);
 router.post("/api/ia/generar-descripcion", generarDescripcionController);
 

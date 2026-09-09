@@ -220,11 +220,14 @@ export class ElevenLabsService {
   }
 
   /**
-   * Devuelve las voces configuradas organizadas por categorías y lista general.
+   * Devuelve las voces configuradas organizadas por categorías, idiomas y lista general.
    */
   getVoices() {
     return {
       total: SPANISH_VOICES.length,
+      modelo: config.elevenLabs.modelId,
+      soporteMultilingue:
+        "Modelo eleven_multilingual_v2 soporta 29 idiomas de manera nativa (Español, Inglés, Portugués, Francés, Alemán, Italiano, Japonés, etc.)",
       femaleVoices: SPANISH_VOICES.filter((v) => v.gender === "female"),
       maleVoices: SPANISH_VOICES.filter((v) => v.gender === "male"),
       neutralVoices: SPANISH_VOICES.filter((v) => v.gender === "neutral"),

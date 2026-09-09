@@ -1,4 +1,4 @@
-import { Context } from "oak";
+import { Context } from "https://deno.land/x/oak/mod.ts";
 import { getSignedUrl } from "npm:@aws-sdk/s3-request-presigner";
 import {
   DeleteObjectCommand,
@@ -51,12 +51,13 @@ export const uploadToS3 = async (
   buffer: Uint8Array,
   fileName: string,
   fileType: string,
+  folder = "profile",
 ) => {
   try {
     const uniqueId = `${Date.now()}-${
       Math.random().toString(36).substring(2, 8)
     }`;
-    const key = `profile/${uniqueId}-${fileName}`;
+    const key = `${folder}/${uniqueId}-${fileName}`;
 
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,

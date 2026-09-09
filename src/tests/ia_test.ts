@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   detectarIdiomaController,
   generarDescripcionController,
+  generarVozGeminiController,
 } from "../controllers/ia.controller.ts";
 
 function createMockContext(bodyData: any = {}) {
@@ -34,3 +35,12 @@ Deno.test("IA Generar Descripción: Falla si el texto está vacío", async () =>
   assertEquals(ctx.response.status, 400);
   assertEquals(ctx.response.body.success, false);
 });
+
+Deno.test("IA Gemini Voz: Falla si el texto está vacío", async () => {
+  const ctx = createMockContext({ texto: "" });
+  await generarVozGeminiController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+});
+
