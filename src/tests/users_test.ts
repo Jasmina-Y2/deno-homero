@@ -184,7 +184,7 @@ Deno.test("Actualizar Suscripción: Valida parámetros requeridos", async () => 
 
   assertEquals(ctx.response.status, 400);
   assertEquals(ctx.response.body.success, false);
-  assertEquals(ctx.response.body.message, "Faltan datos requeridos: uid, nuevaSuscripcion o verificado");
+  assertEquals(ctx.response.body.message, "Faltan datos requeridos: uid o nuevaSuscripcion");
 });
 
 // ----------------------------------------------------

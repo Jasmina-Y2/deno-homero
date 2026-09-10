@@ -142,15 +142,16 @@ export const revenueCatWebhookController = async (ctx: Context) => {
           // Determinar si es suscripción de Lector o de Escritor
           const esLector = productIdLower.includes("lector") || productIdLower.includes("reader") || (event.entitlement_id || "").toLowerCase().includes("lector");
           const esEscritor = productIdLower.includes("escritor") || productIdLower.includes("writer") || productIdLower.includes("author") || productIdLower.includes("creador") || !esLector;
+          const tipoSuscripcion = esLector ? "lector" : "escritor";
+          const creditosElevenLabs = esEscritor ? 15 : undefined;
 
           const entitlementId = event.entitlement_id || (Array.isArray(event.entitlement_ids) ? event.entitlement_ids[0] : null) || (esLector ? "lector_vip" : "creador_estelar");
           const productId = event.product_id || (esLector ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
 
-          // Activar suscripción y créditos según el plan
+          // Activar suscripción y créditos según el plan (sin tocar verificado)
           await actualizarSuscripcionUsuarioService({
             uid,
             nuevaSuscripcion: true,
-            verificado: true,
             entitlementId,
             productId,
             tipo: tipoSuscripcion,
@@ -173,11 +174,10 @@ export const revenueCatWebhookController = async (ctx: Context) => {
         const tipoSuscripcion = esLector ? "lector" : esEscritor ? "escritor" : "general";
         const entitlementId = event.entitlement_id || (Array.isArray(event.entitlement_ids) ? event.entitlement_ids[0] : null) || (esLector ? "lector_vip" : "creador_estelar");
 
-        // Desactivar suscripción
+        // Desactivar suscripción (sin alterar verificado)
         await actualizarSuscripcionUsuarioService({
           uid,
           nuevaSuscripcion: false,
-          verificado: false,
           entitlementId,
           productId: event.product_id,
           tipo: tipoSuscripcion,

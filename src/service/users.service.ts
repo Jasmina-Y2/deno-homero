@@ -488,7 +488,7 @@ export const actualizarFotoUsuarioService = async (uid: string, nuevaFotoURL: st
 export interface OpcionesActualizarSuscripcion {
   uid: string;
   nuevaSuscripcion: boolean;
-  verificado: boolean;
+  verificado?: boolean;
   entitlementId?: string;
   productId?: string;
   tipo?: "lector" | "escritor" | "ambos" | string;
@@ -520,7 +520,7 @@ export const actualizarSuscripcionUsuarioService = async (
       params = {
         uid: uidOrParams,
         nuevaSuscripcion: Boolean(nuevaSuscripcionParam),
-        verificado: Boolean(verificadoParam),
+        verificado: verificadoParam !== undefined ? Boolean(verificadoParam) : undefined,
         fechaSuscripcion: fechaSuscripcionParam,
         fechaVencimiento: fechaVencimientoParam,
         diasDuracion: diasDuracionParam,
@@ -602,11 +602,14 @@ export const actualizarSuscripcionUsuarioService = async (
     const updateData: Record<string, any> = {
       ...obtenerEliminacionesObsoletas(rawUserData),
       suscripciones: currentSuscripciones,
-      "perfil.verificado": verificado,
       "billetera.elevensLab": saldoElevensLab,
       "billetera.mesRecargaFreeElevenLabs": mesActual,
       "sistema.fechaActualizacion": ahoraIso,
     };
+
+    if (verificado !== undefined) {
+      updateData["perfil.verificado"] = Boolean(verificado);
+    }
 
     if (!tieneActivaGlobal) {
       const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
@@ -649,6 +652,7 @@ export interface ParametrosPrivilegiosUsuario {
   entitlementId?: string;
   productId?: string;
   tipo?: string;
+  suscripciones?: SuscripcionItem[];
   verificado?: boolean;
   ADMIN?: boolean;
   admin?: boolean;
@@ -715,11 +719,14 @@ export const asignarPrivilegiosUsuarioService = async (params: ParametrosPrivile
     };
 
     // 1. Suscripción
-    const subDeseada = params.suscription ?? params.nuevaSuscripcion;
-    const cantidadDias = params.dias !== undefined ? Number(params.dias) : (params.diasDuracion !== undefined ? Number(params.diasDuracion) : 30);
-    const tipoSub = (params.tipo || "escritor").toLowerCase();
-    const targetEntitlement = params.entitlementId || (tipoSub === "lector" ? "lector_vip" : "creador_estelar");
-    const targetProduct = params.productId || (tipoSub === "lector" ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
+    if (params.suscripciones && Array.isArray(params.suscripciones)) {
+      dataActualizada.suscripciones = params.suscripciones;
+    } else {
+      const subDeseada = params.suscription ?? params.nuevaSuscripcion;
+      const cantidadDias = params.dias !== undefined ? Number(params.dias) : (params.diasDuracion !== undefined ? Number(params.diasDuracion) : 30);
+      const tipoSub = (params.tipo || "escritor").toLowerCase();
+      const targetEntitlement = params.entitlementId || (tipoSub === "lector" ? "lector_vip" : "creador_estelar");
+      const targetProduct = params.productId || (tipoSub === "lector" ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
 
     if (subDeseada !== undefined) {
       const activa = Boolean(subDeseada);
@@ -754,7 +761,8 @@ export const asignarPrivilegiosUsuarioService = async (params: ParametrosPrivile
         });
       }
 
-      dataActualizada.suscripciones = currentSubs;
+        dataActualizada.suscripciones = currentSubs;
+      }
     }
 
     // 2. Verificación
@@ -1321,11 +1329,14 @@ export const agregarSuscripcionUsuarioService = async (params: ParametrosCrearSu
     const updateData: Record<string, any> = {
       ...obtenerEliminacionesObsoletas(rawUserData),
       suscripciones: currentSubs,
-      "perfil.verificado": verificado,
       "billetera.elevensLab": saldoElevensLab,
       "billetera.mesRecargaFreeElevenLabs": mesActual,
       "sistema.fechaActualizacion": ahoraIso,
     };
+
+    if (params.verificado !== undefined) {
+      updateData["perfil.verificado"] = Boolean(params.verificado);
+    }
 
     await docRef.update(updateData);
     console.log(`✅ Suscripción '${entitlementId}' agregada al array modular para usuario ${uid}`);
@@ -1441,18 +1452,17 @@ export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSu
       ? Number(params.elevensLab)
       : (escritorActivo ? Math.max(15, Number(usuario.billetera.elevensLab || 0)) : (usuario.billetera.elevensLab || 2));
 
-    const verificado = params.verificado !== undefined
-      ? Boolean(params.verificado)
-      : (globalActivo ? usuario.perfil.verificado : false);
-
     const updateData: Record<string, any> = {
       ...obtenerEliminacionesObsoletas(rawUserData),
       suscripciones: currentSubs,
-      "perfil.verificado": verificado,
       "billetera.elevensLab": saldoElevensLab,
       "billetera.mesRecargaFreeElevenLabs": mesActual,
       "sistema.fechaActualizacion": ahoraIso,
     };
+
+    if (params.verificado !== undefined) {
+      updateData["perfil.verificado"] = Boolean(params.verificado);
+    }
 
     if (!globalActivo) {
       const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
@@ -1566,7 +1576,6 @@ export const eliminarSuscripcionUsuarioService = async (
     };
 
     if (!globalActivo) {
-      updateData["perfil.verificado"] = false;
       const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
       if (marcoId.toLowerCase() === "pro_gold") {
         updateData["perfil.marco_perfil_id"] = null;

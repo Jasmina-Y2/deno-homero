@@ -291,11 +291,11 @@ export const actualizarSuscripcionUsuario = async (
       planEscritor,
     } = body;
 
-    if (!uid || nuevaSuscripcion === undefined || verificado === undefined) {
+    if (!uid || nuevaSuscripcion === undefined) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
-        message: "Faltan datos requeridos: uid, nuevaSuscripcion o verificado",
+        message: "Faltan datos requeridos: uid o nuevaSuscripcion",
       };
       return;
     }
@@ -303,7 +303,7 @@ export const actualizarSuscripcionUsuario = async (
     const userActualizado = await actualizarSuscripcionUsuarioService({
       uid,
       nuevaSuscripcion: Boolean(nuevaSuscripcion),
-      verificado: Boolean(verificado),
+      verificado: verificado !== undefined ? Boolean(verificado) : undefined,
       tipo: tipo ?? "escritor",
       fechaSuscripcion: fechaSuscripcion ?? null,
       fechaVencimiento: fechaVencimiento ?? null,
@@ -390,6 +390,10 @@ export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
       uid,
       email,
       suscription: body.suscription ?? body.nuevaSuscripcion,
+      tipo: body.tipo,
+      entitlementId: body.entitlementId,
+      productId: body.productId,
+      suscripciones: body.suscripciones,
       verificado: body.verificado,
       ADMIN: valorAdmin,
       activo: body.activo !== undefined ? Boolean(body.activo) : undefined,
@@ -754,7 +758,7 @@ export const agregarSuscripcionUsuarioController = async (ctx: Context) => {
       fechaSuscripcion: body.fechaSuscripcion,
       fechaVencimiento: body.fechaVencimiento,
       autoRenovacion: body.autoRenovacion !== undefined ? Boolean(body.autoRenovacion) : false,
-      verificado: body.verificado !== undefined ? Boolean(body.verificado) : true,
+      verificado: body.verificado !== undefined ? Boolean(body.verificado) : undefined,
       elevensLab: body.elevensLab !== undefined ? Number(body.elevensLab) : undefined,
     });
 
