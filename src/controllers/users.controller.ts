@@ -6,14 +6,18 @@ import {
   actualizarMarcoUsuarioService,
   actualizarNombreUsuarioService,
   actualizarSuscripcionUsuarioService,
+  agregarSuscripcionUsuarioService,
   asignarPrivilegiosUsuarioService,
   crearUsuarioService,
+  descontarUsoElevenLabsService,
+  editarSuscripcionUsuarioService,
+  eliminarSuscripcionUsuarioService,
   getUsuarioByEmailService,
   getUsuarioByUidService,
   getUsuariosService,
   guardarFcmTokenService,
   obtenerDiaRachaUsuarioService,
-  descontarUsoElevenLabsService,
+  obtenerSuscripcionesUsuarioService,
 } from "../service/users.service.ts";
 
 // ==========================================
@@ -278,10 +282,13 @@ export const actualizarSuscripcionUsuario = async (
       uid,
       nuevaSuscripcion,
       verificado,
+      tipo,
       fechaSuscripcion,
       fechaVencimiento,
       diasDuracion,
       elevensLab,
+      planLector,
+      planEscritor,
     } = body;
 
     if (!uid || nuevaSuscripcion === undefined || verificado === undefined) {
@@ -293,15 +300,18 @@ export const actualizarSuscripcionUsuario = async (
       return;
     }
 
-    const userActualizado = await actualizarSuscripcionUsuarioService(
+    const userActualizado = await actualizarSuscripcionUsuarioService({
       uid,
-      Boolean(nuevaSuscripcion),
-      Boolean(verificado),
-      fechaSuscripcion ?? null,
-      fechaVencimiento ?? null,
-      diasDuracion,
-      elevensLab,
-    );
+      nuevaSuscripcion: Boolean(nuevaSuscripcion),
+      verificado: Boolean(verificado),
+      tipo: tipo ?? "escritor",
+      fechaSuscripcion: fechaSuscripcion ?? null,
+      fechaVencimiento: fechaVencimiento ?? null,
+      diasDuracion: diasDuracion ?? 30,
+      elevensLab: elevensLab !== undefined ? Number(elevensLab) : undefined,
+      planLector,
+      planEscritor,
+    });
 
     ctx.response.status = 200;
     ctx.response.body = { success: true, data: userActualizado };
@@ -314,6 +324,27 @@ export const actualizarSuscripcionUsuario = async (
     ctx.response.body = {
       success: false,
       message: "Error actualizando la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+// ==========================================
+// MIGRAR ESTRUCTURA DE USUARIOS A FORMATO MODULAR
+// ==========================================
+export const migrarEstructuraUsuariosController = async (ctx: Context) => {
+  try {
+    const { migrarTodosLosUsuariosService } = await import("../service/users.service.ts");
+    const resultado = await migrarTodosLosUsuariosService();
+    ctx.response.status = 200;
+    ctx.response.body = resultado;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en migrarEstructuraUsuariosController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al migrar la estructura de los usuarios",
       error: errorMessage,
     };
   }
@@ -645,6 +676,220 @@ export const descontarUsoElevenLabsController = async (ctx: Context) => {
 };
 
 export const consumirElevenLabsController = descontarUsoElevenLabsController;
+
+// ==========================================
+// OBTENER SUSCRIPCIONES DEL USUARIO (GET)
+// ==========================================
+export const obtenerSuscripcionesUsuarioController = async (ctx: Context) => {
+  try {
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+    const uid = params.uid || searchParams.get("uid") || searchParams.get("userId");
+
+    if (!uid) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el parámetro requerido: uid o userId",
+      };
+      return;
+    }
+
+    const resultado = await obtenerSuscripcionesUsuarioService(uid);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en obtenerSuscripcionesUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener las suscripciones del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+// ==========================================
+// AGREGAR / CREAR SUSCRIPCIÓN (POST)
+// ==========================================
+export const agregarSuscripcionUsuarioController = async (ctx: Context) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const uid = body.uid || body.userId || params.uid || searchParams.get("uid");
+    const entitlementId = body.entitlementId || body.id || body.tipo || body.plan || params.entitlementId;
+
+    if (!uid || !entitlementId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: 'uid' y 'entitlementId'",
+      };
+      return;
+    }
+
+    const resultado = await agregarSuscripcionUsuarioService({
+      uid,
+      entitlementId,
+      productId: body.productId || body.product_id,
+      diasDuracion: body.diasDuracion !== undefined ? Number(body.diasDuracion) : (body.dias !== undefined ? Number(body.dias) : 30),
+      fechaSuscripcion: body.fechaSuscripcion,
+      fechaVencimiento: body.fechaVencimiento,
+      autoRenovacion: body.autoRenovacion !== undefined ? Boolean(body.autoRenovacion) : false,
+      verificado: body.verificado !== undefined ? Boolean(body.verificado) : true,
+      elevensLab: body.elevensLab !== undefined ? Number(body.elevensLab) : undefined,
+    });
+
+    ctx.response.status = 201;
+    ctx.response.body = {
+      success: true,
+      message: `Suscripción '${entitlementId}' agregada exitosamente`,
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en agregarSuscripcionUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al agregar la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+// ==========================================
+// EDITAR / ACTUALIZAR SUSCRIPCIÓN (PUT)
+// ==========================================
+export const editarSuscripcionUsuarioController = async (ctx: Context) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const uid = body.uid || body.userId || params.uid || searchParams.get("uid");
+    const entitlementId = body.entitlementId || body.id || body.tipo || body.plan || params.entitlementId;
+
+    if (!uid || !entitlementId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: 'uid' y 'entitlementId'",
+      };
+      return;
+    }
+
+    const resultado = await editarSuscripcionUsuarioService({
+      uid,
+      entitlementId,
+      activo: body.activo !== undefined ? Boolean(body.activo) : undefined,
+      productId: body.productId || body.product_id,
+      diasDuracion: body.diasDuracion !== undefined ? Number(body.diasDuracion) : (body.dias !== undefined ? Number(body.dias) : undefined),
+      fechaSuscripcion: body.fechaSuscripcion,
+      fechaVencimiento: body.fechaVencimiento,
+      autoRenovacion: body.autoRenovacion !== undefined ? Boolean(body.autoRenovacion) : undefined,
+      verificado: body.verificado !== undefined ? Boolean(body.verificado) : undefined,
+      elevensLab: body.elevensLab !== undefined ? Number(body.elevensLab) : undefined,
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: `Suscripción '${entitlementId}' editada exitosamente`,
+      data: resultado,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en editarSuscripcionUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al editar la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
+
+// ==========================================
+// ELIMINAR / CANCELAR SUSCRIPCIÓN (DELETE)
+// ==========================================
+export const eliminarSuscripcionUsuarioController = async (ctx: Context) => {
+  try {
+    let body: any = {};
+    try {
+      if (typeof (ctx.request.body as any)?.json === "function") {
+        body = await (ctx.request.body as any).json();
+      } else if (typeof (ctx.request as any)?.body === "function") {
+        const bodyResult = (ctx.request as any).body({ type: "json" });
+        body = await bodyResult.value;
+      }
+    } catch {
+      body = {};
+    }
+
+    const params = (ctx as any).params || {};
+    const searchParams = ctx.request.url.searchParams;
+
+    const uid = params.uid || body.uid || body.userId || searchParams.get("uid");
+    const entitlementId = params.entitlementId || body.entitlementId || body.id || body.tipo || body.plan || searchParams.get("entitlementId");
+
+    if (!uid || !entitlementId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan datos requeridos: 'uid' y 'entitlementId'",
+      };
+      return;
+    }
+
+    const eliminarCompletamente = body.hardDelete !== undefined
+      ? Boolean(body.hardDelete)
+      : (body.eliminarCompletamente !== undefined ? Boolean(body.eliminarCompletamente) : true);
+
+    const resultado = await eliminarSuscripcionUsuarioService(uid, entitlementId, eliminarCompletamente);
+
+    ctx.response.status = 200;
+    ctx.response.body = resultado;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    console.error("❌ Error en eliminarSuscripcionUsuarioController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al eliminar la suscripción del usuario",
+      error: errorMessage,
+    };
+  }
+};
 
 
 

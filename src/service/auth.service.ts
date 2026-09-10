@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.ts";
 import { uploadToS3 } from "../controllers/aws.controller.ts";
+import { crearUsuarioService, normalizarUsuarioDoc } from "./users.service.ts";
 
 export const syncUserWithGoogleService = async (userData: any) => {
     try {
@@ -8,7 +9,7 @@ export const syncUserWithGoogleService = async (userData: any) => {
         const docSnap = await userRef.get();
 
         if (docSnap.exists) {
-            return docSnap.data();
+            return normalizarUsuarioDoc(docSnap.data(), docSnap.id);
         }
 
         let finalPhotoUrl = "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg";
@@ -27,15 +28,20 @@ export const syncUserWithGoogleService = async (userData: any) => {
                 console.error("❌ Falló subida a S3, usando default:", err);
             }
         }
-        const nuevoUsuario = {
+
+        const nuevoUsuario = await crearUsuarioService({
+            uid,
             email,
             name,
             photoURL: finalPhotoUrl,
-            uid,
-            createdAt: new Date().toISOString(),
-        };
+            metodo: "google",
+            perfil: {
+                name,
+                email,
+                photoURL: finalPhotoUrl,
+            },
+        });
 
-        await userRef.set(nuevoUsuario);
         return nuevoUsuario;
 
     } catch (error) {

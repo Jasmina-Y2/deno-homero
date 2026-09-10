@@ -38,9 +38,9 @@ const obtenerInfoUsuario = async (uid: string) => {
       const d = docSnap.data() || {};
       return {
         uid,
-        nombre: d.name || d.nombre || d.displayName || "Usuario",
-        photoURL: d.photoURL || d.foto || "",
-        descripcion: d.descripcion || "",
+        nombre: d.perfil?.name || d.name || d.nombre || d.displayName || "Usuario",
+        photoURL: d.perfil?.photoURL || d.photoURL || d.foto || "",
+        descripcion: d.perfil?.descripcion || d.descripcion || "",
       };
     }
   } catch (_e) {
@@ -83,7 +83,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     const creadorDoc = await transaction.get(creadorRef);
 
     const oyenteData = oyenteDoc.data() || {};
-    const rawSaldoOyente = oyenteData.walletBalance ?? 0;
+    const rawSaldoOyente = oyenteData.billetera?.walletBalance ?? oyenteData.walletBalance ?? 0;
     const saldoActualOyente = Number(rawSaldoOyente);
 
     // Validación de fondos suficientes
@@ -94,7 +94,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     const nuevoSaldoOyente = saldoActualOyente - cantidadMonedas;
 
     const creadorData = creadorDoc.exists ? (creadorDoc.data() || {}) : {};
-    const rawSaldoCreador = creadorData.walletBalance ?? 0;
+    const rawSaldoCreador = creadorData.billetera?.walletBalance ?? creadorData.walletBalance ?? 0;
     const saldoActualCreador = Number(rawSaldoCreador);
     const nuevoSaldoCreador = saldoActualCreador + cantidadMonedas;
 
@@ -121,6 +121,8 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     // --- FASE DE ESCRITURA ---
     // Comando 1: Restar monedas al oyente
     transaction.update(oyenteRef, {
+      "billetera.walletBalance": nuevoSaldoOyente,
+      "sistema.fechaActualizacion": fechaActual,
       walletBalance: nuevoSaldoOyente,
       fechaActualizacion: fechaActual,
     });
@@ -128,6 +130,8 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     // Comando 2: Sumar la misma cantidad al creador
     if (creadorDoc.exists) {
       transaction.update(creadorRef, {
+        "billetera.walletBalance": nuevoSaldoCreador,
+        "sistema.fechaActualizacion": fechaActual,
         walletBalance: nuevoSaldoCreador,
         fechaActualizacion: fechaActual,
       });
@@ -136,6 +140,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
         creadorRef,
         {
           uid: idCreador,
+          billetera: { walletBalance: nuevoSaldoCreador },
           walletBalance: nuevoSaldoCreador,
           fechaCreacion: fechaActual,
           fechaActualizacion: fechaActual,
@@ -494,7 +499,7 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     }
 
     const userData = userDoc.data() || {};
-    const saldoActual = Number(userData.walletBalance ?? 0);
+    const saldoActual = Number(userData.billetera?.walletBalance ?? userData.walletBalance ?? 0);
     const nuevoSaldo = (isNaN(saldoActual) ? 0 : saldoActual) + monedasOtorgadas;
 
     // --- FASE 2: VALIDACIÓN DE LÍMITES DIARIOS (MÁX 3/DÍA) ---
@@ -516,9 +521,9 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       }
     } else if (!deviceDoc) {
       // Fallback a nivel de usuario si no se envió deviceId
-      const fechaUltimoAnuncio = userData.fechaUltimoAnuncio || "";
+      const fechaUltimoAnuncio = userData.actividadDiaria?.fechaUltimoAnuncio || userData.fechaUltimoAnuncio || "";
       if (fechaUltimoAnuncio === hoyStr) {
-        anunciosVistosHoy = Number(userData.anunciosVistosHoy || 0);
+        anunciosVistosHoy = Number(userData.actividadDiaria?.anunciosVistosHoy ?? userData.anunciosVistosHoy ?? 0);
       } else {
         anunciosVistosHoy = 0;
       }
@@ -558,10 +563,14 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
 
     // 2. Actualizar usuario con saldo y nuevo conteo diario
     transaction.update(userRef, {
+      "billetera.walletBalance": nuevoSaldo,
+      "actividadDiaria.fechaUltimoAnuncio": hoyStr,
+      "actividadDiaria.anunciosVistosHoy": nuevoConteoHoy,
+      ...(cleanDeviceId ? { "sistema.ultimoDeviceId": cleanDeviceId, ultimoDeviceId: cleanDeviceId } : {}),
+      "sistema.fechaActualizacion": fechaActual,
       walletBalance: nuevoSaldo,
       fechaUltimoAnuncio: hoyStr,
       anunciosVistosHoy: nuevoConteoHoy,
-      ...(cleanDeviceId ? { ultimoDeviceId: cleanDeviceId } : {}),
       fechaActualizacion: fechaActual,
     });
 
@@ -609,6 +618,8 @@ export const resetearLimiteAnunciosService = async (idUsuario: string) => {
   const userRef = await obtenerDocRefUsuario(idUsuario);
   await userRef.set(
     {
+      "actividadDiaria.anunciosVistosHoy": 0,
+      "actividadDiaria.fechaUltimoAnuncio": "",
       anunciosVistosHoy: 0,
       fechaUltimoAnuncio: "",
     },
@@ -690,7 +701,7 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     }
 
     const userData = userDoc.data() || {};
-    const saldoActual = Number(userData.walletBalance ?? 0);
+    const saldoActual = Number(userData.billetera?.walletBalance ?? userData.walletBalance ?? 0);
     const nuevoSaldo = saldoActual + cantidadMonedas;
     const fechaActual = new Date().toISOString();
 
@@ -710,6 +721,8 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     };
 
     transaction.update(userRef, {
+      "billetera.walletBalance": nuevoSaldo,
+      "sistema.fechaActualizacion": fechaActual,
       walletBalance: nuevoSaldo,
       fechaActualizacion: fechaActual,
     });

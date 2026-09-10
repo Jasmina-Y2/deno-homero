@@ -1,75 +1,264 @@
 import { db, fieldValue } from "../config/firebase.ts";
-import { DatosUsuario } from "../models/users.model.ts";
+import {
+  ActividadDiariaUsuario,
+  BilleteraUsuario,
+  DatosUsuario,
+  PerfilUsuario,
+  SistemaUsuario,
+  SuscripcionItem,
+  UsuarioDocumento,
+} from "../models/users.model.ts";
 import { enviarPushActualizarPerfil } from "./notification.service.ts";
+
+/**
+ * Lista de campos obsoletos/antiguos que nunca deben estar en la raíz de Firestore
+ */
+const CAMPOS_OBSOLETOS_RAIZ = [
+  "name",
+  "email",
+  "photoURL",
+  "foto",
+  "descripcion",
+  "rol",
+  "verificado",
+  "marco_perfil_id",
+  "marco_perfil",
+  "selectedFrame",
+  "suscription",
+  "suscripcion",
+  "fechaSuscripcion",
+  "fechaVencimiento",
+  "diasDuracion",
+  "walletBalance",
+  "monedas",
+  "ElevensLab",
+  "mesRecargaFreeElevenLabs",
+  "anunciosVistosHoy",
+  "fechaUltimoAnuncio",
+  "dia_racha",
+  "fechaUltimaRacha",
+  "fcmToken",
+  "fcm_token",
+  "tokenActualizadoEn",
+  "bovedaPin",
+  "metodo",
+  "ADMIN",
+  "admin",
+  "activo",
+  "fechaRegistro",
+  "fechaActualizacion",
+  "sistema.fcm_token",
+  "sistema.tokenActualizadoEn",
+];
+
+/**
+ * Genera el objeto de eliminación para campos fantasmas/obsoletos
+ */
+export const obtenerEliminacionesObsoletas = (rawData: any): Record<string, any> => {
+  const deletes: Record<string, any> = {};
+  for (const key of CAMPOS_OBSOLETOS_RAIZ) {
+    if (key.includes(".")) {
+      const [parent, child] = key.split(".");
+      if (rawData && rawData[parent] && child in rawData[parent]) {
+        deletes[key] = fieldValue.delete();
+      }
+    } else if (rawData && key in rawData) {
+      deletes[key] = fieldValue.delete();
+    }
+  }
+  return deletes;
+};
+
+/**
+ * Normaliza un documento de usuario de Firestore a la estructura estrictamente modular:
+ * { uid, perfil, suscripciones, billetera, actividadDiaria, sistema }
+ */
+export const normalizarUsuarioDoc = (data: any, docId?: string): UsuarioDocumento => {
+  if (!data) {
+    data = {};
+  }
+
+  const uid = data.uid || docId || "";
+  const ahora = new Date().toISOString();
+  const mesActual = ahora.slice(0, 7);
+
+  // 1. Perfil
+  const perfil: PerfilUsuario = {
+    name: data.perfil?.name || data.name || data.nombre || data.displayName || `Usuario_${uid.slice(0, 6)}`,
+    email: data.perfil?.email || data.email || data.correo || "",
+    photoURL: data.perfil?.photoURL || data.photoURL || data.foto || "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg",
+    descripcion: data.perfil?.descripcion || data.descripcion || "Soy creador original de homero",
+    rol: data.perfil?.rol || data.rol || "usuario",
+    verificado: Boolean(data.perfil?.verificado ?? data.verificado ?? false),
+    marco_perfil_id: data.perfil?.marco_perfil_id ?? data.marco_perfil_id ?? null,
+  };
+
+  // 2. Suscripciones (Array exclusivo de suscripciones)
+  let suscripciones: SuscripcionItem[] = [];
+  if (Array.isArray(data.suscripciones)) {
+    suscripciones = data.suscripciones.map((s: any) => ({
+      entitlementId: s.entitlementId || s.id || s.tipo || "lector_vip",
+      productId: s.productId || s.product_id || (s.entitlementId === "creador_estelar" ? "homero_creador_estelar:creador-estelar-mensual" : "homero_lector_vip:lector-vip-mensual"),
+      activo: Boolean(s.activo),
+      fechaSuscripcion: s.fechaSuscripcion || null,
+      fechaVencimiento: s.fechaVencimiento || null,
+      diasDuracion: Number(s.diasDuracion || 30),
+      autoRenovacion: Boolean(s.autoRenovacion ?? false),
+    }));
+  } else {
+    // Migrar suscripción legada si existía
+    const legacyActivo = Boolean(data.suscription ?? data.suscripcion?.activo ?? (data.suscripcion === true));
+    const legacyFechaSuscripcion = data.suscripcion?.fechaSuscripcion ?? data.fechaSuscripcion ?? null;
+    const legacyFechaVencimiento = data.suscripcion?.fechaVencimiento ?? data.fechaVencimiento ?? null;
+    const legacyDias = Number(data.suscripcion?.diasDuracion ?? data.diasDuracion ?? 30);
+
+    const lectorActivo = Boolean(
+      data.suscripcion?.lector?.activo ??
+      (data.suscripcion?.tipo === "lector" || data.suscripcion?.tipo === "ambos" ? legacyActivo : false)
+    );
+    const escritorActivo = Boolean(
+      data.suscripcion?.escritor?.activo ??
+      (data.suscripcion?.tipo === "escritor" || data.suscripcion?.tipo === "ambos" || (!data.suscripcion?.tipo && legacyActivo) ? legacyActivo : false)
+    );
+
+    if (lectorActivo) {
+      suscripciones.push({
+        entitlementId: "lector_vip",
+        productId: "homero_lector_vip:lector-vip-mensual",
+        activo: true,
+        fechaSuscripcion: data.suscripcion?.lector?.fechaSuscripcion ?? legacyFechaSuscripcion,
+        fechaVencimiento: data.suscripcion?.lector?.fechaVencimiento ?? legacyFechaVencimiento,
+        diasDuracion: legacyDias,
+        autoRenovacion: false,
+      });
+    }
+
+    if (escritorActivo) {
+      suscripciones.push({
+        entitlementId: "creador_estelar",
+        productId: "homero_creador_estelar:creador-estelar-mensual",
+        activo: true,
+        fechaSuscripcion: data.suscripcion?.escritor?.fechaSuscripcion ?? legacyFechaSuscripcion,
+        fechaVencimiento: data.suscripcion?.escritor?.fechaVencimiento ?? legacyFechaVencimiento,
+        diasDuracion: legacyDias,
+        autoRenovacion: false,
+      });
+    }
+  }
+
+  const tieneEscritorActivo = suscripciones.some(
+    (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
+  );
+
+  // 3. Billetera
+  const billetera: BilleteraUsuario = {
+    walletBalance: Number(data.billetera?.walletBalance ?? data.walletBalance ?? 0),
+    elevensLab: Number(data.billetera?.elevensLab ?? data.ElevensLab ?? (tieneEscritorActivo ? 15 : 2)),
+    mesRecargaFreeElevenLabs: data.billetera?.mesRecargaFreeElevenLabs || data.mesRecargaFreeElevenLabs || mesActual,
+  };
+
+  // 4. Actividad Diaria
+  const actividadDiaria: ActividadDiariaUsuario = {
+    anunciosVistosHoy: Number(data.actividadDiaria?.anunciosVistosHoy ?? data.anunciosVistosHoy ?? 0),
+    fechaUltimoAnuncio: data.actividadDiaria?.fechaUltimoAnuncio || data.fechaUltimoAnuncio || "",
+    dia_racha: Number(data.actividadDiaria?.dia_racha ?? data.dia_racha ?? 0),
+    fechaUltimaRacha: data.actividadDiaria?.fechaUltimaRacha || data.fechaUltimaRacha || null,
+  };
+
+  // 5. Sistema (ÚNICO fcmToken, sin duplicados)
+  const fcmTokenVal = data.sistema?.fcmToken || data.sistema?.fcm_token || data.fcmToken || data.fcm_token || "";
+  const sistema: SistemaUsuario = {
+    fcmToken: fcmTokenVal,
+    ultimoDeviceId: data.sistema?.ultimoDeviceId || data.ultimoDeviceId || "",
+    bovedaPin: data.sistema?.bovedaPin || data.bovedaPin || "",
+    metodo: data.sistema?.metodo || data.metodo || "email",
+    ADMIN: Boolean(data.sistema?.ADMIN ?? data.ADMIN ?? (perfil.rol === "admin" || data.admin === true)),
+    activo: Boolean(data.sistema?.activo ?? data.activo ?? true),
+    fechaRegistro: data.sistema?.fechaRegistro || data.fechaRegistro || data.createdAt || ahora,
+    fechaActualizacion: data.sistema?.fechaActualizacion || data.fechaActualizacion || ahora,
+  };
+
+  return {
+    uid,
+    perfil,
+    suscripciones,
+    billetera,
+    actividadDiaria,
+    sistema,
+  };
+};
+
+/**
+ * Obtiene todos los usuarios normalizados
+ */
 export const getUsuariosService = async () => {
   try {
     const snapshot = await db.collection("users").get();
-    return snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
+    return snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      return normalizarUsuarioDoc(data, doc.id);
+    });
   } catch (error) {
     console.error("❌ Error en getUsuariosService:", error);
     throw new Error("Error al obtener la lista de usuarios");
   }
 };
 
-const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
+/**
+ * Verifica expiración de suscripciones y limpia campos fantasmas/obsoletos del documento en Firestore
+ */
+const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
   let necesitaLimpieza = false;
-  const updateData: Record<string, any> = {};
+  const updateData: Record<string, any> = obtenerEliminacionesObsoletas(rawData);
 
-  // Limpiar campos fantasmas si existen en el documento
-  if ("admin" in data) {
-    updateData.admin = fieldValue.delete();
-    delete data.admin;
-    necesitaLimpieza = true;
-  }
-  if ("marco_perfil" in data) {
-    updateData.marco_perfil = fieldValue.delete();
-    delete data.marco_perfil;
-    necesitaLimpieza = true;
-  }
-  if ("selectedFrame" in data) {
-    updateData.selectedFrame = fieldValue.delete();
-    delete data.selectedFrame;
+  if (Object.keys(updateData).length > 0) {
     necesitaLimpieza = true;
   }
 
+  const normalizado = normalizarUsuarioDoc(rawData, docRef.id);
   const ahora = new Date();
-  const mesActual = ahora.toISOString().slice(0, 7); // e.g. "2026-09"
+  const mesActual = ahora.toISOString().slice(0, 7);
 
-  // 1. Manejo de expiración de suscripción PRO
-  if (data && data.suscription && data.fechaVencimiento) {
-    const fechaVenc = new Date(data.fechaVencimiento);
-    if (ahora > fechaVenc) {
-      data.suscription = false;
-      data.ElevensLab = 2; // Vuelve a los 2 gratuitos del mes
-      data.mesRecargaFreeElevenLabs = mesActual;
+  let suscripcionModificada = false;
 
-      updateData.suscription = false;
-      updateData.ElevensLab = 2;
-      updateData.mesRecargaFreeElevenLabs = mesActual;
-      updateData.fechaActualizacion = ahora.toISOString();
-      necesitaLimpieza = true;
-
-      // Si por defecto estaba con marco_perfil_id "pro_gold", ponerlo en null al expirar suscripción
-      const marcoId = String(data.marco_perfil_id ?? "");
-      if (marcoId.toLowerCase() === "pro_gold") {
-        data.marco_perfil_id = null;
-        updateData.marco_perfil_id = null;
+  // 1. Verificar expiración de cada item en suscripciones
+  for (const sub of normalizado.suscripciones) {
+    if (sub.activo && sub.fechaVencimiento) {
+      const fechaVenc = new Date(sub.fechaVencimiento);
+      if (ahora > fechaVenc) {
+        sub.activo = false;
+        suscripcionModificada = true;
+        necesitaLimpieza = true;
       }
     }
   }
 
-  // 2. Usuarios sin suscripción activa: 2 créditos gratis de ElevenLabs al mes
-  if (!data?.suscription) {
-    const mesUltimaRecarga = data?.mesRecargaFreeElevenLabs;
-    const saldoActual = data?.ElevensLab !== undefined && data?.ElevensLab !== null
-      ? Number(data.ElevensLab)
-      : null;
+  const tieneActivas = normalizado.suscripciones.some((s) => s.activo === true);
+  const tieneEscritorActivo = normalizado.suscripciones.some(
+    (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
+  );
 
-    if (saldoActual === null || mesUltimaRecarga !== mesActual) {
-      data.ElevensLab = 2;
-      data.mesRecargaFreeElevenLabs = mesActual;
-      updateData.ElevensLab = 2;
-      updateData.mesRecargaFreeElevenLabs = mesActual;
+  if (suscripcionModificada) {
+    updateData.suscripciones = normalizado.suscripciones;
+    normalizado.sistema.fechaActualizacion = ahora.toISOString();
+    updateData["sistema.fechaActualizacion"] = normalizado.sistema.fechaActualizacion;
+
+    // Si expiró y tenía el marco pro_gold, se retira
+    const marcoId = String(normalizado.perfil.marco_perfil_id ?? "");
+    if (!tieneActivas && marcoId.toLowerCase() === "pro_gold") {
+      normalizado.perfil.marco_perfil_id = null;
+      updateData["perfil.marco_perfil_id"] = null;
+    }
+  }
+
+  // 2. Recarga mensual gratuita de 2 créditos de ElevenLabs si no tiene creador activo
+  if (!tieneEscritorActivo) {
+    const mesUltimaRecarga = normalizado.billetera.mesRecargaFreeElevenLabs;
+    if (mesUltimaRecarga !== mesActual) {
+      normalizado.billetera.elevensLab = 2;
+      normalizado.billetera.mesRecargaFreeElevenLabs = mesActual;
+      updateData["billetera.elevensLab"] = 2;
+      updateData["billetera.mesRecargaFreeElevenLabs"] = mesActual;
       necesitaLimpieza = true;
     }
   }
@@ -77,33 +266,36 @@ const verificarExpiracionSuscripcion = async (docRef: any, data: any) => {
   if (necesitaLimpieza) {
     try {
       await docRef.update(updateData);
-      console.log(
-        `🧹 Documento actualizado/limpiado para usuario ${data.uid || docRef.id}`,
-      );
+      console.log(`🧹 Documento limpiado y normalizado para usuario ${normalizado.uid}`);
 
-      // Notificar en segundo plano mediante FCM data-only si expiró
-      if (updateData.suscription === false) {
-        const fcmToken = data.fcm_token || data.fcmToken;
-        if (fcmToken) {
-          enviarPushActualizarPerfil(fcmToken).catch((err) =>
-            console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras expiración de suscripción:", err)
+      if (suscripcionModificada && !tieneActivas) {
+        const token = normalizado.sistema.fcmToken;
+        if (token) {
+          enviarPushActualizarPerfil(token).catch((err) =>
+            console.error("⚠️ [FCM] Error enviando push tras expiración:", err)
           );
         }
       }
     } catch (err) {
-      console.error("Error al actualizar expiración/limpieza de suscripción:", err);
+      console.error("Error al persistir expiración/limpieza de usuario:", err);
     }
   }
 
-  return data;
+  return normalizado;
 };
 
+/**
+ * Obtiene el usuario por UID normalizado
+ */
 export const getUsuarioByUidService = async (uid: string) => {
   try {
-    const snapshot = await db.collection("users")
-      .where("uid", "==", uid)
-      .get();
+    const directDoc = await db.collection("users").doc(uid).get();
+    if (directDoc.exists) {
+      const data = await verificarExpiracionSuscripcion(directDoc.ref, directDoc.data());
+      return { idDoc: directDoc.id, ...data };
+    }
 
+    const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
     if (snapshot.empty) {
       console.warn(`⚠️ No se encontró usuario con UID: ${uid}`);
       return null;
@@ -111,243 +303,341 @@ export const getUsuarioByUidService = async (uid: string) => {
 
     const userDoc = snapshot.docs[0];
     const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
-
-    return {
-      idDoc: userDoc.id,
-      ...data,
-    };
+    return { idDoc: userDoc.id, ...data };
   } catch (error) {
     console.error("❌ Error en getUsuarioByUidService:", error);
     throw new Error("Error al obtener los datos del usuario");
   }
 };
+
+/**
+ * Obtiene el usuario por Email normalizado
+ */
 export const getUsuarioByEmailService = async (email: string) => {
   try {
-    const snapshot = await db.collection("users")
-      .where("email", "==", email)
+    const snapshotModular = await db.collection("users")
+      .where("perfil.email", "==", email)
+      .limit(1)
       .get();
 
-    if (snapshot.empty) {
-      console.warn(`⚠️ No se encontró usuario con el email: ${email}`);
+    if (!snapshotModular.empty) {
+      const userDoc = snapshotModular.docs[0];
+      const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
+      return { idDoc: userDoc.id, ...data };
+    }
+
+    const snapshotPlano = await db.collection("users")
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+
+    if (snapshotPlano.empty) {
+      console.warn(`⚠️ No se encontró usuario con email: ${email}`);
       return null;
     }
 
-    const userDoc = snapshot.docs[0];
+    const userDoc = snapshotPlano.docs[0];
     const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
-
-    return {
-      idDoc: userDoc.id,
-      ...data,
-    };
+    return { idDoc: userDoc.id, ...data };
   } catch (error) {
     console.error("❌ Error en getUsuarioByEmailService:", error);
     throw new Error("Error al verificar la existencia del email");
   }
 };
+
+/**
+ * Crea un nuevo usuario con la estructura modular estricta
+ */
 export const crearUsuarioService = async (datos: DatosUsuario) => {
   try {
-    const metodoRegistro = datos.metodo || "email";
-
     const ahora = new Date();
     const mesActual = ahora.toISOString().slice(0, 7);
+    const ahoraIso = ahora.toISOString();
+    const uid = datos.uid;
 
-    await db.collection("users").doc(datos.uid).set({
-      ...datos,
-      fechaRegistro: datos.fechaRegistro || ahora.toISOString(),
-      rol: "usuario",
-      activo: true,
-      metodo: metodoRegistro,
-      suscription: false,
-      verificado: false,
-      ElevensLab: 2, // 2 créditos gratis de ElevenLabs al mes
-      mesRecargaFreeElevenLabs: mesActual,
-      fechaSuscripcion: null,
-      fechaVencimiento: null,
-      descripcion: "Soy creador original de homero",
-    });
+    const perfil: PerfilUsuario = {
+      name: datos.perfil?.name || datos.name || `User_${uid.slice(0, 6)}`,
+      email: datos.perfil?.email || datos.email || "",
+      photoURL: datos.perfil?.photoURL || datos.photoURL || "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg",
+      descripcion: datos.perfil?.descripcion || datos.descripcion || "Soy creador original de homero",
+      rol: datos.perfil?.rol || datos.rol || "usuario",
+      verificado: Boolean(datos.perfil?.verificado ?? datos.verificado ?? false),
+      marco_perfil_id: datos.perfil?.marco_perfil_id ?? null,
+    };
 
-    console.log(
-      `Usuario creado exitosamente con UID: ${datos.uid} vía ${metodoRegistro}`,
+    const suscripciones: SuscripcionItem[] = Array.isArray(datos.suscripciones) ? datos.suscripciones : [];
+
+    const tieneEscritor = suscripciones.some(
+      (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
     );
 
-    return {
-      idDoc: datos.uid,
-      ...datos,
-      rol: "usuario",
-      activo: true,
-      metodo: metodoRegistro,
-      suscription: false,
-      verificado: false,
-      ElevensLab: 2,
+    const billetera: BilleteraUsuario = {
+      walletBalance: Number(datos.billetera?.walletBalance ?? datos.walletBalance ?? 0),
+      elevensLab: Number(datos.billetera?.elevensLab ?? datos.ElevensLab ?? (tieneEscritor ? 15 : 2)),
       mesRecargaFreeElevenLabs: mesActual,
-      fechaSuscripcion: null,
-      fechaVencimiento: null,
-      descripcion: "Soy creador original de homero",
     };
+
+    const actividadDiaria: ActividadDiariaUsuario = {
+      anunciosVistosHoy: 0,
+      fechaUltimoAnuncio: "",
+      dia_racha: 0,
+      fechaUltimaRacha: null,
+    };
+
+    const sistema: SistemaUsuario = {
+      fcmToken: datos.sistema?.fcmToken || datos.fcmToken || datos.fcm_token || "",
+      ultimoDeviceId: datos.sistema?.ultimoDeviceId || datos.ultimoDeviceId || "",
+      bovedaPin: datos.sistema?.bovedaPin || datos.bovedaPin || "",
+      metodo: datos.sistema?.metodo || datos.metodo || "email",
+      ADMIN: Boolean(datos.sistema?.ADMIN ?? (perfil.rol === "admin")),
+      activo: true,
+      fechaRegistro: datos.sistema?.fechaRegistro || datos.fechaRegistro || ahoraIso,
+      fechaActualizacion: ahoraIso,
+    };
+
+    const nuevoDocumento: UsuarioDocumento = {
+      uid,
+      perfil,
+      suscripciones,
+      billetera,
+      actividadDiaria,
+      sistema,
+    };
+
+    await db.collection("users").doc(uid).set(nuevoDocumento);
+    console.log(`✅ Usuario creado en formato modular. UID: ${uid}`);
+    return { idDoc: uid, ...nuevoDocumento };
   } catch (error) {
-    console.error("Error en crearUsuarioService:", error);
+    console.error("❌ Error en crearUsuarioService:", error);
     throw new Error("Error al crear el perfil del usuario en la base de datos");
   }
 };
 
-export const actualizarNombreUsuarioService = async (
-  uid: string,
-  nuevoNombre: string,
-) => {
+/**
+ * Actualiza el nombre del usuario en perfil.name
+ */
+export const actualizarNombreUsuarioService = async (uid: string, nuevoNombre: string) => {
   try {
     const snapshot = await db.collection("users").where("uid", "==", uid).get();
-    if (snapshot.empty) {
-      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
-    }
+    const docRef = snapshot.empty ? db.collection("users").doc(uid) : snapshot.docs[0].ref;
     const fechaActualizacion = new Date().toISOString();
 
-    const promesas = snapshot.docs.map((doc) => {
-      return doc.ref.update({
-        name: nuevoNombre,
-        fechaActualizacion: fechaActualizacion,
-      });
-    });
-
-    await Promise.all(promesas);
-
-    console.log(
-      `Nombre actualizado exitosamente a "${nuevoNombre}" para el campo UID: ${uid}`,
-    );
-
-    return {
-      uid: uid,
-      name: nuevoNombre,
-      fechaActualizacion: fechaActualizacion,
+    const updateData: Record<string, any> = {
+      "perfil.name": nuevoNombre,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      name: fieldValue.delete(),
     };
+
+    await docRef.update(updateData);
+    console.log(`Nombre actualizado a "${nuevoNombre}" para UID: ${uid}`);
+    return { uid, name: nuevoNombre, fechaActualizacion };
   } catch (error) {
     console.error("Error en actualizarNombreUsuarioService:", error);
-    throw new Error(
-      "Error al modificar el nombre del usuario en la base de datos",
-    );
+    throw new Error("Error al modificar el nombre del usuario");
   }
 };
 
-export const actualizarFotoUsuarioService = async (
-  uid: string,
-  nuevaFotoURL: string,
-) => {
+/**
+ * Actualiza la descripción del usuario en perfil.descripcion
+ */
+export const actualizarDescripcionUsuarioService = async (uid: string, nuevaDescripcion: string) => {
   try {
     const snapshot = await db.collection("users").where("uid", "==", uid).get();
-    if (snapshot.empty) {
-      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
-    }
+    const docRef = snapshot.empty ? db.collection("users").doc(uid) : snapshot.docs[0].ref;
     const fechaActualizacion = new Date().toISOString();
 
-    const promesas = snapshot.docs.map((doc) => {
-      return doc.ref.update({
-        photoURL: nuevaFotoURL,
-        fechaActualizacion: fechaActualizacion,
-      });
-    });
-
-    await Promise.all(promesas);
-
-    console.log(
-      `Foto actualizada exitosamente a "${nuevaFotoURL}" para el campo UID: ${uid}`,
-    );
-
-    return {
-      uid: uid,
-      photoURL: nuevaFotoURL,
-      fechaActualizacion: fechaActualizacion,
+    const updateData: Record<string, any> = {
+      "perfil.descripcion": nuevaDescripcion,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      descripcion: fieldValue.delete(),
     };
+
+    await docRef.update(updateData);
+    console.log(`Descripción actualizada para UID: ${uid}`);
+    return { uid, descripcion: nuevaDescripcion, fechaActualizacion };
   } catch (error) {
-    console.error("Error en actualizarFotoUsuarioService:", error);
-    throw new Error(
-      "Error al modificar la foto del usuario en la base de datos",
-    );
+    console.error("Error en actualizarDescripcionUsuarioService:", error);
+    throw new Error("Error al modificar la descripción del usuario");
   }
 };
 
-export const actualizarSuscripcionUsuarioService = async (
-  uid: string,
-  nuevaSuscripcion: boolean,
-  verificado: boolean,
-  fechaSuscripcion: string | null = null,
-  fechaVencimiento: string | null = null,
-  diasDuracion: number = 30,
-  elevensLab: number = 15,
-) => {
+/**
+ * Actualiza la foto del usuario en perfil.photoURL
+ */
+export const actualizarFotoUsuarioService = async (uid: string, nuevaFotoURL: string) => {
   try {
     const snapshot = await db.collection("users").where("uid", "==", uid).get();
-    if (snapshot.empty) {
-      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
-    }
+    const docRef = snapshot.empty ? db.collection("users").doc(uid) : snapshot.docs[0].ref;
+    const fechaActualizacion = new Date().toISOString();
 
-    const userData = snapshot.docs[0].data();
-    const fcmToken = userData?.fcm_token || userData?.fcmToken || null;
-
-    const ahora = new Date();
-    const fechaActualizacion = ahora.toISOString();
-    const mesActual = ahora.toISOString().slice(0, 7);
-    const elevensLabFinal = nuevaSuscripcion ? elevensLab : 2;
-    const finalFechaSuscripcion = fechaSuscripcion || (nuevaSuscripcion ? ahora.toISOString() : null);
-
-    let finalFechaVencimiento = fechaVencimiento;
-    if (nuevaSuscripcion && !fechaVencimiento && diasDuracion && diasDuracion > 0) {
-      const venc = new Date(ahora.getTime() + Number(diasDuracion) * 24 * 60 * 60 * 1000);
-      finalFechaVencimiento = venc.toISOString();
-    }
-
-    const dataActualizada: Record<string, any> = {
-      suscription: nuevaSuscripcion,
-      verificado: verificado,
-      ElevensLab: elevensLabFinal,
-      mesRecargaFreeElevenLabs: mesActual,
-      fechaActualizacion: fechaActualizacion,
-      fechaSuscripcion: finalFechaSuscripcion,
-      fechaVencimiento: finalFechaVencimiento,
-      diasDuracion: nuevaSuscripcion ? diasDuracion : 0,
+    const updateData: Record<string, any> = {
+      "perfil.photoURL": nuevaFotoURL,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      photoURL: fieldValue.delete(),
     };
 
-    // Si el usuario se queda sin suscripción y tenía el marco "pro_gold", se le quita (null)
-    const marcoId = String(userData.marco_perfil_id ?? "");
-    if (!nuevaSuscripcion && marcoId.toLowerCase() === "pro_gold") {
-      dataActualizada.marco_perfil_id = null;
+    await docRef.update(updateData);
+    console.log(`Foto actualizada para UID: ${uid}`);
+    return { uid, photoURL: nuevaFotoURL, fechaActualizacion };
+  } catch (error) {
+    console.error("Error en actualizarFotoUsuarioService:", error);
+    throw new Error("Error al modificar la foto del usuario");
+  }
+};
+
+export interface OpcionesActualizarSuscripcion {
+  uid: string;
+  nuevaSuscripcion: boolean;
+  verificado: boolean;
+  entitlementId?: string;
+  productId?: string;
+  tipo?: "lector" | "escritor" | "ambos" | string;
+  fechaSuscripcion?: string | null;
+  fechaVencimiento?: string | null;
+  diasDuracion?: number;
+  elevensLab?: number;
+  planLector?: string;
+  planEscritor?: string;
+}
+
+/**
+ * Actualiza o renueva la suscripción de un usuario en el array modular `suscripciones`
+ */
+export const actualizarSuscripcionUsuarioService = async (
+  uidOrParams: string | OpcionesActualizarSuscripcion,
+  nuevaSuscripcionParam?: boolean,
+  verificadoParam?: boolean,
+  fechaSuscripcionParam: string | null = null,
+  fechaVencimientoParam: string | null = null,
+  diasDuracionParam: number = 30,
+  elevensLabParam?: number,
+) => {
+  try {
+    let params: OpcionesActualizarSuscripcion;
+    if (typeof uidOrParams === "object") {
+      params = uidOrParams;
+    } else {
+      params = {
+        uid: uidOrParams,
+        nuevaSuscripcion: Boolean(nuevaSuscripcionParam),
+        verificado: Boolean(verificadoParam),
+        fechaSuscripcion: fechaSuscripcionParam,
+        fechaVencimiento: fechaVencimientoParam,
+        diasDuracion: diasDuracionParam,
+        elevensLab: elevensLabParam,
+      };
     }
 
-    // Limpiar campos fantasmas si existían en el documento
-    if ("admin" in userData) {
-      dataActualizada.admin = fieldValue.delete();
-    }
-    if ("marco_perfil" in userData) {
-      dataActualizada.marco_perfil = fieldValue.delete();
-    }
-    if ("selectedFrame" in userData) {
-      dataActualizada.selectedFrame = fieldValue.delete();
+    const { uid, nuevaSuscripcion, verificado } = params;
+    const tipo = (params.tipo || "escritor").toLowerCase();
+    const diasDuracion = params.diasDuracion !== undefined ? Number(params.diasDuracion) : 30;
+
+    const docDirect = await db.collection("users").doc(uid).get();
+    let docRef: any = null;
+    let rawUserData: any = null;
+
+    if (docDirect.exists) {
+      docRef = docDirect.ref;
+      rawUserData = docDirect.data();
+    } else {
+      const snap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (snap.empty) {
+        throw new Error(`No se encontró ningún usuario con UID: ${uid}`);
+      }
+      docRef = snap.docs[0].ref;
+      rawUserData = snap.docs[0].data();
     }
 
-    const promesas = snapshot.docs.map((doc) => {
-      return doc.ref.update(dataActualizada);
-    });
+    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const ahora = new Date();
+    const ahoraIso = ahora.toISOString();
+    const mesActual = ahoraIso.slice(0, 7);
 
-    await Promise.all(promesas);
+    let finalFechaVencimiento = params.fechaVencimiento;
+    if (nuevaSuscripcion && !finalFechaVencimiento && diasDuracion > 0) {
+      const venc = new Date(ahora.getTime() + diasDuracion * 24 * 60 * 60 * 1000);
+      finalFechaVencimiento = venc.toISOString();
+    }
+    const finalFechaSuscripcion = params.fechaSuscripcion || (nuevaSuscripcion ? ahoraIso : null);
 
-    console.log(
-      `Suscripción actualizada a "${nuevaSuscripcion}" para UID: ${uid}. ElevensLab: ${elevensLabFinal}. Vencimiento: ${finalFechaVencimiento}`,
+    const currentSuscripciones: SuscripcionItem[] = [...(usuario.suscripciones || [])];
+    const targetEntitlementId = params.entitlementId || (tipo === "lector" ? "lector_vip" : "creador_estelar");
+    const targetProductId = params.productId || (tipo === "lector" ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
+
+    const idx = currentSuscripciones.findIndex(
+      (s) => s.entitlementId.toLowerCase() === targetEntitlementId.toLowerCase() || (params.productId && s.productId === params.productId)
     );
 
-    // Notificar en segundo plano al dispositivo mediante FCM data-only
+    if (idx >= 0) {
+      currentSuscripciones[idx] = {
+        entitlementId: targetEntitlementId,
+        productId: targetProductId,
+        activo: nuevaSuscripcion,
+        fechaSuscripcion: finalFechaSuscripcion ?? null,
+        fechaVencimiento: finalFechaVencimiento ?? null,
+        diasDuracion: nuevaSuscripcion ? diasDuracion : 0,
+        autoRenovacion: currentSuscripciones[idx].autoRenovacion ?? false,
+      };
+    } else if (nuevaSuscripcion) {
+      currentSuscripciones.push({
+        entitlementId: targetEntitlementId,
+        productId: targetProductId,
+        activo: true,
+        fechaSuscripcion: finalFechaSuscripcion ?? null,
+        fechaVencimiento: finalFechaVencimiento ?? null,
+        diasDuracion: diasDuracion,
+        autoRenovacion: false,
+      });
+    }
+
+    const tieneEscritor = currentSuscripciones.some(
+      (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
+    );
+    const tieneActivaGlobal = currentSuscripciones.some((s) => s.activo === true);
+
+    const saldoElevensLab = params.elevensLab !== undefined
+      ? Number(params.elevensLab)
+      : (tieneEscritor ? Math.max(15, Number(usuario.billetera.elevensLab || 0)) : (usuario.billetera.elevensLab || 2));
+
+    const updateData: Record<string, any> = {
+      ...obtenerEliminacionesObsoletas(rawUserData),
+      suscripciones: currentSuscripciones,
+      "perfil.verificado": verificado,
+      "billetera.elevensLab": saldoElevensLab,
+      "billetera.mesRecargaFreeElevenLabs": mesActual,
+      "sistema.fechaActualizacion": ahoraIso,
+    };
+
+    if (!tieneActivaGlobal) {
+      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
+      if (marcoId.toLowerCase() === "pro_gold") {
+        updateData["perfil.marco_perfil_id"] = null;
+      }
+    }
+
+    await docRef.update(updateData);
+    console.log(`✅ Suscripción '${targetEntitlementId}' actualizada para usuario ${uid}`);
+
+    const fcmToken = usuario.sistema.fcmToken;
     if (fcmToken) {
       enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
-        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar suscripción:", pushErr);
+        console.error("⚠️ [FCM] Error push suscripción:", pushErr);
       });
     }
 
     return {
-      uid: uid,
-      ...dataActualizada,
+      uid,
+      suscripciones: currentSuscripciones,
+      verificado,
+      billetera: {
+        ...usuario.billetera,
+        elevensLab: saldoElevensLab,
+      },
+      fechaActualizacion: ahoraIso,
     };
   } catch (error) {
-    console.error("Error en actualizarSuscripcionUsuarioService:", error);
-    throw new Error(
-      "Error al modificar la suscripción del usuario en la base de datos",
-    );
+    console.error("❌ Error en actualizarSuscripcionUsuarioService:", error);
+    throw error;
   }
 };
 
@@ -355,190 +645,173 @@ export interface ParametrosPrivilegiosUsuario {
   uid?: string;
   email?: string;
   suscription?: boolean;
+  nuevaSuscripcion?: boolean;
+  entitlementId?: string;
+  productId?: string;
+  tipo?: string;
   verificado?: boolean;
   ADMIN?: boolean;
   admin?: boolean;
   isAdmin?: boolean;
   activo?: boolean;
-  rol?: "admin" | "usuario" | string;
+  rol?: string;
   dias?: number;
   diasDuracion?: number;
   fechaSuscripcion?: string | null;
   fechaVencimiento?: string | null;
   elevensLab?: number;
   sumarElevensLab?: number;
+  walletBalance?: number;
+  sumarWalletBalance?: number;
 }
 
 /**
- * Asigna de forma personalizada privilegios a cualquier usuario:
- * - Suscripción por días personalizados (ej. 2 o 5 días enteros con cálculo automático de fechaVencimiento)
- * - Insignia de Verificado (true / false)
- * - Permisos de Administrador con campo booleano `ADMIN: true / false`
- * - Estado Activo / Inactivo `activo: true / false` (para desactivar o activar usuarios)
- * - Saldo de generaciones de ElevenLabs (set o suma)
+ * Asigna privilegios y actualiza únicamente los campos modulares
  */
-export const asignarPrivilegiosUsuarioService = async (
-  params: ParametrosPrivilegiosUsuario,
-) => {
+export const asignarPrivilegiosUsuarioService = async (params: ParametrosPrivilegiosUsuario) => {
   try {
-    const {
-      uid,
-      email,
-      suscription,
-      verificado,
-      ADMIN,
-      admin,
-      isAdmin,
-      activo,
-      rol,
-      dias,
-      diasDuracion,
-      elevensLab,
-      sumarElevensLab,
-    } = params;
-
+    const { uid, email } = params;
     if (!uid && !email) {
       throw new Error("Se requiere al menos el UID o el Email del usuario");
     }
 
-    let snapshot: any;
+    let docRef: any = null;
+    let rawUserData: any = null;
+
     if (uid) {
-      snapshot = await db.collection("users").where("uid", "==", uid).get();
-      if (snapshot.empty) {
-        const docSnap = await db.collection("users").doc(uid).get();
-        if (docSnap.exists) {
-          snapshot = { docs: [docSnap], empty: false };
+      const docDirect = await db.collection("users").doc(uid).get();
+      if (docDirect.exists) {
+        docRef = docDirect.ref;
+        rawUserData = docDirect.data();
+      } else {
+        const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
+        if (!snapshot.empty) {
+          docRef = snapshot.docs[0].ref;
+          rawUserData = snapshot.docs[0].data();
         }
       }
     } else if (email) {
-      snapshot = await db.collection("users").where("email", "==", email).get();
+      let snapshot = await db.collection("users").where("perfil.email", "==", email).limit(1).get();
+      if (snapshot.empty) {
+        snapshot = await db.collection("users").where("email", "==", email).limit(1).get();
+      }
+      if (!snapshot.empty) {
+        docRef = snapshot.docs[0].ref;
+        rawUserData = snapshot.docs[0].data();
+      }
     }
 
-    if (!snapshot || snapshot.empty) {
-      throw new Error(
-        `No se encontró ningún usuario con ${uid ? `UID: ${uid}` : `Email: ${email}`}`,
-      );
+    if (!docRef || !rawUserData) {
+      throw new Error(`No se encontró ningún usuario con ${uid ? `UID: ${uid}` : `Email: ${email}`}`);
     }
 
-    const userDoc = snapshot.docs[0];
-    const userData = userDoc.data();
+    const usuario = normalizarUsuarioDoc(rawUserData, uid || docRef.id);
     const ahora = new Date();
-    const fechaActualizacion = ahora.toISOString();
+    const ahoraIso = ahora.toISOString();
 
     const dataActualizada: Record<string, any> = {
-      fechaActualizacion,
+      ...obtenerEliminacionesObsoletas(rawUserData),
+      "sistema.fechaActualizacion": ahoraIso,
     };
 
-    // 1. Manejo de Suscripción y Días (ej: 2 días, 5 días, 30 días)
-    const cantidadDias = dias !== undefined
-      ? Number(dias)
-      : (diasDuracion !== undefined ? Number(diasDuracion) : undefined);
+    // 1. Suscripción
+    const subDeseada = params.suscription ?? params.nuevaSuscripcion;
+    const cantidadDias = params.dias !== undefined ? Number(params.dias) : (params.diasDuracion !== undefined ? Number(params.diasDuracion) : 30);
+    const tipoSub = (params.tipo || "escritor").toLowerCase();
+    const targetEntitlement = params.entitlementId || (tipoSub === "lector" ? "lector_vip" : "creador_estelar");
+    const targetProduct = params.productId || (tipoSub === "lector" ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
 
-    if (suscription !== undefined) {
-      dataActualizada.suscription = Boolean(suscription);
-      if (suscription) {
-        const fechaInicio = params.fechaSuscripcion || ahora.toISOString();
-        dataActualizada.fechaSuscripcion = fechaInicio;
-
-        if (params.fechaVencimiento) {
-          dataActualizada.fechaVencimiento = params.fechaVencimiento;
-        } else if (cantidadDias !== undefined && cantidadDias > 0) {
-          const fechaVenc = new Date(
-            ahora.getTime() + cantidadDias * 24 * 60 * 60 * 1000,
-          );
-          dataActualizada.fechaVencimiento = fechaVenc.toISOString();
-          dataActualizada.diasDuracion = cantidadDias;
-        } else if (!userData.fechaVencimiento) {
-          const fechaVenc = new Date(
-            ahora.getTime() + 30 * 24 * 60 * 60 * 1000,
-          );
-          dataActualizada.fechaVencimiento = fechaVenc.toISOString();
-          dataActualizada.diasDuracion = 30;
-        }
-      } else {
-        dataActualizada.fechaVencimiento = null;
-        dataActualizada.diasDuracion = 0;
-
-        // Si se quita la suscripción y tenía el marco "pro_gold", se le quita (null)
-        const marcoId = String(userData.marco_perfil_id ?? "");
-        if (marcoId.toLowerCase() === "pro_gold") {
-          dataActualizada.marco_perfil_id = null;
-        }
+    if (subDeseada !== undefined) {
+      const activa = Boolean(subDeseada);
+      const fechaInicio = params.fechaSuscripcion || (activa ? ahoraIso : null);
+      let fechaVenc = params.fechaVencimiento;
+      if (activa && !fechaVenc && cantidadDias > 0) {
+        const v = new Date(ahora.getTime() + cantidadDias * 24 * 60 * 60 * 1000);
+        fechaVenc = v.toISOString();
+      } else if (!activa) {
+        fechaVenc = null;
       }
-    } else if (cantidadDias !== undefined && cantidadDias > 0) {
-      dataActualizada.suscription = true;
-      dataActualizada.fechaSuscripcion = ahora.toISOString();
-      const fechaVenc = new Date(
-        ahora.getTime() + cantidadDias * 24 * 60 * 60 * 1000,
+
+      const currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
+      const idx = currentSubs.findIndex(
+        (s) => s.entitlementId.toLowerCase() === targetEntitlement.toLowerCase()
       );
-      dataActualizada.fechaVencimiento = fechaVenc.toISOString();
-      dataActualizada.diasDuracion = cantidadDias;
+
+      if (idx >= 0) {
+        currentSubs[idx].activo = activa;
+        currentSubs[idx].fechaSuscripcion = fechaInicio ?? null;
+        currentSubs[idx].fechaVencimiento = fechaVenc ?? null;
+        currentSubs[idx].diasDuracion = activa ? cantidadDias : 0;
+      } else if (activa) {
+        currentSubs.push({
+          entitlementId: targetEntitlement,
+          productId: targetProduct,
+          activo: true,
+          fechaSuscripcion: fechaInicio ?? null,
+          fechaVencimiento: fechaVenc ?? null,
+          diasDuracion: cantidadDias,
+          autoRenovacion: false,
+        });
+      }
+
+      dataActualizada.suscripciones = currentSubs;
     }
 
-    // 2. Manejo de Verificación (true / false)
-    if (verificado !== undefined) {
-      dataActualizada.verificado = Boolean(verificado);
+    // 2. Verificación
+    if (params.verificado !== undefined) {
+      dataActualizada["perfil.verificado"] = Boolean(params.verificado);
     }
 
-    // 3. Manejo de campo ADMIN Booleano en mayúscula ("ADMIN": true / false)
-    if (ADMIN !== undefined || admin !== undefined || isAdmin !== undefined) {
-      const valorAdmin = Boolean(ADMIN ?? admin ?? isAdmin);
-      dataActualizada.ADMIN = valorAdmin;
-    } else if (rol !== undefined && typeof rol === "string" && rol.trim() !== "") {
-      const valorAdmin = rol.trim().toLowerCase() === "admin";
-      dataActualizada.ADMIN = valorAdmin;
+    // 3. ADMIN / Rol
+    const esAdmin = params.ADMIN !== undefined || params.admin !== undefined || params.isAdmin !== undefined
+      ? Boolean(params.ADMIN ?? params.admin ?? params.isAdmin)
+      : (params.rol ? params.rol.trim().toLowerCase() === "admin" : undefined);
+
+    if (esAdmin !== undefined) {
+      dataActualizada["sistema.ADMIN"] = esAdmin;
+      if (esAdmin) {
+        dataActualizada["perfil.rol"] = "admin";
+      }
     }
 
-    // Limpiar campos fantasmas si existían
-    if ("admin" in userData || admin !== undefined) {
-      dataActualizada.admin = fieldValue.delete();
-    }
-    if ("marco_perfil" in userData) {
-      dataActualizada.marco_perfil = fieldValue.delete();
-    }
-    if ("selectedFrame" in userData) {
-      dataActualizada.selectedFrame = fieldValue.delete();
+    if (params.rol !== undefined && params.rol.trim() !== "") {
+      dataActualizada["perfil.rol"] = params.rol.trim();
     }
 
-    // 4. Manejo de estado Activo / Desactivado (activo: true / false)
-    if (activo !== undefined) {
-      dataActualizada.activo = Boolean(activo);
+    // 4. Activo
+    if (params.activo !== undefined) {
+      dataActualizada["sistema.activo"] = Boolean(params.activo);
     }
 
-    // 5. Manejo de saldo de ElevensLab
-    if (elevensLab !== undefined) {
-      dataActualizada.ElevensLab = Number(elevensLab);
-    } else if (sumarElevensLab !== undefined) {
-      const saldoActual = Number(userData.ElevensLab || 0);
-      dataActualizada.ElevensLab = Math.max(0, saldoActual + Number(sumarElevensLab));
-    } else if (suscription === true && userData.ElevensLab === undefined) {
-      dataActualizada.ElevensLab = 15;
+    // 5. Saldo ElevenLabs
+    if (params.elevensLab !== undefined) {
+      dataActualizada["billetera.elevensLab"] = Number(params.elevensLab);
+    } else if (params.sumarElevensLab !== undefined) {
+      const nuevoSaldo = Math.max(0, Number(usuario.billetera.elevensLab || 0) + Number(params.sumarElevensLab));
+      dataActualizada["billetera.elevensLab"] = nuevoSaldo;
     }
 
-    const promesas = snapshot.docs.map((doc: any) =>
-      doc.ref.update(dataActualizada)
-    );
-    await Promise.all(promesas);
+    // 6. Saldo Monedas
+    if (params.walletBalance !== undefined) {
+      dataActualizada["billetera.walletBalance"] = Number(params.walletBalance);
+    } else if (params.sumarWalletBalance !== undefined) {
+      const nuevoSaldo = Math.max(0, Number(usuario.billetera.walletBalance || 0) + Number(params.sumarWalletBalance));
+      dataActualizada["billetera.walletBalance"] = nuevoSaldo;
+    }
 
-    console.log(
-      `✅ Privilegios actualizados para usuario ${userData.uid || uid}:`,
-      dataActualizada,
-    );
+    await docRef.update(dataActualizada);
+    console.log(`✅ Privilegios actualizados de forma limpia para usuario ${usuario.uid}`);
 
-    // Notificar en segundo plano al dispositivo mediante FCM data-only
-    const fcmTokenPriv = userData?.fcm_token || userData?.fcmToken;
-    if (fcmTokenPriv) {
-      enviarPushActualizarPerfil(fcmTokenPriv).catch((pushErr) => {
-        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras asignar privilegios:", pushErr);
+    const fcmToken = usuario.sistema.fcmToken;
+    if (fcmToken) {
+      enviarPushActualizarPerfil(fcmToken).catch((err) => {
+        console.error("⚠️ [FCM] Error push privilegios:", err);
       });
     }
 
     return {
-      idDoc: userDoc.id,
-      uid: userData.uid || uid,
-      email: userData.email,
-      name: userData.name,
-      ...userData,
+      idDoc: docRef.id,
+      uid: usuario.uid,
       ...dataActualizada,
     };
   } catch (error) {
@@ -547,87 +820,51 @@ export const asignarPrivilegiosUsuarioService = async (
   }
 };
 
-export const actualizarDescripcionUsuarioService = async (
-  uid: string,
-  nuevaDescripcion: string,
-) => {
-  try {
-    const snapshot = await db.collection("users").where("uid", "==", uid).get();
-    if (snapshot.empty) {
-      throw new Error(`No se encontró ningún usuario con el uid: ${uid}`);
-    }
-    const fechaActualizacion = new Date().toISOString();
-
-    const promesas = snapshot.docs.map((doc) => {
-      return doc.ref.update({
-        descripcion: nuevaDescripcion,
-        fechaActualizacion: fechaActualizacion,
-      });
-    });
-
-    await Promise.all(promesas);
-
-    console.log(
-      `Descripción actualizada exitosamente a "${nuevaDescripcion}" para el campo UID: ${uid}`,
-    );
-
-    return {
-      uid: uid,
-      descripcion: nuevaDescripcion,
-      fechaActualizacion: fechaActualizacion,
-    };
-  } catch (error) {
-    console.error("Error en actualizarDescripcionUsuarioService:", error);
-    throw new Error(
-      "Error al modificar la descripción del usuario en la base de datos",
-    );
-  }
-};
-
-export const guardarFcmTokenService = async (
-  uid: string,
-  fcmToken: string,
-) => {
+/**
+ * Guarda el token FCM ÚNICAMENTE en `sistema.fcmToken`
+ */
+export const guardarFcmTokenService = async (uid: string, fcmToken: string) => {
   try {
     const fechaActualizacion = new Date().toISOString();
-
     const userDocRef = db.collection("users").doc(uid);
     const docSnap = await userDocRef.get();
 
-    const tokenData = {
-      fcmToken: fcmToken,
-      fcm_token: fcmToken,
-      tokenActualizadoEn: fechaActualizacion,
-      fechaActualizacion: fechaActualizacion,
+    const tokenData: Record<string, any> = {
+      "sistema.fcmToken": fcmToken,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      fcmToken: fieldValue.delete(),
+      fcm_token: fieldValue.delete(),
+      tokenActualizadoEn: fieldValue.delete(),
+      "sistema.fcm_token": fieldValue.delete(),
+      "sistema.tokenActualizadoEn": fieldValue.delete(),
     };
 
     if (docSnap.exists) {
       await userDocRef.update(tokenData);
     } else {
-      const snapshot = await db.collection("users").where("uid", "==", uid).get();
+      const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
       if (!snapshot.empty) {
-        const promesas = snapshot.docs.map((doc) =>
-          doc.ref.update(tokenData)
-        );
-        await Promise.all(promesas);
+        await snapshot.docs[0].ref.update(tokenData);
       } else {
         await userDocRef.set({
-          uid: uid,
-          ...tokenData,
+          uid,
+          sistema: {
+            fcmToken,
+            fechaActualizacion,
+          },
         }, { merge: true });
       }
     }
 
-    console.log(`✅ Token FCM guardado en base de datos para usuario: ${uid}`);
+    console.log(`✅ Token FCM guardado únicamente en sistema.fcmToken para usuario: ${uid}`);
     return {
       uid,
       fcmToken,
-      fcm_token: fcmToken,
-      tokenActualizadoEn: fechaActualizacion,
+      fechaActualizacion,
     };
   } catch (error) {
     console.error("❌ Error en guardarFcmTokenService:", error);
-    throw new Error("Error al guardar el FCM token en la base de datos");
+    throw new Error("Error al guardar el FCM token");
   }
 };
 
@@ -643,12 +880,9 @@ export interface ParametrosMarcoUsuario {
 }
 
 /**
- * Actualiza o asigna el marco de perfil seleccionado de un usuario en Firestore:
- * Solo guarda marco_perfil_id y elimina campos fantasmas (marco_perfil y selectedFrame)
+ * Actualiza el marco de perfil únicamente en `perfil.marco_perfil_id`
  */
-export const actualizarMarcoUsuarioService = async (
-  params: ParametrosMarcoUsuario,
-) => {
+export const actualizarMarcoUsuarioService = async (params: ParametrosMarcoUsuario) => {
   try {
     const userId = params.userId || params.uid;
     if (!userId) {
@@ -656,72 +890,62 @@ export const actualizarMarcoUsuarioService = async (
     }
 
     const marcoPerfilId = params.frame?.id ?? params.marco_perfil_id ?? params.selectedFrame ?? null;
+    const finalMarcoId = marcoPerfilId ? String(marcoPerfilId) : null;
     const fechaActualizacion = new Date().toISOString();
 
     const dataToUpdate: Record<string, any> = {
-      marco_perfil_id: marcoPerfilId ? String(marcoPerfilId) : null,
+      "perfil.marco_perfil_id": finalMarcoId,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      marco_perfil_id: fieldValue.delete(),
       marco_perfil: fieldValue.delete(),
       selectedFrame: fieldValue.delete(),
-      fechaActualizacion: fechaActualizacion,
     };
 
     const userDocRef = db.collection("users").doc(userId);
     const docSnap = await userDocRef.get();
-
     let fcmToken: string | null = null;
 
     if (docSnap.exists) {
       const userData = docSnap.data();
-      fcmToken = userData?.fcm_token || userData?.fcmToken || null;
-      await userDocRef.set(dataToUpdate, { merge: true });
+      fcmToken = userData?.sistema?.fcmToken || null;
+      await userDocRef.update(dataToUpdate);
     } else {
-      const snapshot = await db.collection("users").where("uid", "==", userId).get();
+      const snapshot = await db.collection("users").where("uid", "==", userId).limit(1).get();
       if (!snapshot.empty) {
         const userData = snapshot.docs[0].data();
-        fcmToken = userData?.fcm_token || userData?.fcmToken || null;
-        const promesas = snapshot.docs.map((doc: any) =>
-          doc.ref.set(dataToUpdate, { merge: true })
-        );
-        await Promise.all(promesas);
+        fcmToken = userData?.sistema?.fcmToken || null;
+        await snapshot.docs[0].ref.update(dataToUpdate);
       } else {
         await userDocRef.set({
           uid: userId,
-          ...dataToUpdate,
+          perfil: { marco_perfil_id: finalMarcoId },
+          sistema: { fechaActualizacion },
         }, { merge: true });
       }
     }
 
-    console.log(`✅ Marco de perfil actualizado para usuario: ${userId}`, {
-      marco_perfil_id: dataToUpdate.marco_perfil_id,
-      fechaActualizacion,
-    });
+    console.log(`✅ Marco actualizado en perfil.marco_perfil_id para usuario: ${userId} -> ${finalMarcoId}`);
 
-    // Notificar en segundo plano al dispositivo mediante FCM data-only
     if (fcmToken) {
-      enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
-        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar marco:", pushErr);
+      enviarPushActualizarPerfil(fcmToken).catch((err) => {
+        console.error("⚠️ [FCM] Error push marco:", err);
       });
     }
 
     return {
       userId,
       uid: userId,
-      marco_perfil_id: dataToUpdate.marco_perfil_id,
+      marco_perfil_id: finalMarcoId,
       fechaActualizacion,
     };
   } catch (error) {
     console.error("❌ Error en actualizarMarcoUsuarioService:", error);
-    throw new Error(
-      error instanceof Error ? error.message : "Error al actualizar el marco del perfil",
-    );
+    throw error;
   }
 };
 
 /**
- * Actualiza o incrementa el campo 'dia_racha' en el documento del usuario
- * @param uid - ID del usuario
- * @param diaRacha - Número de días de racha (opcional si se incrementa)
- * @param incrementar - Si es true, suma +1 a la racha actual
+ * Actualiza el día de racha únicamente en `actividadDiaria.dia_racha`
  */
 export const actualizarDiaRachaUsuarioService = async (
   uid: string,
@@ -750,35 +974,28 @@ export const actualizarDiaRachaUsuarioService = async (
     }
 
     if (!docRef) {
-      throw new Error(`No se encontró usuario con el UID: ${uid}`);
+      throw new Error(`No se encontró usuario con UID: ${uid}`);
     }
 
+    const rachaActual = Number(userData?.actividadDiaria?.dia_racha ?? userData?.dia_racha ?? 0);
     let nuevoDiaRacha: number;
 
     if (diaRacha !== undefined && !isNaN(Number(diaRacha)) && !incrementar) {
       nuevoDiaRacha = Math.max(0, Number(diaRacha));
     } else {
-      const rachaActual = Number(userData?.dia_racha ?? 0);
       nuevoDiaRacha = rachaActual + 1;
     }
 
-    const dataToUpdate: Record<string, any> = {
-      dia_racha: nuevoDiaRacha,
-      fechaActualizacion,
-      fechaUltimaRacha: fechaActualizacion,
+    const dataToUpdate = {
+      "actividadDiaria.dia_racha": nuevoDiaRacha,
+      "actividadDiaria.fechaUltimaRacha": fechaActualizacion,
+      "sistema.fechaActualizacion": fechaActualizacion,
+      dia_racha: fieldValue.delete(),
+      fechaUltimaRacha: fieldValue.delete(),
     };
 
     await docRef.update(dataToUpdate);
-
-    console.log(`🔥 Racha actualizada para usuario ${uid}: ${nuevoDiaRacha} días`);
-
-    // Notificar en segundo plano mediante FCM data-only
-    const fcmToken = userData?.fcm_token || userData?.fcmToken;
-    if (fcmToken) {
-      enviarPushActualizarPerfil(fcmToken).catch((pushErr) => {
-        console.error("⚠️ [FCM] Error al enviar ACTUALIZAR_PERFIL tras actualizar racha:", pushErr);
-      });
-    }
+    console.log(`🔥 Racha guardada en actividadDiaria para usuario ${uid}: ${nuevoDiaRacha} días`);
 
     return {
       uid,
@@ -788,15 +1005,12 @@ export const actualizarDiaRachaUsuarioService = async (
     };
   } catch (error) {
     console.error("❌ Error en actualizarDiaRachaUsuarioService:", error);
-    throw new Error(
-      error instanceof Error ? error.message : "Error al actualizar la racha del usuario",
-    );
+    throw error;
   }
 };
 
 /**
- * Obtiene el 'dia_racha' de un usuario
- * @param uid - ID del usuario
+ * Obtiene el día de racha de un usuario
  */
 export const obtenerDiaRachaUsuarioService = async (uid: string) => {
   try {
@@ -816,11 +1030,11 @@ export const obtenerDiaRachaUsuarioService = async (uid: string) => {
     }
 
     if (!userData) {
-      throw new Error(`No se encontró usuario con el UID: ${uid}`);
+      throw new Error(`No se encontró usuario con UID: ${uid}`);
     }
 
-    const diaRacha = Number(userData?.dia_racha ?? 0);
-    const fechaUltimaRacha = userData?.fechaUltimaRacha || null;
+    const diaRacha = Number(userData?.actividadDiaria?.dia_racha ?? userData?.dia_racha ?? 0);
+    const fechaUltimaRacha = userData?.actividadDiaria?.fechaUltimaRacha || userData?.fechaUltimaRacha || null;
 
     return {
       uid,
@@ -829,15 +1043,12 @@ export const obtenerDiaRachaUsuarioService = async (uid: string) => {
     };
   } catch (error) {
     console.error("❌ Error en obtenerDiaRachaUsuarioService:", error);
-    throw new Error(
-      error instanceof Error ? error.message : "Error al obtener la racha del usuario",
-    );
+    throw error;
   }
 };
 
 /**
- * Descuenta 1 crédito del saldo de ElevensLab del usuario si tiene disponibilidad
- * @param uid - ID del usuario
+ * Descuenta 1 crédito de ElevenLabs únicamente en `billetera.elevensLab`
  */
 export const descontarUsoElevenLabsService = async (uid: string) => {
   try {
@@ -846,27 +1057,27 @@ export const descontarUsoElevenLabsService = async (uid: string) => {
     }
 
     let docRef: any = null;
-    let userData: any = null;
+    let rawUserData: any = null;
 
     const userDocDirect = await db.collection("users").doc(uid).get();
     if (userDocDirect.exists) {
       docRef = userDocDirect.ref;
-      userData = userDocDirect.data();
+      rawUserData = userDocDirect.data();
     } else {
       const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
       if (!snapshot.empty) {
         docRef = snapshot.docs[0].ref;
-        userData = snapshot.docs[0].data();
+        rawUserData = snapshot.docs[0].data();
       }
     }
 
-    if (!docRef || !userData) {
+    if (!docRef || !rawUserData) {
       throw new Error(`Usuario no encontrado con UID: ${uid}`);
     }
 
-    userData = await verificarExpiracionSuscripcion(docRef, userData);
+    const userNormalized = await verificarExpiracionSuscripcion(docRef, rawUserData);
+    const saldoActual = Number(userNormalized.billetera?.elevensLab ?? 0);
 
-    const saldoActual = Number(userData.ElevensLab ?? 0);
     if (saldoActual <= 0) {
       return {
         success: false,
@@ -877,12 +1088,15 @@ export const descontarUsoElevenLabsService = async (uid: string) => {
     }
 
     const nuevoSaldo = Math.max(0, saldoActual - 1);
+    const ahoraIso = new Date().toISOString();
+
     await docRef.update({
-      ElevensLab: nuevoSaldo,
-      fechaActualizacion: new Date().toISOString(),
+      "billetera.elevensLab": nuevoSaldo,
+      "sistema.fechaActualizacion": ahoraIso,
+      ElevensLab: fieldValue.delete(),
     });
 
-    console.log(`🎙️ Uso de ElevenLabs descontado para usuario ${uid}. Saldo restante: ${nuevoSaldo}`);
+    console.log(`🎙️ Saldo ElevenLabs actualizado en billetera para usuario ${uid}. Saldo restante: ${nuevoSaldo}`);
 
     return {
       success: true,
@@ -892,13 +1106,503 @@ export const descontarUsoElevenLabsService = async (uid: string) => {
     };
   } catch (error) {
     console.error("❌ Error en descontarUsoElevenLabsService:", error);
-    throw new Error(
-      error instanceof Error ? error.message : "Error al descontar uso de ElevenLabs",
-    );
+    throw error;
   }
 };
 
+/**
+ * Migra y limpia TODOS los usuarios en la colección "users" de Firestore
+ * Eliminando absolutamente todos los campos raíz y dejando la estructura modular limpia.
+ */
+export const migrarTodosLosUsuariosService = async () => {
+  try {
+    const snapshot = await db.collection("users").get();
+    console.log(`🔄 Iniciando limpieza y migración total de ${snapshot.size} usuarios al formato modular limpio...`);
 
+    let migrados = 0;
+    for (const doc of snapshot.docs) {
+      const rawData = doc.data();
+      const normalizado = normalizarUsuarioDoc(rawData, doc.id);
 
+      // set con merge: false sobreescribe el documento entero sin dejar campos fantasma en la raíz
+      await doc.ref.set(normalizado);
+      migrados++;
+    }
 
+    console.log(`✅ Migración completada exitosamente. ${migrados} usuarios limpiados.`);
+    return {
+      success: true,
+      totalMigrados: migrados,
+      mensaje: `${migrados} usuarios migrados y limpiados exitosamente a la estructura modular`,
+    };
+  } catch (error) {
+    console.error("❌ Error en migrarTodosLosUsuariosService:", error);
+    throw new Error("Error durante la migración de usuarios");
+  }
+};
 
+// ============================================================================
+// CRUD DE SUSCRIPCIONES (EXCLUSIVAMENTE EN EL ARRAY `suscripciones`)
+// ============================================================================
+
+export interface ParametrosCrearSuscripcion {
+  uid: string;
+  entitlementId: string;
+  productId?: string;
+  diasDuracion?: number;
+  fechaSuscripcion?: string | null;
+  fechaVencimiento?: string | null;
+  autoRenovacion?: boolean;
+  verificado?: boolean;
+  elevensLab?: number;
+}
+
+export interface ParametrosEditarSuscripcion {
+  uid: string;
+  entitlementId: string;
+  activo?: boolean;
+  productId?: string;
+  diasDuracion?: number;
+  fechaSuscripcion?: string | null;
+  fechaVencimiento?: string | null;
+  autoRenovacion?: boolean;
+  verificado?: boolean;
+  elevensLab?: number;
+}
+
+/**
+ * Obtiene las suscripciones del usuario consultando el array `suscripciones`
+ */
+export const obtenerSuscripcionesUsuarioService = async (uid: string) => {
+  try {
+    if (!uid) {
+      throw new Error("El UID del usuario es requerido");
+    }
+
+    const usuario = await getUsuarioByUidService(uid);
+    if (!usuario) {
+      throw new Error(`No se encontró ningún usuario con UID: ${uid}`);
+    }
+
+    const suscripciones: SuscripcionItem[] = usuario.suscripciones || [];
+    const lectorSub = suscripciones.find((s) => s.entitlementId.toLowerCase().includes("lector"));
+    const escritorSub = suscripciones.find((s) =>
+      s.entitlementId.toLowerCase().includes("creador") ||
+      s.entitlementId.toLowerCase().includes("escritor") ||
+      s.entitlementId.toLowerCase().includes("estelar")
+    );
+
+    const activas = suscripciones.filter((s) => s.activo === true);
+    const tieneLector = Boolean(lectorSub?.activo);
+    const tieneEscritor = Boolean(escritorSub?.activo);
+    const activoGlobal = activas.length > 0;
+
+    const tipo = (tieneLector && tieneEscritor)
+      ? "ambos"
+      : tieneLector
+      ? "lector"
+      : tieneEscritor
+      ? "escritor"
+      : (activoGlobal ? "general" : "ninguno");
+
+    return {
+      uid: usuario.uid,
+      suscripciones,
+      resumen: {
+        activoGlobal,
+        tipo,
+        tieneLector,
+        tieneEscritor,
+        totalSuscripciones: suscripciones.length,
+        totalActivas: activas.length,
+        suscripcionesActivas: activas,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en obtenerSuscripcionesUsuarioService:", error);
+    throw error;
+  }
+};
+
+/**
+ * Agrega o activa una suscripción en el array `suscripciones`
+ */
+export const agregarSuscripcionUsuarioService = async (params: ParametrosCrearSuscripcion) => {
+  try {
+    const { uid, entitlementId } = params;
+    if (!uid || !entitlementId) {
+      throw new Error("Se requieren los campos 'uid' y 'entitlementId'");
+    }
+
+    const docDirect = await db.collection("users").doc(uid).get();
+    let docRef: any = null;
+    let rawUserData: any = null;
+
+    if (docDirect.exists) {
+      docRef = docDirect.ref;
+      rawUserData = docDirect.data();
+    } else {
+      const snap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (snap.empty) {
+        throw new Error(`No se encontró usuario con UID: ${uid}`);
+      }
+      docRef = snap.docs[0].ref;
+      rawUserData = snap.docs[0].data();
+    }
+
+    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const ahora = new Date();
+    const ahoraIso = ahora.toISOString();
+    const mesActual = ahoraIso.slice(0, 7);
+
+    const dias = params.diasDuracion !== undefined ? Number(params.diasDuracion) : 30;
+    const fechaInicio = params.fechaSuscripcion || ahoraIso;
+
+    let fechaVenc = params.fechaVencimiento;
+    if (!fechaVenc && dias > 0) {
+      const vencDate = new Date(ahora.getTime() + dias * 24 * 60 * 60 * 1000);
+      fechaVenc = vencDate.toISOString();
+    }
+
+    const defaultProductId = entitlementId.toLowerCase().includes("lector")
+      ? "homero_lector_vip:lector-vip-mensual"
+      : entitlementId.toLowerCase().includes("creador") || entitlementId.toLowerCase().includes("estelar")
+      ? "homero_creador_estelar:creador-estelar-mensual"
+      : `homero_${entitlementId}:mensual`;
+
+    const productId = params.productId || defaultProductId;
+    const currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
+
+    const idx = currentSubs.findIndex(
+      (s) => s.entitlementId.toLowerCase() === entitlementId.toLowerCase() || (productId && s.productId === productId)
+    );
+
+    const nuevaSubItem: SuscripcionItem = {
+      entitlementId,
+      productId,
+      activo: true,
+      fechaSuscripcion: fechaInicio,
+      fechaVencimiento: fechaVenc || null,
+      diasDuracion: dias,
+      autoRenovacion: Boolean(params.autoRenovacion ?? false),
+    };
+
+    if (idx >= 0) {
+      currentSubs[idx] = nuevaSubItem;
+    } else {
+      currentSubs.push(nuevaSubItem);
+    }
+
+    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
+    const escritorSub = currentSubs.find((s) =>
+      s.entitlementId.toLowerCase().includes("creador") ||
+      s.entitlementId.toLowerCase().includes("escritor") ||
+      s.entitlementId.toLowerCase().includes("estelar")
+    );
+
+    const lectorActivo = Boolean(lectorSub?.activo);
+    const escritorActivo = Boolean(escritorSub?.activo);
+    const globalActivo = currentSubs.some((s) => s.activo === true);
+
+    const tipoFinal = (lectorActivo && escritorActivo)
+      ? "ambos"
+      : lectorActivo
+      ? "lector"
+      : escritorActivo
+      ? "escritor"
+      : (globalActivo ? "general" : "ninguno");
+
+    const saldoElevensLab = params.elevensLab !== undefined
+      ? Number(params.elevensLab)
+      : (escritorActivo ? Math.max(15, Number(usuario.billetera.elevensLab || 0)) : (usuario.billetera.elevensLab || 2));
+
+    const verificado = params.verificado !== undefined ? Boolean(params.verificado) : true;
+
+    const updateData: Record<string, any> = {
+      ...obtenerEliminacionesObsoletas(rawUserData),
+      suscripciones: currentSubs,
+      "perfil.verificado": verificado,
+      "billetera.elevensLab": saldoElevensLab,
+      "billetera.mesRecargaFreeElevenLabs": mesActual,
+      "sistema.fechaActualizacion": ahoraIso,
+    };
+
+    await docRef.update(updateData);
+    console.log(`✅ Suscripción '${entitlementId}' agregada al array modular para usuario ${uid}`);
+
+    const token = usuario.sistema.fcmToken;
+    if (token) {
+      enviarPushActualizarPerfil(token).catch((err) =>
+        console.error("⚠️ [FCM] Error push suscripción:", err)
+      );
+    }
+
+    return {
+      uid,
+      suscripcionAgregada: nuevaSubItem,
+      suscripciones: currentSubs,
+      resumen: {
+        activoGlobal: globalActivo,
+        tipo: tipoFinal,
+        tieneLector: lectorActivo,
+        tieneEscritor: escritorActivo,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en agregarSuscripcionUsuarioService:", error);
+    throw error;
+  }
+};
+
+/**
+ * Edita una suscripción específica dentro del array `suscripciones`
+ */
+export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSuscripcion) => {
+  try {
+    const { uid, entitlementId } = params;
+    if (!uid || !entitlementId) {
+      throw new Error("Se requieren los campos 'uid' y 'entitlementId'");
+    }
+
+    const docDirect = await db.collection("users").doc(uid).get();
+    let docRef: any = null;
+    let rawUserData: any = null;
+
+    if (docDirect.exists) {
+      docRef = docDirect.ref;
+      rawUserData = docDirect.data();
+    } else {
+      const snap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (snap.empty) {
+        throw new Error(`No se encontró usuario con UID: ${uid}`);
+      }
+      docRef = snap.docs[0].ref;
+      rawUserData = snap.docs[0].data();
+    }
+
+    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const ahora = new Date();
+    const ahoraIso = ahora.toISOString();
+    const mesActual = ahoraIso.slice(0, 7);
+
+    const currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
+    const idx = currentSubs.findIndex(
+      (s) => s.entitlementId.toLowerCase() === entitlementId.toLowerCase() || (params.productId && s.productId === params.productId)
+    );
+
+    if (idx === -1) {
+      throw new Error(`No se encontró la suscripción '${entitlementId}' para el usuario ${uid}`);
+    }
+
+    const existing = currentSubs[idx];
+    const nuevoActivo = params.activo !== undefined ? Boolean(params.activo) : existing.activo;
+    const nuevoProductId = params.productId || existing.productId;
+    const nuevoDias = params.diasDuracion !== undefined ? Number(params.diasDuracion) : existing.diasDuracion;
+    const nuevaFechaSuscripcion = params.fechaSuscripcion !== undefined ? params.fechaSuscripcion : existing.fechaSuscripcion;
+
+    let nuevaFechaVencimiento = params.fechaVencimiento !== undefined ? params.fechaVencimiento : existing.fechaVencimiento;
+    if (params.diasDuracion !== undefined && params.diasDuracion > 0 && params.fechaVencimiento === undefined) {
+      const vencDate = new Date(ahora.getTime() + params.diasDuracion * 24 * 60 * 60 * 1000);
+      nuevaFechaVencimiento = vencDate.toISOString();
+    }
+
+    const subEditada: SuscripcionItem = {
+      ...existing,
+      activo: nuevoActivo,
+      productId: nuevoProductId,
+      diasDuracion: nuevoDias,
+      fechaSuscripcion: nuevaFechaSuscripcion,
+      fechaVencimiento: nuevoActivo ? nuevaFechaVencimiento : (params.fechaVencimiento ?? null),
+      autoRenovacion: params.autoRenovacion !== undefined ? Boolean(params.autoRenovacion) : existing.autoRenovacion,
+    };
+
+    currentSubs[idx] = subEditada;
+
+    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
+    const escritorSub = currentSubs.find((s) =>
+      s.entitlementId.toLowerCase().includes("creador") ||
+      s.entitlementId.toLowerCase().includes("escritor") ||
+      s.entitlementId.toLowerCase().includes("estelar")
+    );
+
+    const lectorActivo = Boolean(lectorSub?.activo);
+    const escritorActivo = Boolean(escritorSub?.activo);
+    const globalActivo = currentSubs.some((s) => s.activo === true);
+
+    const tipoFinal = (lectorActivo && escritorActivo)
+      ? "ambos"
+      : lectorActivo
+      ? "lector"
+      : escritorActivo
+      ? "escritor"
+      : (globalActivo ? "general" : "ninguno");
+
+    const saldoElevensLab = params.elevensLab !== undefined
+      ? Number(params.elevensLab)
+      : (escritorActivo ? Math.max(15, Number(usuario.billetera.elevensLab || 0)) : (usuario.billetera.elevensLab || 2));
+
+    const verificado = params.verificado !== undefined
+      ? Boolean(params.verificado)
+      : (globalActivo ? usuario.perfil.verificado : false);
+
+    const updateData: Record<string, any> = {
+      ...obtenerEliminacionesObsoletas(rawUserData),
+      suscripciones: currentSubs,
+      "perfil.verificado": verificado,
+      "billetera.elevensLab": saldoElevensLab,
+      "billetera.mesRecargaFreeElevenLabs": mesActual,
+      "sistema.fechaActualizacion": ahoraIso,
+    };
+
+    if (!globalActivo) {
+      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
+      if (marcoId.toLowerCase() === "pro_gold") {
+        updateData["perfil.marco_perfil_id"] = null;
+      }
+    }
+
+    await docRef.update(updateData);
+    console.log(`✅ Suscripción '${entitlementId}' editada en array modular para usuario ${uid}`);
+
+    const token = usuario.sistema.fcmToken;
+    if (token) {
+      enviarPushActualizarPerfil(token).catch((err: any) =>
+        console.error("⚠️ [FCM] Error push edición suscripción:", err)
+      );
+    }
+
+    return {
+      uid,
+      suscripcionEditada: subEditada,
+      suscripciones: currentSubs,
+      resumen: {
+        activoGlobal: globalActivo,
+        tipo: tipoFinal,
+        tieneLector: lectorActivo,
+        tieneEscritor: escritorActivo,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en editarSuscripcionUsuarioService:", error);
+    throw error;
+  }
+};
+
+/**
+ * Elimina una suscripción del array `suscripciones`
+ */
+export const eliminarSuscripcionUsuarioService = async (
+  uid: string,
+  entitlementId: string,
+  eliminarCompletamente: boolean = true,
+) => {
+  try {
+    if (!uid || !entitlementId) {
+      throw new Error("Se requieren los campos 'uid' y 'entitlementId'");
+    }
+
+    const docDirect = await db.collection("users").doc(uid).get();
+    let docRef: any = null;
+    let rawUserData: any = null;
+
+    if (docDirect.exists) {
+      docRef = docDirect.ref;
+      rawUserData = docDirect.data();
+    } else {
+      const snap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (snap.empty) {
+        throw new Error(`No se encontró usuario con UID: ${uid}`);
+      }
+      docRef = snap.docs[0].ref;
+      rawUserData = snap.docs[0].data();
+    }
+
+    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const ahora = new Date();
+    const ahoraIso = ahora.toISOString();
+    const mesActual = ahoraIso.slice(0, 7);
+
+    let currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
+    const index = currentSubs.findIndex(
+      (s) => s.entitlementId.toLowerCase() === entitlementId.toLowerCase()
+    );
+
+    if (index === -1) {
+      throw new Error(`No se encontró la suscripción '${entitlementId}' para el usuario ${uid}`);
+    }
+
+    if (eliminarCompletamente) {
+      currentSubs = currentSubs.filter(
+        (s) => s.entitlementId.toLowerCase() !== entitlementId.toLowerCase()
+      );
+    } else {
+      currentSubs[index].activo = false;
+      currentSubs[index].fechaVencimiento = ahoraIso;
+    }
+
+    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
+    const escritorSub = currentSubs.find((s) =>
+      s.entitlementId.toLowerCase().includes("creador") ||
+      s.entitlementId.toLowerCase().includes("escritor") ||
+      s.entitlementId.toLowerCase().includes("estelar")
+    );
+
+    const lectorActivo = Boolean(lectorSub?.activo);
+    const escritorActivo = Boolean(escritorSub?.activo);
+    const globalActivo = currentSubs.some((s) => s.activo === true);
+
+    const tipoFinal = (lectorActivo && escritorActivo)
+      ? "ambos"
+      : lectorActivo
+      ? "lector"
+      : escritorActivo
+      ? "escritor"
+      : (globalActivo ? "general" : "ninguno");
+
+    const updateData: Record<string, any> = {
+      ...obtenerEliminacionesObsoletas(rawUserData),
+      suscripciones: currentSubs,
+      "sistema.fechaActualizacion": ahoraIso,
+    };
+
+    if (!globalActivo) {
+      updateData["perfil.verificado"] = false;
+      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
+      if (marcoId.toLowerCase() === "pro_gold") {
+        updateData["perfil.marco_perfil_id"] = null;
+      }
+    }
+
+    if (!escritorActivo) {
+      updateData["billetera.elevensLab"] = 2;
+      updateData["billetera.mesRecargaFreeElevenLabs"] = mesActual;
+    }
+
+    await docRef.update(updateData);
+    console.log(`🗑️ Suscripción '${entitlementId}' eliminada del array modular para usuario ${uid}`);
+
+    const token = usuario.sistema.fcmToken;
+    if (token) {
+      enviarPushActualizarPerfil(token).catch((err) =>
+        console.error("⚠️ [FCM] Error push eliminación suscripción:", err)
+      );
+    }
+
+    return {
+      success: true,
+      mensaje: `Suscripción '${entitlementId}' eliminada correctamente`,
+      uid,
+      entitlementId,
+      suscripcionesRestantes: currentSubs,
+      resumen: {
+        activoGlobal: globalActivo,
+        tipo: tipoFinal,
+        tieneLector: lectorActivo,
+        tieneEscritor: escritorActivo,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error en eliminarSuscripcionUsuarioService:", error);
+    throw error;
+  }
+};

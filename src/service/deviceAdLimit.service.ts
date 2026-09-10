@@ -145,7 +145,7 @@ export const validarYProcesarRecompensaDispositivoService = async (
     }
 
     const userData = userDocSnap.data() || {};
-    const saldoActual = Number(userData.walletBalance ?? 0);
+    const saldoActual = Number(userData.billetera?.walletBalance ?? userData.walletBalance ?? 0);
     const nuevoSaldo = (isNaN(saldoActual) ? 0 : saldoActual) + monedasOtorgadas;
 
     // -----------------------------------------------------------------
@@ -209,6 +209,11 @@ export const validarYProcesarRecompensaDispositivoService = async (
 
     // 2. Sumar monedas y actualizar datos en la colección "users/{uid}"
     transaction.update(userRef, {
+      "billetera.walletBalance": nuevoSaldo,
+      "actividadDiaria.fechaUltimoAnuncio": hoyStr,
+      "actividadDiaria.anunciosVistosHoy": nuevoConteoHoy,
+      "sistema.ultimoDeviceId": cleanDeviceId,
+      "sistema.fechaActualizacion": ahoraIso,
       walletBalance: nuevoSaldo,
       fechaUltimoAnuncio: hoyStr,
       anunciosVistosHoy: nuevoConteoHoy,

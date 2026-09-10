@@ -18,16 +18,18 @@ export const obtenerPinBovedaFirebase = async (uid: string): Promise<string | nu
     const snap = await userRef.get();
     if (snap.exists) {
       const data = snap.data();
-      if (data?.bovedaPin !== undefined && data?.bovedaPin !== null && data?.bovedaPin !== "") {
-        return String(data.bovedaPin);
+      const pinVal = data?.sistema?.bovedaPin ?? data?.bovedaPin;
+      if (pinVal !== undefined && pinVal !== null && pinVal !== "") {
+        return String(pinVal);
       }
     } else {
       // Búsqueda por campo "uid" en caso de que el ID del documento sea autogenerado
       const userQuery = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
       if (!userQuery.empty) {
         const data = userQuery.docs[0].data();
-        if (data?.bovedaPin !== undefined && data?.bovedaPin !== null && data?.bovedaPin !== "") {
-          return String(data.bovedaPin);
+        const pinVal = data?.sistema?.bovedaPin ?? data?.bovedaPin;
+        if (pinVal !== undefined && pinVal !== null && pinVal !== "") {
+          return String(pinVal);
         }
       }
     }
@@ -95,20 +97,21 @@ export const guardarPinBovedaService = async (
   );
 
   // 2. Actualizar también en colección users si existe
+  const updateData = {
+    "sistema.bovedaPin": cleanPin,
+    "sistema.fechaActualizacion": fechaActualizacion,
+    bovedaPin: cleanPin,
+    fechaActualizacion,
+  };
+
   const userRef = db.collection("users").doc(cleanUid);
   const userSnap = await userRef.get();
   if (userSnap.exists) {
-    await userRef.update({
-      bovedaPin: cleanPin,
-      fechaActualizacion,
-    });
+    await userRef.update(updateData);
   } else {
     const userQuery = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
     if (!userQuery.empty) {
-      await userQuery.docs[0].ref.update({
-        bovedaPin: cleanPin,
-        fechaActualizacion,
-      });
+      await userQuery.docs[0].ref.update(updateData);
     }
   }
 

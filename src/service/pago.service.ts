@@ -26,11 +26,11 @@ const obtenerInfoUsuario = async (uid: string) => {
       const d = docSnap.data() || {};
       return {
         uid,
-        nombre: d.name || d.nombre || d.displayName || "Usuario",
-        photoURL: d.photoURL || d.foto || "",
-        email: d.email || d.correo || "",
+        nombre: d.perfil?.name || d.name || d.nombre || d.displayName || "Usuario",
+        photoURL: d.perfil?.photoURL || d.photoURL || d.foto || "",
+        email: d.perfil?.email || d.email || d.correo || "",
         telefono: d.phoneNumber || d.telefono || "",
-        descripcion: d.descripcion || "",
+        descripcion: d.perfil?.descripcion || d.descripcion || "",
       };
     }
   } catch (_e) {
@@ -96,7 +96,7 @@ export const solicitarRetiroService = async (
     const homeroDoc = await transaction.get(homeroRef);
 
     const usuarioData = usuarioDoc.data() || {};
-    const rawSaldoUsuario = usuarioData.walletBalance ?? 0;
+    const rawSaldoUsuario = usuarioData.billetera?.walletBalance ?? usuarioData.walletBalance ?? 0;
     const saldoActualUsuario = Number(rawSaldoUsuario);
 
     // Validación de fondos suficientes
@@ -107,7 +107,7 @@ export const solicitarRetiroService = async (
     const nuevoSaldoUsuario = saldoActualUsuario - cantidadMonedas;
 
     const homeroData = homeroDoc.exists ? (homeroDoc.data() || {}) : {};
-    const rawSaldoHomero = homeroData.walletBalance ?? 0;
+    const rawSaldoHomero = homeroData.billetera?.walletBalance ?? homeroData.walletBalance ?? 0;
     const saldoActualHomero = Number(rawSaldoHomero);
     const nuevoSaldoHomero = saldoActualHomero + cantidadMonedas;
 
@@ -172,6 +172,8 @@ export const solicitarRetiroService = async (
     // --- FASE DE ESCRITURA ---
     // 1. Descontar monedas al usuario solicitante
     transaction.update(usuarioRef, {
+      "billetera.walletBalance": nuevoSaldoUsuario,
+      "sistema.fechaActualizacion": fechaActual,
       walletBalance: nuevoSaldoUsuario,
       fechaActualizacion: fechaActual,
     });
@@ -179,6 +181,8 @@ export const solicitarRetiroService = async (
     // 2. Sumar monedas a la cuenta de Homero
     if (homeroDoc.exists) {
       transaction.update(homeroRef, {
+        "billetera.walletBalance": nuevoSaldoHomero,
+        "sistema.fechaActualizacion": fechaActual,
         walletBalance: nuevoSaldoHomero,
         fechaActualizacion: fechaActual,
       });
@@ -187,6 +191,7 @@ export const solicitarRetiroService = async (
         homeroRef,
         {
           uid: idDestino,
+          billetera: { walletBalance: nuevoSaldoHomero },
           walletBalance: nuevoSaldoHomero,
           fechaCreacion: fechaActual,
           fechaActualizacion: fechaActual,
@@ -369,8 +374,8 @@ export const actualizarEstadoPagoService = async (
       const uDoc = await transaction.get(usuarioRef);
       const hDoc = await transaction.get(homeroRef);
 
-      const saldoActualU = Number(uDoc.exists ? (uDoc.data()?.walletBalance ?? 0) : 0);
-      const saldoActualH = Number(hDoc.exists ? (hDoc.data()?.walletBalance ?? 0) : 0);
+      const saldoActualU = Number(uDoc.exists ? (uDoc.data()?.billetera?.walletBalance ?? uDoc.data()?.walletBalance ?? 0) : 0);
+      const saldoActualH = Number(hDoc.exists ? (hDoc.data()?.billetera?.walletBalance ?? hDoc.data()?.walletBalance ?? 0) : 0);
 
       const monedas = Number(pagoData.cantidadMonedas || 0);
       const nuevoSaldoU = saldoActualU + monedas;
@@ -380,6 +385,8 @@ export const actualizarEstadoPagoService = async (
 
       // Devolver saldo al usuario
       transaction.update(usuarioRef, {
+        "billetera.walletBalance": nuevoSaldoU,
+        "sistema.fechaActualizacion": fechaActual,
         walletBalance: nuevoSaldoU,
         fechaActualizacion: fechaActual,
       });
@@ -387,6 +394,8 @@ export const actualizarEstadoPagoService = async (
       // Descontar saldo de Homero
       if (hDoc.exists) {
         transaction.update(homeroRef, {
+          "billetera.walletBalance": nuevoSaldoH,
+          "sistema.fechaActualizacion": fechaActual,
           walletBalance: nuevoSaldoH,
           fechaActualizacion: fechaActual,
         });

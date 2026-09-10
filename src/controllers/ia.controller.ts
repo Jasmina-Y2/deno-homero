@@ -2527,8 +2527,7 @@ export const verificarEstadoAzureController = async (ctx: any) => {
   const inicio = Date.now();
   const apiKey = Deno.env.get("AZURE_SPEECH_KEY") ||
     Deno.env.get("AZURE_API_KEY");
-  const region = Deno.env.get("AZURE_SPEECH_REGION") ||
-    Deno.env.get("AZURE_REGION");
+  const region = Deno.env.get("AZURE_SPEECH_REGION");
 
   if (!apiKey) {
     ctx.response.status = 500;
@@ -2658,8 +2657,7 @@ export const generarVozAzureController = async (ctx: any) => {
 
     const apiKey = Deno.env.get("AZURE_SPEECH_KEY") ||
       Deno.env.get("AZURE_API_KEY");
-    const region = Deno.env.get("AZURE_SPEECH_REGION") ||
-      Deno.env.get("AZURE_REGION");
+    const region = Deno.env.get("AZURE_SPEECH_REGION");
 
     if (!apiKey) {
       ctx.response.status = 500;

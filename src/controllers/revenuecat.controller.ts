@@ -139,33 +139,54 @@ export const revenueCatWebhookController = async (ctx: Context) => {
           });
           console.log(`[RevenueCat Webhook] Paquete de monedas procesado para ${uid}:`, resultadoMonedas);
         } else {
-          // Activar suscripción y créditos PRO
-          await actualizarSuscripcionUsuarioService(
+          // Determinar si es suscripción de Lector o de Escritor
+          const esLector = productIdLower.includes("lector") || productIdLower.includes("reader") || (event.entitlement_id || "").toLowerCase().includes("lector");
+          const esEscritor = productIdLower.includes("escritor") || productIdLower.includes("writer") || productIdLower.includes("author") || productIdLower.includes("creador") || !esLector;
+
+          const entitlementId = event.entitlement_id || (Array.isArray(event.entitlement_ids) ? event.entitlement_ids[0] : null) || (esLector ? "lector_vip" : "creador_estelar");
+          const productId = event.product_id || (esLector ? "homero_lector_vip:lector-vip-mensual" : "homero_creador_estelar:creador-estelar-mensual");
+
+          // Activar suscripción y créditos según el plan
+          await actualizarSuscripcionUsuarioService({
             uid,
-            true,
-            true,
+            nuevaSuscripcion: true,
+            verificado: true,
+            entitlementId,
+            productId,
+            tipo: tipoSuscripcion,
             fechaSuscripcion,
             fechaVencimiento,
             diasDuracion,
-            15, // 15 audios de ElevenLabs para suscriptores PRO
-          );
-          console.log(`[RevenueCat Webhook] Suscripción activada/renovada para ${uid}`);
+            elevensLab: creditosElevenLabs,
+            planLector: esLector ? productId : undefined,
+            planEscritor: esEscritor ? productId : undefined,
+          });
+          console.log(`[RevenueCat Webhook] Suscripción (${entitlementId} | ${productId}) activada/renovada para ${uid}`);
         }
         break;
       }
 
       case "EXPIRATION": {
+        const productIdLower = (event.product_id || "").toLowerCase();
+        const esLector = productIdLower.includes("lector") || productIdLower.includes("reader");
+        const esEscritor = productIdLower.includes("escritor") || productIdLower.includes("writer");
+        const tipoSuscripcion = esLector ? "lector" : esEscritor ? "escritor" : "general";
+        const entitlementId = event.entitlement_id || (Array.isArray(event.entitlement_ids) ? event.entitlement_ids[0] : null) || (esLector ? "lector_vip" : "creador_estelar");
+
         // Desactivar suscripción
-        await actualizarSuscripcionUsuarioService(
+        await actualizarSuscripcionUsuarioService({
           uid,
-          false,
-          false,
-          null,
+          nuevaSuscripcion: false,
+          verificado: false,
+          entitlementId,
+          productId: event.product_id,
+          tipo: tipoSuscripcion,
+          fechaSuscripcion: null,
           fechaVencimiento,
-          0,
-          0,
-        );
-        console.log(`[RevenueCat Webhook] Suscripción expirada para ${uid}`);
+          diasDuracion: 0,
+          elevensLab: 2,
+        });
+        console.log(`[RevenueCat Webhook] Suscripción (${entitlementId}) expirada para ${uid}`);
         break;
       }
 
