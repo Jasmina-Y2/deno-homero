@@ -8,7 +8,13 @@ import {
   guardarFcmToken,
   obtenerDiaRachaUsuarioController,
 } from "../controllers/users.controller.ts";
-import { normalizarUsuarioDoc } from "../service/users.service.ts";
+import {
+  normalizarUsuarioDoc,
+  esMarcoPro,
+  esMarcoVip,
+  esMarcoDeSuscripcion,
+  debeRemoverMarcoPorSuscripcion,
+} from "../service/users.service.ts";
 
 function createMockContext(
   bodyData: any = {},
@@ -317,3 +323,71 @@ Deno.test("Eliminar Suscripción (DELETE): Falla si falta UID o entitlementId", 
   assertEquals(ctx2.response.body.success, false);
   assertEquals(ctx2.response.body.message, "Faltan datos requeridos: 'uid' y 'entitlementId'");
 });
+
+// ----------------------------------------------------
+// PRUEBAS DE DETECCIÓN Y RETIRO DE MARCOS EXCLUSIVOS (PRO Y VIP)
+// ----------------------------------------------------
+
+Deno.test("Marcos Suscripción: Identificación correcta de Marco PRO y Marco VIP", () => {
+  // Marco PRO
+  assertEquals(esMarcoPro("pro_gold"), true);
+  assertEquals(esMarcoPro("marco_pro"), true);
+  assertEquals(esMarcoPro("/images/badges/marco_pro.png"), true);
+  assertEquals(esMarcoPro("pro"), true);
+  assertEquals(esMarcoPro("vip_gold"), false);
+  assertEquals(esMarcoPro("racha_green"), false);
+  assertEquals(esMarcoPro("verificado_diamond"), false);
+  assertEquals(esMarcoPro(null), false);
+
+  // Marco VIP
+  assertEquals(esMarcoVip("vip_gold"), true);
+  assertEquals(esMarcoVip("marco_vip"), true);
+  assertEquals(esMarcoVip("/images/badges/marco_vip.png"), true);
+  assertEquals(esMarcoVip("vip"), true);
+  assertEquals(esMarcoVip("pro_gold"), false);
+  assertEquals(esMarcoVip("racha_red"), false);
+  assertEquals(esMarcoVip(null), false);
+
+  // Exclusivos de suscripción (PRO o VIP)
+  assertEquals(esMarcoDeSuscripcion("pro_gold"), true);
+  assertEquals(esMarcoDeSuscripcion("vip_gold"), true);
+  assertEquals(esMarcoDeSuscripcion("marco_pro"), true);
+  assertEquals(esMarcoDeSuscripcion("marco_vip"), true);
+  assertEquals(esMarcoDeSuscripcion("racha_purple"), false);
+  assertEquals(esMarcoDeSuscripcion("none"), false);
+  assertEquals(esMarcoDeSuscripcion(null), false);
+});
+
+Deno.test("Marcos Suscripción: Retiro automático cuando el usuario pierde su suscripción", () => {
+  // 1. Usuario sin ninguna suscripción activa -> DEBE retirar marcos PRO y VIP
+  assertEquals(debeRemoverMarcoPorSuscripcion("pro_gold", false, false, false), true);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_pro", false, false, false), true);
+  assertEquals(debeRemoverMarcoPorSuscripcion("vip_gold", false, false, false), true);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_vip", false, false, false), true);
+
+  // Marcos de racha o verificado NO se deben retirar por falta de suscripción
+  assertEquals(debeRemoverMarcoPorSuscripcion("racha_purple", false, false, false), false);
+  assertEquals(debeRemoverMarcoPorSuscripcion("verificado_diamond", false, false, false), false);
+  assertEquals(debeRemoverMarcoPorSuscripcion(null, false, false, false), false);
+
+  // 2. Usuario con LECTOR VIP activo solamente (sin creador/escritor)
+  // Marco VIP se mantiene
+  assertEquals(debeRemoverMarcoPorSuscripcion("vip_gold", true, false, true), false);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_vip", true, false, true), false);
+  // Marco PRO debe ser retirado (no tiene escritor activo)
+  assertEquals(debeRemoverMarcoPorSuscripcion("pro_gold", true, false, true), true);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_pro", true, false, true), true);
+
+  // 3. Usuario con ESCRITOR/CREADOR PRO activo solamente (sin lector)
+  // Marco PRO se mantiene
+  assertEquals(debeRemoverMarcoPorSuscripcion("pro_gold", true, true, false), false);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_pro", true, true, false), false);
+  // Marco VIP debe ser retirado (no tiene lector activo)
+  assertEquals(debeRemoverMarcoPorSuscripcion("vip_gold", true, true, false), true);
+  assertEquals(debeRemoverMarcoPorSuscripcion("marco_vip", true, true, false), true);
+
+  // 4. Usuario con ambas suscripciones activas -> conserva cualquiera
+  assertEquals(debeRemoverMarcoPorSuscripcion("pro_gold", true, true, true), false);
+  assertEquals(debeRemoverMarcoPorSuscripcion("vip_gold", true, true, true), false);
+});
+

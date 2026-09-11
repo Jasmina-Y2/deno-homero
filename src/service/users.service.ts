@@ -205,6 +205,124 @@ export const getUsuariosService = async () => {
 };
 
 /**
+ * Verifica si un marco de perfil corresponde a PRO / Creador / Escritor
+ */
+export const esMarcoPro = (marcoId?: string | number | null): boolean => {
+  if (!marcoId) return false;
+  const id = String(marcoId).toLowerCase().trim();
+  return (
+    id === "pro_gold" ||
+    id === "pro" ||
+    id === "marco_pro" ||
+    id.includes("marco_pro") ||
+    id.includes("pro_gold")
+  );
+};
+
+/**
+ * Verifica si un marco de perfil corresponde a VIP / Lector
+ */
+export const esMarcoVip = (marcoId?: string | number | null): boolean => {
+  if (!marcoId) return false;
+  const id = String(marcoId).toLowerCase().trim();
+  return (
+    id === "vip_gold" ||
+    id === "vip" ||
+    id === "marco_vip" ||
+    id.includes("marco_vip") ||
+    id.includes("vip_gold")
+  );
+};
+
+/**
+ * Verifica si un marco de perfil es exclusivo de suscripción (ya sea PRO o VIP)
+ */
+export const esMarcoDeSuscripcion = (marcoId?: string | number | null): boolean => {
+  return esMarcoPro(marcoId) || esMarcoVip(marcoId);
+};
+
+/**
+ * Verifica si el usuario cuenta con alguna suscripción activa de tipo Lector VIP
+ */
+export const tieneSubLectorActiva = (suscripciones: SuscripcionItem[] = []): boolean => {
+  return suscripciones.some((s) => {
+    if (!s.activo) return false;
+    const id = (s.entitlementId || "").toLowerCase();
+    const pid = (s.productId || "").toLowerCase();
+    return id.includes("lector") || id.includes("vip") || id.includes("reader") || pid.includes("lector") || pid.includes("reader");
+  });
+};
+
+/**
+ * Verifica si el usuario cuenta con alguna suscripción activa de tipo Escritor / Creador PRO
+ */
+export const tieneSubEscritorActiva = (suscripciones: SuscripcionItem[] = []): boolean => {
+  return suscripciones.some((s) => {
+    if (!s.activo) return false;
+    const id = (s.entitlementId || "").toLowerCase();
+    const pid = (s.productId || "").toLowerCase();
+    return (
+      id.includes("creador") ||
+      id.includes("escritor") ||
+      id.includes("estelar") ||
+      id.includes("writer") ||
+      id.includes("author") ||
+      id.includes("pro") ||
+      pid.includes("creador") ||
+      pid.includes("escritor") ||
+      pid.includes("estelar")
+    );
+  });
+};
+
+/**
+ * Verifica si el usuario cuenta con cualquier suscripción activa
+ */
+export const tieneSubGlobalActiva = (suscripciones: SuscripcionItem[] = []): boolean => {
+  return suscripciones.some((s) => s.activo === true);
+};
+
+/**
+ * Determina si el marco actual debe removerse debido al estado de las suscripciones.
+ * - Si no tiene ninguna suscripción activa, se remueven todos los marcos de suscripción (PRO y VIP).
+ * - Si tiene marco PRO pero no tiene suscripción de escritor/creador activa, se remueve.
+ * - Si tiene marco VIP pero no tiene suscripción de lector activa, se remueve.
+ */
+export const debeRemoverMarcoPorSuscripcion = (
+  marcoId: string | number | null | undefined,
+  tieneActivas: boolean,
+  tieneEscritorActivo: boolean,
+  tieneLectorActivo: boolean,
+): boolean => {
+  if (!marcoId) return false;
+  const marcoStr = String(marcoId).trim();
+  if (!marcoStr || marcoStr === "none" || marcoStr === "null" || marcoStr === "undefined") {
+    return false;
+  }
+
+  if (!esMarcoDeSuscripcion(marcoStr)) {
+    return false;
+  }
+
+  // Si no tiene ninguna suscripción activa, se retira de inmediato
+  if (!tieneActivas) {
+    return true;
+  }
+
+  // Si tiene marco PRO pero ya no tiene suscripción de creador/escritor activa
+  if (esMarcoPro(marcoStr) && !tieneEscritorActivo) {
+    return true;
+  }
+
+  // Si tiene marco VIP pero ya no tiene suscripción de lector activa
+  if (esMarcoVip(marcoStr) && !tieneLectorActivo) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Verifica expiración de suscripciones y limpia campos fantasmas/obsoletos del documento en Firestore
  */
 const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
@@ -233,22 +351,27 @@ const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
     }
   }
 
-  const tieneActivas = normalizado.suscripciones.some((s) => s.activo === true);
-  const tieneEscritorActivo = normalizado.suscripciones.some(
-    (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
-  );
+  const tieneActivas = tieneSubGlobalActiva(normalizado.suscripciones);
+  const tieneEscritorActivo = tieneSubEscritorActiva(normalizado.suscripciones);
+  const tieneLectorActivo = tieneSubLectorActiva(normalizado.suscripciones);
 
   if (suscripcionModificada) {
     updateData.suscripciones = normalizado.suscripciones;
     normalizado.sistema.fechaActualizacion = ahora.toISOString();
     updateData["sistema.fechaActualizacion"] = normalizado.sistema.fechaActualizacion;
+  }
 
-    // Si expiró y tenía el marco pro_gold, se retira
-    const marcoId = String(normalizado.perfil.marco_perfil_id ?? "");
-    if (!tieneActivas && marcoId.toLowerCase() === "pro_gold") {
-      normalizado.perfil.marco_perfil_id = null;
-      updateData["perfil.marco_perfil_id"] = null;
-    }
+  // Si dejó de tener suscripción o ya no tiene la suscripción requerida para su marco PRO o VIP, se le retira y se pone null
+  let marcoRemovido = false;
+  const marcoActual = normalizado.perfil.marco_perfil_id;
+  if (debeRemoverMarcoPorSuscripcion(marcoActual, tieneActivas, tieneEscritorActivo, tieneLectorActivo)) {
+    console.log(`🚫 Retirando marco de suscripción '${marcoActual}' para usuario ${normalizado.uid} (perfil.marco_perfil_id = null)`);
+    normalizado.perfil.marco_perfil_id = null;
+    updateData["perfil.marco_perfil_id"] = null;
+    normalizado.sistema.fechaActualizacion = ahora.toISOString();
+    updateData["sistema.fechaActualizacion"] = normalizado.sistema.fechaActualizacion;
+    necesitaLimpieza = true;
+    marcoRemovido = true;
   }
 
   // 2. Recarga mensual gratuita de 2 créditos de ElevenLabs si no tiene creador activo
@@ -268,11 +391,11 @@ const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
       await docRef.update(updateData);
       console.log(`🧹 Documento limpiado y normalizado para usuario ${normalizado.uid}`);
 
-      if (suscripcionModificada && !tieneActivas) {
+      if ((suscripcionModificada && !tieneActivas) || marcoRemovido) {
         const token = normalizado.sistema.fcmToken;
         if (token) {
           enviarPushActualizarPerfil(token).catch((err) =>
-            console.error("⚠️ [FCM] Error enviando push tras expiración:", err)
+            console.error("⚠️ [FCM] Error enviando push tras expiración/marco:", err)
           );
         }
       }
@@ -590,10 +713,9 @@ export const actualizarSuscripcionUsuarioService = async (
       });
     }
 
-    const tieneEscritor = currentSuscripciones.some(
-      (s) => (s.entitlementId.toLowerCase().includes("creador") || s.entitlementId.toLowerCase().includes("escritor")) && s.activo
-    );
-    const tieneActivaGlobal = currentSuscripciones.some((s) => s.activo === true);
+    const tieneEscritor = tieneSubEscritorActiva(currentSuscripciones);
+    const tieneLector = tieneSubLectorActiva(currentSuscripciones);
+    const tieneActivaGlobal = tieneSubGlobalActiva(currentSuscripciones);
 
     const saldoElevensLab = params.elevensLab !== undefined
       ? Number(params.elevensLab)
@@ -611,11 +733,10 @@ export const actualizarSuscripcionUsuarioService = async (
       updateData["perfil.verificado"] = Boolean(verificado);
     }
 
-    if (!tieneActivaGlobal) {
-      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
-      if (marcoId.toLowerCase() === "pro_gold") {
-        updateData["perfil.marco_perfil_id"] = null;
-      }
+    if (debeRemoverMarcoPorSuscripcion(usuario.perfil.marco_perfil_id, tieneActivaGlobal, tieneEscritor, tieneLector)) {
+      console.log(`🚫 Quitando marco de suscripción '${usuario.perfil.marco_perfil_id}' para usuario ${uid} (perfil.marco_perfil_id = null)`);
+      usuario.perfil.marco_perfil_id = null;
+      updateData["perfil.marco_perfil_id"] = null;
     }
 
     await docRef.update(updateData);
@@ -807,6 +928,18 @@ export const asignarPrivilegiosUsuarioService = async (params: ParametrosPrivile
       dataActualizada["billetera.walletBalance"] = nuevoSaldo;
     }
 
+    // Verificar si se debe retirar marco de perfil tras cambio de privilegios/suscripciones
+    const finalSubs = dataActualizada.suscripciones || usuario.suscripciones || [];
+    const tieneEscritorPriv = tieneSubEscritorActiva(finalSubs);
+    const tieneLectorPriv = tieneSubLectorActiva(finalSubs);
+    const tieneActivasPriv = tieneSubGlobalActiva(finalSubs);
+
+    if (debeRemoverMarcoPorSuscripcion(usuario.perfil.marco_perfil_id, tieneActivasPriv, tieneEscritorPriv, tieneLectorPriv)) {
+      console.log(`🚫 Quitando marco de suscripción '${usuario.perfil.marco_perfil_id}' para usuario ${usuario.uid} en asignarPrivilegiosUsuarioService`);
+      usuario.perfil.marco_perfil_id = null;
+      dataActualizada["perfil.marco_perfil_id"] = null;
+    }
+
     await docRef.update(dataActualizada);
     console.log(`✅ Privilegios actualizados de forma limpia para usuario ${usuario.uid}`);
 
@@ -916,14 +1049,35 @@ export const actualizarMarcoUsuarioService = async (params: ParametrosMarcoUsuar
     if (docSnap.exists) {
       const userData = docSnap.data();
       fcmToken = userData?.sistema?.fcmToken || null;
+      if (finalMarcoId && esMarcoDeSuscripcion(finalMarcoId)) {
+        const usuarioNorm = normalizarUsuarioDoc(userData, userId);
+        const tieneEscritor = tieneSubEscritorActiva(usuarioNorm.suscripciones);
+        const tieneLector = tieneSubLectorActiva(usuarioNorm.suscripciones);
+        const tieneActivas = tieneSubGlobalActiva(usuarioNorm.suscripciones);
+        if (debeRemoverMarcoPorSuscripcion(finalMarcoId, tieneActivas, tieneEscritor, tieneLector)) {
+          throw new Error("No tienes una suscripción activa correspondiente para usar este marco");
+        }
+      }
       await userDocRef.update(dataToUpdate);
     } else {
       const snapshot = await db.collection("users").where("uid", "==", userId).limit(1).get();
       if (!snapshot.empty) {
         const userData = snapshot.docs[0].data();
         fcmToken = userData?.sistema?.fcmToken || null;
+        if (finalMarcoId && esMarcoDeSuscripcion(finalMarcoId)) {
+          const usuarioNorm = normalizarUsuarioDoc(userData, userId);
+          const tieneEscritor = tieneSubEscritorActiva(usuarioNorm.suscripciones);
+          const tieneLector = tieneSubLectorActiva(usuarioNorm.suscripciones);
+          const tieneActivas = tieneSubGlobalActiva(usuarioNorm.suscripciones);
+          if (debeRemoverMarcoPorSuscripcion(finalMarcoId, tieneActivas, tieneEscritor, tieneLector)) {
+            throw new Error("No tienes una suscripción activa correspondiente para usar este marco");
+          }
+        }
         await snapshot.docs[0].ref.update(dataToUpdate);
       } else {
+        if (finalMarcoId && esMarcoDeSuscripcion(finalMarcoId)) {
+          throw new Error("No tienes una suscripción activa correspondiente para usar este marco");
+        }
         await userDocRef.set({
           uid: userId,
           perfil: { marco_perfil_id: finalMarcoId },
@@ -1301,16 +1455,9 @@ export const agregarSuscripcionUsuarioService = async (params: ParametrosCrearSu
       currentSubs.push(nuevaSubItem);
     }
 
-    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
-    const escritorSub = currentSubs.find((s) =>
-      s.entitlementId.toLowerCase().includes("creador") ||
-      s.entitlementId.toLowerCase().includes("escritor") ||
-      s.entitlementId.toLowerCase().includes("estelar")
-    );
-
-    const lectorActivo = Boolean(lectorSub?.activo);
-    const escritorActivo = Boolean(escritorSub?.activo);
-    const globalActivo = currentSubs.some((s) => s.activo === true);
+    const lectorActivo = tieneSubLectorActiva(currentSubs);
+    const escritorActivo = tieneSubEscritorActiva(currentSubs);
+    const globalActivo = tieneSubGlobalActiva(currentSubs);
 
     const tipoFinal = (lectorActivo && escritorActivo)
       ? "ambos"
@@ -1336,6 +1483,12 @@ export const agregarSuscripcionUsuarioService = async (params: ParametrosCrearSu
 
     if (params.verificado !== undefined) {
       updateData["perfil.verificado"] = Boolean(params.verificado);
+    }
+
+    if (debeRemoverMarcoPorSuscripcion(usuario.perfil.marco_perfil_id, globalActivo, escritorActivo, lectorActivo)) {
+      console.log(`🚫 Quitando marco de suscripción '${usuario.perfil.marco_perfil_id}' para usuario ${uid} (perfil.marco_perfil_id = null)`);
+      usuario.perfil.marco_perfil_id = null;
+      updateData["perfil.marco_perfil_id"] = null;
     }
 
     await docRef.update(updateData);
@@ -1429,16 +1582,9 @@ export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSu
 
     currentSubs[idx] = subEditada;
 
-    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
-    const escritorSub = currentSubs.find((s) =>
-      s.entitlementId.toLowerCase().includes("creador") ||
-      s.entitlementId.toLowerCase().includes("escritor") ||
-      s.entitlementId.toLowerCase().includes("estelar")
-    );
-
-    const lectorActivo = Boolean(lectorSub?.activo);
-    const escritorActivo = Boolean(escritorSub?.activo);
-    const globalActivo = currentSubs.some((s) => s.activo === true);
+    const lectorActivo = tieneSubLectorActiva(currentSubs);
+    const escritorActivo = tieneSubEscritorActiva(currentSubs);
+    const globalActivo = tieneSubGlobalActiva(currentSubs);
 
     const tipoFinal = (lectorActivo && escritorActivo)
       ? "ambos"
@@ -1464,11 +1610,10 @@ export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSu
       updateData["perfil.verificado"] = Boolean(params.verificado);
     }
 
-    if (!globalActivo) {
-      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
-      if (marcoId.toLowerCase() === "pro_gold") {
-        updateData["perfil.marco_perfil_id"] = null;
-      }
+    if (debeRemoverMarcoPorSuscripcion(usuario.perfil.marco_perfil_id, globalActivo, escritorActivo, lectorActivo)) {
+      console.log(`🚫 Quitando marco de suscripción '${usuario.perfil.marco_perfil_id}' para usuario ${uid} (perfil.marco_perfil_id = null)`);
+      usuario.perfil.marco_perfil_id = null;
+      updateData["perfil.marco_perfil_id"] = null;
     }
 
     await docRef.update(updateData);
@@ -1550,16 +1695,9 @@ export const eliminarSuscripcionUsuarioService = async (
       currentSubs[index].fechaVencimiento = ahoraIso;
     }
 
-    const lectorSub = currentSubs.find((s) => s.entitlementId.toLowerCase().includes("lector"));
-    const escritorSub = currentSubs.find((s) =>
-      s.entitlementId.toLowerCase().includes("creador") ||
-      s.entitlementId.toLowerCase().includes("escritor") ||
-      s.entitlementId.toLowerCase().includes("estelar")
-    );
-
-    const lectorActivo = Boolean(lectorSub?.activo);
-    const escritorActivo = Boolean(escritorSub?.activo);
-    const globalActivo = currentSubs.some((s) => s.activo === true);
+    const lectorActivo = tieneSubLectorActiva(currentSubs);
+    const escritorActivo = tieneSubEscritorActiva(currentSubs);
+    const globalActivo = tieneSubGlobalActiva(currentSubs);
 
     const tipoFinal = (lectorActivo && escritorActivo)
       ? "ambos"
@@ -1575,11 +1713,10 @@ export const eliminarSuscripcionUsuarioService = async (
       "sistema.fechaActualizacion": ahoraIso,
     };
 
-    if (!globalActivo) {
-      const marcoId = String(usuario.perfil.marco_perfil_id ?? "");
-      if (marcoId.toLowerCase() === "pro_gold") {
-        updateData["perfil.marco_perfil_id"] = null;
-      }
+    if (debeRemoverMarcoPorSuscripcion(usuario.perfil.marco_perfil_id, globalActivo, escritorActivo, lectorActivo)) {
+      console.log(`🚫 Quitando marco de suscripción '${usuario.perfil.marco_perfil_id}' para usuario ${uid} (perfil.marco_perfil_id = null)`);
+      usuario.perfil.marco_perfil_id = null;
+      updateData["perfil.marco_perfil_id"] = null;
     }
 
     if (!escritorActivo) {

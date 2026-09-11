@@ -167,6 +167,7 @@ export const revenueCatWebhookController = async (ctx: Context) => {
         break;
       }
 
+      case "REVOCATION":
       case "EXPIRATION": {
         const productIdLower = (event.product_id || "").toLowerCase();
         const esLector = productIdLower.includes("lector") || productIdLower.includes("reader");
