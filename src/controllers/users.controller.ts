@@ -26,6 +26,9 @@ import {
 export const getUsuarios = async (ctx: Context) => {
   try {
     const data = await getUsuariosService();
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.headers.set("Pragma", "no-cache");
+    ctx.response.headers.set("Expires", "0");
     ctx.response.status = 200;
     ctx.response.body = { success: true, data };
   } catch (error: unknown) {

@@ -21,18 +21,35 @@ export const guardarComentarioService = async (
   }
 };
 
-export const obtenerComentariosService = async (publicacionId: string) => {
+export const obtenerComentariosService = async (
+  publicacionId: string,
+  limitCount = 50,
+) => {
   try {
     const snapshot = await db
       .collection("Comentarios")
       .where("publicacionId", "==", publicacionId)
       .get();
 
-    return snapshot.docs.map((doc: any) => ({
+    const items = snapshot.docs.map((doc: any) => ({
       idDoc: doc.id,
       id: doc.id,
       ...doc.data(),
     }));
+
+    // Ordenar por fecha cronológica para visualización coherente
+    items.sort((a: any, b: any) => {
+      const timeA = new Date(a.createdAt || a.fecha || 0).getTime();
+      const timeB = new Date(b.createdAt || b.fecha || 0).getTime();
+      return timeA - timeB;
+    });
+
+    // Carga pasiva de los últimos 'limitCount' comentarios
+    if (items.length > limitCount) {
+      return items.slice(items.length - limitCount);
+    }
+
+    return items;
   } catch (error) {
     console.error("❌ Error en obtenerComentariosService:", error);
     throw new Error("Error al obtener comentarios");

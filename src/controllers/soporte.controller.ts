@@ -112,6 +112,9 @@ export const obtenerReportesController = async (ctx: RouterContext<string>) => {
       limit,
     });
 
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.headers.set("Pragma", "no-cache");
+    ctx.response.headers.set("Expires", "0");
     ctx.response.status = 200;
     ctx.response.body = {
       ok: true,
@@ -149,6 +152,9 @@ export const obtenerReportesUsuarioController = async (ctx: RouterContext<string
 
     const reportes = await obtenerReportesUsuarioService(uid);
 
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.headers.set("Pragma", "no-cache");
+    ctx.response.headers.set("Expires", "0");
     ctx.response.status = 200;
     ctx.response.body = {
       ok: true,
@@ -196,6 +202,9 @@ export const obtenerReportePorIdController = async (ctx: RouterContext<string>) 
       return;
     }
 
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.headers.set("Pragma", "no-cache");
+    ctx.response.headers.set("Expires", "0");
     ctx.response.status = 200;
     ctx.response.body = {
       ok: true,
