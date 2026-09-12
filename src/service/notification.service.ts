@@ -8,8 +8,10 @@ export interface NotificationPayloadData {
   [key: string]: string | number | boolean | undefined;
 }
 
+const ICONO_APP = "https://app.homero.live/icono.jpg";
+
 /**
- * Función para enviar una notificación push a un celular usando su FCM Token puro.
+ * Función para enviar una notificación push a un celular o navegador usando su FCM Token puro.
  * @param tokenDestinatario - El FCM Token del usuario que recibe la alerta
  * @param titulo - Título de la notificación
  * @param mensaje - Cuerpo del mensaje
@@ -27,18 +29,23 @@ export const enviarPush = async (
   }
 
   // FCM data solo acepta pares clave-valor tipo string
-  const formattedData: Record<string, string> = {};
+  const formattedData: Record<string, string> = {
+    icon: ICONO_APP,
+    image: ICONO_APP,
+    avatar: ICONO_APP,
+  };
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined && value !== null) {
       formattedData[key] = String(value);
     }
   }
 
-  const payload = {
+  const payload: any = {
     token: tokenDestinatario.trim(),
     notification: {
       title: titulo,
       body: mensaje,
+      imageUrl: ICONO_APP,
     },
     data: formattedData,
     android: {
@@ -47,15 +54,33 @@ export const enviarPush = async (
         channelId: "default",
         sound: "default",
         icon: "ic_launcher",
+        imageUrl: ICONO_APP,
         color: "#FFA500",
       },
     },
     apns: {
+      fcmOptions: {
+        imageUrl: ICONO_APP,
+      },
       payload: {
         aps: {
           sound: "default",
           badge: 1,
+          mutableContent: true,
         },
+      },
+    },
+    webpush: {
+      headers: {
+        Urgency: "high",
+      },
+      notification: {
+        icon: ICONO_APP,
+        image: ICONO_APP,
+        badge: ICONO_APP,
+      },
+      fcmOptions: {
+        link: "https://app.homero.live",
       },
     },
   };
@@ -90,8 +115,13 @@ export const guardarNotificacionEnBD = async (
       uidUsuario: uidDestinatario,
       titulo,
       mensaje,
+      icono: ICONO_APP,
+      imagen: data.imagen || data.img || data.portada || ICONO_APP,
       tipo: data.tipo || "general",
-      data: { ...data },
+      data: {
+        icono: ICONO_APP,
+        ...data,
+      },
       leido: false,
       fecha,
       fechaCreacion: fecha,
