@@ -1,5 +1,5 @@
 import { db, fieldValue } from "../config/firebase.ts";
-import { enviarPushAUsuario } from "./notification.service.ts";
+import { enviarPushAUsuario, obtenerInfoUsuarioEmisor } from "./notification.service.ts";
 
 export const seguirUsuarioService = async (
   miUid: string,
@@ -22,25 +22,23 @@ export const seguirUsuarioService = async (
     if (miUid !== uidASeguir) {
       try {
         let nombre = nombreSeguidor;
-        if (!nombre) {
-          const userSnap = await db.collection("users").doc(miUid).get();
-          if (userSnap.exists) {
-            nombre = userSnap.data()?.name || "Un usuario";
-          } else {
-            const qUser = await db.collection("users").where("uid", "==", miUid).get();
-            if (!qUser.empty) {
-              nombre = qUser.docs[0].data()?.name || "Un usuario";
-            } else {
-              nombre = "Un usuario";
-            }
-          }
+        const emisorInfo = await obtenerInfoUsuarioEmisor(miUid);
+        if (!nombre || nombre === "Un usuario" || nombre === "Alguien") {
+          nombre = emisorInfo.nombre;
         }
 
         await enviarPushAUsuario(
           uidASeguir,
           "👤 ¡Nuevo Seguidor!",
           `${nombre} ha comenzado a seguirte.`,
-          { idSeguidor: miUid, tipo: "seguidor" },
+          {
+            idSeguidor: miUid,
+            idUsuario: miUid,
+            uidUsuario: miUid,
+            nombreUsuario: nombre,
+            fotoUsuario: emisorInfo.photoURL,
+            tipo: "seguidor",
+          },
         );
       } catch (pushErr) {
         console.warn("⚠️ No se pudo enviar notificación de nuevo seguidor:", pushErr);

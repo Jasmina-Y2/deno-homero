@@ -11,6 +11,62 @@ export interface NotificationPayloadData {
 const ICONO_APP = "https://app.homero.live/icono.jpg";
 
 /**
+ * Helper para obtener el nombre y foto real del usuario emisor
+ * compatible con la nueva estructura modular de 'users' (perfil.name, perfil.photoURL)
+ */
+export const obtenerInfoUsuarioEmisor = async (
+  uid: string,
+): Promise<{ nombre: string; photoURL?: string }> => {
+  if (!uid || uid.trim() === "") return { nombre: "Un usuario" };
+
+  try {
+    let uData: any = null;
+
+    // 1. Buscar por Document ID directo
+    const directDoc = await db.collection("users").doc(uid).get();
+    if (directDoc.exists) {
+      uData = directDoc.data();
+    } else {
+      // 2. Buscar por campo uid
+      const qSnap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (!qSnap.empty) {
+        uData = qSnap.docs[0].data();
+      } else {
+        // 3. Buscar por campo id
+        const qSnapId = await db.collection("users").where("id", "==", uid).limit(1).get();
+        if (!qSnapId.empty) {
+          uData = qSnapId.docs[0].data();
+        }
+      }
+    }
+
+    if (uData) {
+      const nombre =
+        uData.perfil?.name ||
+        uData.perfil?.nombre ||
+        uData.name ||
+        uData.nombre ||
+        uData.displayName ||
+        uData.username ||
+        "Un usuario";
+
+      const photoURL =
+        uData.perfil?.photoURL ||
+        uData.perfil?.foto ||
+        uData.photoURL ||
+        uData.foto ||
+        undefined;
+
+      return { nombre, photoURL };
+    }
+  } catch (err) {
+    console.warn("⚠️ Error obteniendo información del usuario emisor:", err);
+  }
+
+  return { nombre: "Un usuario" };
+};
+
+/**
  * Función para enviar una notificación push a un celular o navegador usando su FCM Token puro.
  * @param tokenDestinatario - El FCM Token del usuario que recibe la alerta
  * @param titulo - Título de la notificación
@@ -109,16 +165,69 @@ export const guardarNotificacionEnBD = async (
 
   try {
     const fecha = new Date().toISOString();
+
+    // Extraer correctamente el UID del emisor (quien realizó la acción)
+    let uidEmisor =
+      (data.idUsuario as string) ||
+      (data.uidUsuario as string) ||
+      (data.idSeguidor as string) ||
+      (data.uidSeguidor as string) ||
+      (data.idRemitente as string) ||
+      (data.idOyente as string) ||
+      (data.uidEmisor as string) ||
+      "";
+
+    let nombreEmisor =
+      (data.nombreUsuario as string) ||
+      (data.nombreSeguidor as string) ||
+      (data.nombre as string) ||
+      "";
+
+    let fotoEmisor =
+      (data.fotoUsuario as string) ||
+      (data.photoURL as string) ||
+      (data.foto as string) ||
+      (data.avatar as string) ||
+      "";
+
+    // Si tenemos un emisor pero no su nombre real o es genérico, consultarlo de la BD
+    if (uidEmisor && uidEmisor !== uidDestinatario && (!nombreEmisor || nombreEmisor === "Un usuario" || nombreEmisor === "Alguien" || !fotoEmisor)) {
+      const info = await obtenerInfoUsuarioEmisor(uidEmisor);
+      if (info.nombre && info.nombre !== "Un usuario") {
+        nombreEmisor = info.nombre;
+      }
+      if (info.photoURL && !fotoEmisor) {
+        fotoEmisor = info.photoURL;
+      }
+    }
+
+    // Corregir el cuerpo del mensaje si tenía un placeholder genérico y obtuvimos el nombre real
+    let mensajeFinal = mensaje;
+    if (nombreEmisor && nombreEmisor !== "Un usuario" && nombreEmisor !== "Alguien") {
+      mensajeFinal = mensajeFinal
+        .replace(/A (?:Un usuario|Alguien) le gustó/g, `A ${nombreEmisor} le gustó`)
+        .replace(/(?:Un usuario|Alguien) ha comenzado a seguirte/g, `${nombreEmisor} ha comenzado a seguirte`)
+        .replace(/(?:Un usuario|Un lector|Alguien) comentó:/g, `${nombreEmisor} comentó:`)
+        .replace(/¡(?:Un usuario|Alguien) te envió/g, `¡${nombreEmisor} te envió`);
+    }
+
     const docData: any = {
       uidDestinatario,
       idDestinatario: uidDestinatario,
-      uidUsuario: uidDestinatario,
+      uidUsuario: uidEmisor || "", // UID DEL EMISOR QUE REALIZÓ LA ACCIÓN (NUNCA el del destinatario)
+      idUsuario: uidEmisor || "",
+      nombreUsuario: nombreEmisor || undefined,
+      fotoUsuario: fotoEmisor || undefined,
       titulo,
-      mensaje,
+      mensaje: mensajeFinal,
       icono: ICONO_APP,
-      imagen: data.imagen || data.img || data.portada || ICONO_APP,
+      imagen: data.imagen || data.img || data.portada || fotoEmisor || ICONO_APP,
       tipo: data.tipo || "general",
       data: {
+        idUsuario: uidEmisor || "",
+        uidUsuario: uidEmisor || "",
+        nombreUsuario: nombreEmisor || "",
+        fotoUsuario: fotoEmisor || "",
         icono: ICONO_APP,
         ...data,
       },
@@ -129,7 +238,7 @@ export const guardarNotificacionEnBD = async (
     };
 
     const docRef = await db.collection("notificaciones").add(docData);
-    console.log(`📥 [Notificación DB] Guardada en 'notificaciones' para usuario: ${uidDestinatario} (ID: ${docRef.id})`);
+    console.log(`📥 [Notificación DB] Guardada en 'notificaciones' para usuario: ${uidDestinatario} de parte de: ${uidEmisor || 'sistema'} (ID: ${docRef.id})`);
     return docRef.id;
   } catch (error) {
     console.error("❌ [Notificación DB] Error guardando notificación en Firestore:", error);

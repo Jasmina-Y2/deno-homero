@@ -1,5 +1,5 @@
 import { db } from "../config/firebase.ts";
-import { enviarPushAUsuario } from "./notification.service.ts";
+import { enviarPushAUsuario, obtenerInfoUsuarioEmisor } from "./notification.service.ts";
 
 export const guardarComentarioService = async (
   publicacionId: string,
@@ -50,12 +50,24 @@ export const guardarComentarioService = async (
         comentario?.idAutor ||
         "";
 
-      const nombreComentador =
+      let nombreComentador =
         comentario?.nombre ||
         comentario?.usuario ||
         comentario?.name ||
         comentario?.autor ||
-        "Un lector";
+        "";
+
+      let fotoComentador = comentario?.photoURL || comentario?.foto || comentario?.avatar;
+
+      if (idComentador) {
+        const infoEmisor = await obtenerInfoUsuarioEmisor(idComentador);
+        if (!nombreComentador || nombreComentador === "Un lector" || nombreComentador === "Un usuario" || nombreComentador === "Alguien") {
+          nombreComentador = infoEmisor.nombre;
+        }
+        if (!fotoComentador) {
+          fotoComentador = infoEmisor.photoURL;
+        }
+      }
 
       const textoComentario =
         comentario?.texto ||
@@ -74,10 +86,13 @@ export const guardarComentarioService = async (
         await enviarPushAUsuario(
           autorUid,
           "💬 ¡Nuevo Comentario!",
-          `${nombreComentador} comentó: "${previewTexto}"`,
+          `${nombreComentador || "Un usuario"} comentó: "${previewTexto}"`,
           {
             idHistoria: publicacionId,
             idUsuario: idComentador,
+            uidUsuario: idComentador,
+            nombreUsuario: nombreComentador || "Un usuario",
+            fotoUsuario: fotoComentador,
             tipo: "comentario",
             tituloHistoria,
           },

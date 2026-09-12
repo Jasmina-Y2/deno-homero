@@ -1,6 +1,6 @@
 import { db, fieldValue } from "../config/firebase.ts";
 import { actualizarLikesHelper } from "./historiaInfo.service.ts";
-import { enviarPushAUsuario } from "./notification.service.ts";
+import { enviarPushAUsuario, obtenerInfoUsuarioEmisor } from "./notification.service.ts";
 
 export interface LikeExtraData {
   idAutorHistoria?: string;
@@ -67,13 +67,13 @@ export const toggleLikeService = async (
                     const cardSnap = await db.collection("CardHistoria").where("id", "==", idPublicacion).get();
                     if (!cardSnap.empty) {
                         const cardData = cardSnap.docs[0].data();
-                        autorUid = cardData.idAutor;
+                        autorUid = cardData.idAutor || cardData.uidAutor || cardData.autorId;
                         if (cardData.titulo) storyTitle = cardData.titulo;
                     } else {
                         const directCard = await db.collection("CardHistoria").doc(idPublicacion).get();
                         if (directCard.exists) {
                             const cardData = directCard.data();
-                            autorUid = cardData?.idAutor;
+                            autorUid = cardData?.idAutor || cardData?.uidAutor || cardData?.autorId;
                             if (cardData?.titulo) storyTitle = cardData.titulo;
                         }
                     }
@@ -81,28 +81,31 @@ export const toggleLikeService = async (
 
                 // Notificar si no es su propia historia
                 if (autorUid && autorUid !== idUsuario) {
-                    let nombreLiker = "Alguien";
-                    if (extraData?.nombreUsuario) {
-                        nombreLiker = extraData.nombreUsuario;
-                    } else if (typeof extraData?.usuarioQueDaLike === "object" && extraData.usuarioQueDaLike?.name) {
-                        nombreLiker = extraData.usuarioQueDaLike.name;
-                    } else {
-                        const userSnap = await db.collection("users").doc(idUsuario).get();
-                        if (userSnap.exists) {
-                            nombreLiker = userSnap.data()?.name || "Un usuario";
-                        } else {
-                            const qUser = await db.collection("users").where("uid", "==", idUsuario).get();
-                            if (!qUser.empty) {
-                                nombreLiker = qUser.docs[0].data()?.name || "Un usuario";
-                            }
-                        }
+                    let nombreLiker =
+                        extraData?.nombreUsuario ||
+                        (typeof extraData?.usuarioQueDaLike === "object" ? extraData.usuarioQueDaLike?.name : undefined);
+                    let fotoLiker: string | undefined = undefined;
+
+                    // Resolver datos reales del emisor
+                    const emisorInfo = await obtenerInfoUsuarioEmisor(idUsuario);
+                    if (!nombreLiker || nombreLiker === "Un usuario" || nombreLiker === "Alguien") {
+                        nombreLiker = emisorInfo.nombre;
                     }
+                    fotoLiker = emisorInfo.photoURL;
 
                     await enviarPushAUsuario(
                         autorUid,
                         "❤️ ¡Nuevo Me Gusta!",
                         `A ${nombreLiker} le gustó tu historia.`,
-                        { idHistoria: idPublicacion, tipo: "like" },
+                        {
+                            idHistoria: idPublicacion,
+                            idUsuario: idUsuario,
+                            uidUsuario: idUsuario,
+                            nombreUsuario: nombreLiker,
+                            fotoUsuario: fotoLiker,
+                            tipo: "like",
+                            tituloHistoria: storyTitle,
+                        },
                     );
                 }
             } catch (pushErr) {

@@ -6,7 +6,7 @@ import {
   ReciboTransaccion,
   RecompensaAnuncioDto,
 } from "../models/propina.model.ts";
-import { enviarPush, enviarPushAUsuario } from "./notification.service.ts";
+import { enviarPush, enviarPushAUsuario, obtenerInfoUsuarioEmisor } from "./notification.service.ts";
 
 /**
  * Obtiene la referencia directa del documento de un usuario en Firestore.
@@ -190,16 +190,8 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
 
   // 2. Enviar notificación push e in-app directa al creador
   try {
-    let nombreDonador = "Un usuario";
-    const donadorDoc = await db.collection("users").doc(idOyente).get();
-    if (donadorDoc.exists) {
-      nombreDonador = donadorDoc.data()?.name || "Un usuario";
-    } else {
-      const donadorQuery = await db.collection("users").where("uid", "==", idOyente).limit(1).get();
-      if (!donadorQuery.empty) {
-        nombreDonador = donadorQuery.docs[0].data()?.name || "Un usuario";
-      }
-    }
+    const infoOyente = await obtenerInfoUsuarioEmisor(idOyente);
+    const nombreDonador = infoOyente.nombre || "Un usuario";
 
     await enviarPushAUsuario(
       idCreador,
@@ -211,6 +203,9 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
         cantidadMonedas: String(cantidadMonedas),
         idOyente,
         idUsuario: idOyente,
+        uidUsuario: idOyente,
+        nombreUsuario: nombreDonador,
+        fotoUsuario: infoOyente.photoURL,
         idHistoria: datos.idHistoria || datos.publicacionId || "",
         transactionId: resultado.recibo.id,
       },
