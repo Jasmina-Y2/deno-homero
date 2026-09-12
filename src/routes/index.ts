@@ -24,10 +24,14 @@ import {
   getColeccionesPorId,
   getTodasLasColecciones,
   mostrarColeccionesPorAutorController,
+  calificarColeccionController,
+  obtenerCalificacionColeccionController,
+  eliminarCalificacionColeccionController,
 } from "../controllers/coleccion.controller.ts";
 import {
   agregarHistoriaAColeccionController,
   getColeccionDetalle,
+  reordenarEpisodiosColeccionController,
 } from "../controllers/Coleccionids.controller.ts";
 import { traducirTexto } from "../controllers/traductor.controller.ts";
 import { getCategoriasController } from "../controllers/categorias.controller.ts";
@@ -153,6 +157,15 @@ router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
 router.delete("/api/colecciones/eliminar/:uid", eliminarColeccionesPorUid);
 router.post("/api/coleccion-ids/crear", agregarHistoriaAColeccionController);
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);
+router.put("/api/coleccionesids/reordenar", reordenarEpisodiosColeccionController);
+router.post("/api/coleccionesids/reordenar", reordenarEpisodiosColeccionController);
+router.put("/api/coleccion-ids/reordenar", reordenarEpisodiosColeccionController);
+router.post("/api/coleccion-ids/reordenar", reordenarEpisodiosColeccionController);
+router.post("/api/colecciones/calificar", calificarColeccionController);
+router.put("/api/colecciones/calificar", calificarColeccionController);
+router.get("/api/colecciones/calificacion/:idColeccion", obtenerCalificacionColeccionController);
+router.get("/api/colecciones/calificacion/:idColeccion/:idUsuario", obtenerCalificacionColeccionController);
+router.delete("/api/colecciones/calificar", eliminarCalificacionColeccionController);
 
 // ============================================================================
 // HISTORIAS Y CARDS

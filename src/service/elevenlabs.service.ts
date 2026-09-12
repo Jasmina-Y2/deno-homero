@@ -3,6 +3,7 @@ import { config, SPANISH_VOICES } from "../config/elevenlabs.ts";
 import { PutObjectCommand } from "npm:@aws-sdk/client-s3";
 import { BUCKET_NAME, s3Client } from "../config/aws.ts";
 import { db } from "../config/firebase.ts";
+import { mergeAudioBuffersWithFFmpeg } from "../utils/audio.utils.ts";
 
 export interface DialogueSegment {
   personaje?: string;
@@ -47,7 +48,9 @@ async function fetchApiKeyFromFirestore(): Promise<string | null> {
             data?.token || data?.value || data?.api ||
             data?.ELEVENLABS_API_KEY;
           if (typeof key === "string" && key.trim().length > 0) {
-            console.log(`🔑 ElevenLabs API Key obtenida de Firestore en: ${ref.path}`);
+            console.log(
+              `🔑 ElevenLabs API Key obtenida de Firestore en: ${ref.path}`,
+            );
             return key.trim();
           }
         }
@@ -60,13 +63,18 @@ async function fetchApiKeyFromFirestore(): Promise<string | null> {
     try {
       const groupSnap = await db.collectionGroup("API").get();
       for (const doc of groupSnap.docs) {
-        if (doc.id.toLowerCase() === "api" || doc.ref.parent.parent?.id === "ELEVENS") {
+        if (
+          doc.id.toLowerCase() === "api" ||
+          doc.ref.parent.parent?.id === "ELEVENS"
+        ) {
           const data = doc.data() as Record<string, unknown>;
           const key = data?.apiKey || data?.api_key || data?.key ||
             data?.token || data?.value || data?.api ||
             data?.ELEVENLABS_API_KEY;
           if (typeof key === "string" && key.trim().length > 0) {
-            console.log(`🔑 ElevenLabs API Key obtenida de Firestore (collectionGroup): ${doc.ref.path}`);
+            console.log(
+              `🔑 ElevenLabs API Key obtenida de Firestore (collectionGroup): ${doc.ref.path}`,
+            );
             return key.trim();
           }
         }
@@ -184,7 +192,8 @@ export class ElevenLabsService {
           available: false,
           status: "unauthorized_or_error",
           httpStatus: response.status,
-          message: "No se pudo autenticar con ElevenLabs. Verifica tu API Key en Firebase.",
+          message:
+            "No se pudo autenticar con ElevenLabs. Verifica tu API Key en Firebase.",
           error: errorData,
         };
       }
@@ -207,7 +216,8 @@ export class ElevenLabsService {
             ? Number(((characterCount / characterLimit) * 100).toFixed(2))
             : 0,
         },
-        message: "ElevenLabs está disponible y conectado correctamente desde Firebase.",
+        message:
+          "ElevenLabs está disponible y conectado correctamente desde Firebase.",
       };
     } catch (error) {
       return {
@@ -243,7 +253,7 @@ export class ElevenLabsService {
     const { modelId } = config.elevenLabs;
     const voiceId = this.resolveVoiceId(voice);
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -274,15 +284,13 @@ export class ElevenLabsService {
   }
 
   /**
-   * Genera audio multivoz a partir de HISTORIA / segmentos y los une en un solo archivo MP3.
+   * Genera audio multivoz a partir de HISTORIA / segmentos y los une en un solo archivo MP3 con FFmpeg.
    */
   async generateMultiVoiceAudio(
     segments: DialogueSegment[],
   ): Promise<Uint8Array> {
     if (!segments || !Array.isArray(segments) || segments.length === 0) {
-      throw new Error(
-        "El arreglo de HISTORIA no puede estar vacío.",
-      );
+      throw new Error("El arreglo de HISTORIA no puede estar vacío.");
     }
 
     const audioParts: Uint8Array[] = [];
@@ -291,13 +299,11 @@ export class ElevenLabsService {
       const rawText = segment.texto || segment.Texto || segment.TEXTO ||
         segment.text || segment.Text;
       const text = rawText ? String(rawText).trim() : "";
-
       if (!text) continue;
 
       const rawVoice = segment.personaje || segment.Personaje ||
-        segment.PERSONAJE || segment.voice || segment.voz ||
-        segment.voiceId || segment.voice_id;
-
+        segment.PERSONAJE || segment.voice || segment.voz || segment.voiceId ||
+        segment.voice_id;
       const voice = rawVoice ? String(rawVoice).trim() : undefined;
 
       const part = await this.generateAudio(text, voice);
@@ -308,16 +314,10 @@ export class ElevenLabsService {
       throw new Error("No se pudo generar ningún fragmento de audio válido.");
     }
 
-    // Unir todos los buffers MP3 en un solo Uint8Array
-    const totalLength = audioParts.reduce((acc, part) => acc + part.length, 0);
-    const mergedAudio = new Uint8Array(totalLength);
-
-    let offset = 0;
-    for (const part of audioParts) {
-      mergedAudio.set(part, offset);
-      offset += part.length;
-    }
-
-    return mergedAudio;
+    // Unir todos los fragmentos MP3 usando FFmpeg recodificando a CBR 128k 44.1kHz
+    return await mergeAudioBuffersWithFFmpeg(audioParts, {
+      bitrate: "128k",
+      sampleRate: "44100",
+    });
   }
 }

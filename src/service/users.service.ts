@@ -1550,11 +1550,41 @@ export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSu
     const mesActual = ahoraIso.slice(0, 7);
 
     const currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
-    const idx = currentSubs.findIndex(
-      (s) => s.entitlementId.toLowerCase() === entitlementId.toLowerCase() || (params.productId && s.productId === params.productId)
+    const idLower = entitlementId.toLowerCase().trim();
+    let idx = currentSubs.findIndex(
+      (s) => s.entitlementId.toLowerCase() === idLower || (params.productId && s.productId === params.productId)
     );
 
     if (idx === -1) {
+      if (idLower.includes("creador") || idLower.includes("escritor") || idLower.includes("estelar")) {
+        idx = currentSubs.findIndex((s) => {
+          const sId = (s.entitlementId || "").toLowerCase();
+          const pId = (s.productId || "").toLowerCase();
+          return sId.includes("creador") || sId.includes("escritor") || sId.includes("estelar") || pId.includes("creador") || pId.includes("escritor");
+        });
+      } else if (idLower.includes("lector") || idLower.includes("vip") || idLower.includes("reader")) {
+        idx = currentSubs.findIndex((s) => {
+          const sId = (s.entitlementId || "").toLowerCase();
+          const pId = (s.productId || "").toLowerCase();
+          return sId.includes("lector") || sId.includes("vip") || sId.includes("reader") || pId.includes("lector") || pId.includes("reader");
+        });
+      }
+    }
+
+    if (idx === -1) {
+      if (params.activo === false) {
+        return {
+          uid,
+          suscripcionEditada: null,
+          suscripciones: currentSubs,
+          resumen: {
+            activoGlobal: tieneSubGlobalActiva(currentSubs),
+            tipo: "ninguno",
+            tieneLector: tieneSubLectorActiva(currentSubs),
+            tieneEscritor: tieneSubEscritorActiva(currentSubs),
+          },
+        };
+      }
       throw new Error(`No se encontró la suscripción '${entitlementId}' para el usuario ${uid}`);
     }
 
@@ -1678,21 +1708,39 @@ export const eliminarSuscripcionUsuarioService = async (
     const mesActual = ahoraIso.slice(0, 7);
 
     let currentSubs: SuscripcionItem[] = [...(usuario.suscripciones || [])];
-    const index = currentSubs.findIndex(
-      (s) => s.entitlementId.toLowerCase() === entitlementId.toLowerCase()
-    );
+    const idLower = entitlementId.toLowerCase().trim();
 
-    if (index === -1) {
-      throw new Error(`No se encontró la suscripción '${entitlementId}' para el usuario ${uid}`);
-    }
+    // 1. Buscar coincidencia exacta o por alias/tipo
+    const matchedIndices: number[] = [];
+    currentSubs.forEach((s, idx) => {
+      const sId = (s.entitlementId || "").toLowerCase();
+      const pId = (s.productId || "").toLowerCase();
+      if (sId === idLower || (pId && pId === idLower)) {
+        matchedIndices.push(idx);
+      } else if (
+        (idLower.includes("creador") || idLower.includes("escritor") || idLower.includes("estelar")) &&
+        (sId.includes("creador") || sId.includes("escritor") || sId.includes("estelar") || pId.includes("creador") || pId.includes("escritor"))
+      ) {
+        matchedIndices.push(idx);
+      } else if (
+        (idLower.includes("lector") || idLower.includes("vip") || idLower.includes("reader")) &&
+        (sId.includes("lector") || sId.includes("vip") || sId.includes("reader") || pId.includes("lector") || pId.includes("reader"))
+      ) {
+        matchedIndices.push(idx);
+      }
+    });
 
-    if (eliminarCompletamente) {
-      currentSubs = currentSubs.filter(
-        (s) => s.entitlementId.toLowerCase() !== entitlementId.toLowerCase()
-      );
-    } else {
-      currentSubs[index].activo = false;
-      currentSubs[index].fechaVencimiento = ahoraIso;
+    const existiaSuscripcion = matchedIndices.length > 0;
+
+    if (existiaSuscripcion) {
+      if (eliminarCompletamente) {
+        currentSubs = currentSubs.filter((_, idx) => !matchedIndices.includes(idx));
+      } else {
+        matchedIndices.forEach((idx) => {
+          currentSubs[idx].activo = false;
+          currentSubs[idx].fechaVencimiento = ahoraIso;
+        });
+      }
     }
 
     const lectorActivo = tieneSubLectorActiva(currentSubs);
@@ -1725,7 +1773,7 @@ export const eliminarSuscripcionUsuarioService = async (
     }
 
     await docRef.update(updateData);
-    console.log(`🗑️ Suscripción '${entitlementId}' eliminada del array modular para usuario ${uid}`);
+    console.log(`🗑️ Suscripción '${entitlementId}' procesada/eliminada para usuario ${uid}`);
 
     const token = usuario.sistema.fcmToken;
     if (token) {
@@ -1736,7 +1784,9 @@ export const eliminarSuscripcionUsuarioService = async (
 
     return {
       success: true,
-      mensaje: `Suscripción '${entitlementId}' eliminada correctamente`,
+      mensaje: existiaSuscripcion
+        ? `Suscripción '${entitlementId}' eliminada correctamente`
+        : `El usuario ya no poseía la suscripción '${entitlementId}' activa`,
       uid,
       entitlementId,
       suscripcionesRestantes: currentSubs,

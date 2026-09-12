@@ -2,6 +2,7 @@ import { Context, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { BUCKET_NAME, pollyClient, s3Client } from "../config/aws.ts";
 import { SynthesizeSpeechCommand, VoiceId } from "npm:@aws-sdk/client-polly";
 import { uploadToS3 } from "../controllers/aws.controller.ts";
+import { mergeAudioBuffersWithFFmpeg } from "../utils/audio.utils.ts";
 
 const validarHistoriaCoherencia = async (
   historia: string,
@@ -596,17 +597,11 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       return;
     }
 
-    const longitudTotal = partesAudio.reduce(
-      (acc, curr) => acc + curr.length,
-      0,
-    );
-    const audioFinal = new Uint8Array(longitudTotal);
-
-    let offset = 0;
-    for (const parte of partesAudio) {
-      audioFinal.set(parte, offset);
-      offset += parte.length;
-    }
+    // Unir todos los fragmentos MP3 usando FFmpeg recodificando con libmp3lame
+    const audioFinal = await mergeAudioBuffersWithFFmpeg(partesAudio, {
+      bitrate: "128k",
+      sampleRate: "24000",
+    });
 
     const fileName = `historia_polly_${Date.now()}.mp3`;
     const urlS3 = await uploadToS3(audioFinal, fileName, "audio/mpeg", "polly");
