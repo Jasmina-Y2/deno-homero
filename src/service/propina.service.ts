@@ -6,7 +6,7 @@ import {
   ReciboTransaccion,
   RecompensaAnuncioDto,
 } from "../models/propina.model.ts";
-import { enviarPush } from "./notification.service.ts";
+import { enviarPush, enviarPushAUsuario } from "./notification.service.ts";
 
 /**
  * Obtiene la referencia directa del documento de un usuario en Firestore.
@@ -188,30 +188,35 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     console.warn("⚠️ Error al guardar comentario de propina:", errComentario);
   }
 
-  // 2. Enviar notificación push directa al celular del creador (vía FCM puro, sin subcolecciones en users)
+  // 2. Enviar notificación push e in-app directa al creador
   try {
-    const creadorSnap = await creadorRef.get();
-    const creadorToken = creadorSnap.data()?.fcmToken;
-
-    if (creadorToken) {
-      enviarPush(
-        creadorToken,
-        "¡Nueva propina recibida! 🎉",
-        `¡Alguien te envió el sticker '${tipoSticker}' y ganaste ${cantidadMonedas} monedas!`,
-        {
-          tipo: "propina",
-          tipoSticker,
-          cantidadMonedas: String(cantidadMonedas),
-          idOyente,
-          idHistoria: datos.idHistoria || datos.publicacionId || "",
-          transactionId: resultado.recibo.id,
-        },
-      ).catch((notifError) => {
-        console.warn("⚠️ No se pudo enviar notificación push al creador:", notifError);
-      });
+    let nombreDonador = "Un usuario";
+    const donadorDoc = await db.collection("users").doc(idOyente).get();
+    if (donadorDoc.exists) {
+      nombreDonador = donadorDoc.data()?.name || "Un usuario";
+    } else {
+      const donadorQuery = await db.collection("users").where("uid", "==", idOyente).limit(1).get();
+      if (!donadorQuery.empty) {
+        nombreDonador = donadorQuery.docs[0].data()?.name || "Un usuario";
+      }
     }
+
+    await enviarPushAUsuario(
+      idCreador,
+      "💰 ¡Has recibido una propina!",
+      `¡${nombreDonador} te envió el sticker '${tipoSticker}' y ganaste ${cantidadMonedas} monedas!`,
+      {
+        tipo: "propina",
+        tipoSticker,
+        cantidadMonedas: String(cantidadMonedas),
+        idOyente,
+        idUsuario: idOyente,
+        idHistoria: datos.idHistoria || datos.publicacionId || "",
+        transactionId: resultado.recibo.id,
+      },
+    );
   } catch (err) {
-    console.warn("⚠️ Error al obtener token para push:", err);
+    console.warn("⚠️ Error al enviar notificación de propina al creador:", err);
   }
 
   return resultado;
@@ -740,22 +745,18 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     `💰 [RevenueCat Monedas] Compra acreditada a ${uid}: +${cantidadMonedas} monedas (productId: ${productId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
   );
 
-  // 4. Notificar al usuario por Push FCM directo
+  // 4. Notificar al usuario por Push FCM e In-App
   try {
-    const userDocSnap = await userRef.get();
-    const userToken = userDocSnap.data()?.fcmToken;
-    if (userToken) {
-      enviarPush(
-        userToken,
-        "¡Compra acreditada! 🪙",
-        `Se han acreditado con éxito ${cantidadMonedas} monedas a tu billetera.`,
-        {
-          tipo: "compra_monedas",
-          cantidadMonedas: String(cantidadMonedas),
-          productId,
-        },
-      ).catch((e) => console.warn("⚠️ Error enviando push de compra de monedas:", e));
-    }
+    await enviarPushAUsuario(
+      uid,
+      "¡Compra acreditada! 🪙",
+      `Se han acreditado con éxito ${cantidadMonedas} monedas a tu billetera.`,
+      {
+        tipo: "compra_monedas",
+        cantidadMonedas: String(cantidadMonedas),
+        productId,
+      },
+    );
   } catch (_e) {
     // Ignorar si falla push
   }

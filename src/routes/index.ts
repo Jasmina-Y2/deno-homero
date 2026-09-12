@@ -214,8 +214,12 @@ router.get("/api/vistasuser/verificar/:idUsuario/:idHistoria", checkStoryViewed)
 // SEGUIDORES Y SEGUIDOS
 // ============================================================================
 router.post("/api/seguiruser/seguir", seguirUsuario);
+router.post("/api/seguir/seguir", seguirUsuario);
 router.post("/api/seguiruser/dejar-seguir", dejarDeSeguir);
+router.post("/api/seguir/dejar-seguir", dejarDeSeguir);
 router.get("/api/seguiruser/seguidores/:uid", getGenteQueMeSigue);
+router.get("/api/seguir/seguidores/:uid", getGenteQueMeSigue);
+router.get("/api/seguiruser/siguiendo/:uid", getGenteQueYoSigo);
 router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);
 
 // ============================================================================

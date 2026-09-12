@@ -10,11 +10,10 @@ export interface NotificationPayloadData {
 
 /**
  * Función para enviar una notificación push a un celular usando su FCM Token puro.
- * No crea ni escribe nada en la base de datos Firestore.
  * @param tokenDestinatario - El FCM Token del usuario que recibe la alerta
  * @param titulo - Título de la notificación
  * @param mensaje - Cuerpo del mensaje
- * @param data - Datos extras (opcional, ej: { historiaId: "123", tipo: "like" })
+ * @param data - Datos extras (ej: { idHistoria: "123", tipo: "like" })
  */
 export const enviarPush = async (
   tokenDestinatario: string,
@@ -36,7 +35,7 @@ export const enviarPush = async (
   }
 
   const payload = {
-    token: tokenDestinatario,
+    token: tokenDestinatario.trim(),
     notification: {
       title: titulo,
       body: mensaje,
@@ -55,6 +54,7 @@ export const enviarPush = async (
       payload: {
         aps: {
           sound: "default",
+          badge: 1,
         },
       },
     },
@@ -71,43 +71,86 @@ export const enviarPush = async (
 };
 
 /**
- * Función auxiliar para compatibilidad de interfaces (NO guarda nada en Firestore).
+ * Guarda la notificación en la base de datos Firestore (colección 'notificaciones').
+ * Permite que el usuario la vea en su bandeja/centro de notificaciones en la app.
  */
 export const guardarNotificacionEnBD = async (
-  _uidDestinatario: string,
-  _titulo: string,
-  _mensaje: string,
-  _data: NotificationPayloadData = {},
-) => {
-  // No-op: No se escribe nada en Firestore
-  return null;
+  uidDestinatario: string,
+  titulo: string,
+  mensaje: string,
+  data: NotificationPayloadData = {},
+): Promise<string | null> => {
+  if (!uidDestinatario) return null;
+
+  try {
+    const fecha = new Date().toISOString();
+    const docData: any = {
+      uidDestinatario,
+      idDestinatario: uidDestinatario,
+      uidUsuario: uidDestinatario,
+      titulo,
+      mensaje,
+      tipo: data.tipo || "general",
+      data: { ...data },
+      leido: false,
+      fecha,
+      fechaCreacion: fecha,
+      createdAt: fecha,
+    };
+
+    const docRef = await db.collection("notificaciones").add(docData);
+    console.log(`📥 [Notificación DB] Guardada en 'notificaciones' para usuario: ${uidDestinatario} (ID: ${docRef.id})`);
+    return docRef.id;
+  } catch (error) {
+    console.error("❌ [Notificación DB] Error guardando notificación en Firestore:", error);
+    return null;
+  }
 };
 
 /**
- * Envía una notificación push buscando el fcmToken del usuario en la colección 'users'.
- * NO crea ni escribe ninguna colección en Firestore.
+ * Envía una notificación completa a un usuario:
+ * 1. Guarda la notificación en Firestore (colección 'notificaciones') para la bandeja in-app.
+ * 2. Busca el fcmToken del usuario en 'users' (compatible con sistema.fcmToken, fcmToken, etc.)
+ *    y envía la alerta Push al dispositivo móvil mediante FCM.
+ *
  * @param uidDestinatario - UID del usuario destinatario
  * @param titulo - Título de la notificación
  * @param mensaje - Cuerpo de la notificación
  * @param data - Datos adicionales
+ * @param omitirGuardadoBD - Opcional, si es true no guarda en Firestore
  */
 export const enviarPushAUsuario = async (
   uidDestinatario: string,
   titulo: string,
   mensaje: string,
   data: NotificationPayloadData = {},
+  omitirGuardadoBD = false,
 ) => {
   try {
     if (!uidDestinatario) return null;
 
-    // Obtener el token del usuario desde Firestore
-    let fcmToken: string | null = null;
-
-    const userDocDirect = await db.collection("users").doc(uidDestinatario).get();
-    if (userDocDirect.exists) {
-      fcmToken = userDocDirect.data()?.fcmToken || null;
+    // 1. Guardar en Firestore para que aparezca en la lista de notificaciones de la app
+    if (!omitirGuardadoBD) {
+      await guardarNotificacionEnBD(uidDestinatario, titulo, mensaje, data);
     }
 
+    // 2. Extraer el token FCM del usuario desde Firestore
+    let fcmToken: string | null = null;
+
+    // Intento 1: Buscar por ID directo de documento
+    const userDocDirect = await db.collection("users").doc(uidDestinatario).get();
+    if (userDocDirect.exists) {
+      const uData = userDocDirect.data();
+      fcmToken =
+        uData?.sistema?.fcmToken ||
+        uData?.sistema?.fcm_token ||
+        uData?.fcmToken ||
+        uData?.fcm_token ||
+        uData?.token ||
+        null;
+    }
+
+    // Intento 2: Buscar por query where("uid", "==", uidDestinatario)
     if (!fcmToken) {
       const snapshot = await db.collection("users")
         .where("uid", "==", uidDestinatario)
@@ -115,15 +158,40 @@ export const enviarPushAUsuario = async (
         .get();
 
       if (!snapshot.empty) {
-        fcmToken = snapshot.docs[0].data()?.fcmToken || null;
+        const uData = snapshot.docs[0].data();
+        fcmToken =
+          uData?.sistema?.fcmToken ||
+          uData?.sistema?.fcm_token ||
+          uData?.fcmToken ||
+          uData?.fcm_token ||
+          uData?.token ||
+          null;
       }
     }
 
-    // Si tiene fcmToken, enviar notificación Push al celular
-    if (fcmToken) {
+    // Intento 3: Buscar por query where("id", "==", uidDestinatario)
+    if (!fcmToken) {
+      const snapId = await db.collection("users")
+        .where("id", "==", uidDestinatario)
+        .limit(1)
+        .get();
+
+      if (!snapId.empty) {
+        const uData = snapId.docs[0].data();
+        fcmToken =
+          uData?.sistema?.fcmToken ||
+          uData?.sistema?.fcm_token ||
+          uData?.fcmToken ||
+          uData?.fcm_token ||
+          null;
+      }
+    }
+
+    // 3. Si tiene fcmToken, enviar notificación Push al celular
+    if (fcmToken && fcmToken.trim().length > 0) {
       return await enviarPush(fcmToken, titulo, mensaje, data);
     } else {
-      console.log(`ℹ️ [FCM] El usuario ${uidDestinatario} no tiene fcmToken registrado.`);
+      console.log(`ℹ️ [FCM] El usuario ${uidDestinatario} no tiene fcmToken registrado. Notificación guardada solo en base de datos.`);
       return null;
     }
   } catch (error) {
@@ -135,8 +203,6 @@ export const enviarPushAUsuario = async (
 /**
  * Envía un mensaje Push data-only (sin bloque notification: { title, body })
  * para indicarle al frontend o app móvil que actualice el perfil del usuario inmediatamente.
- * @param fcmToken - Token FCM del dispositivo del usuario
- * @param extraData - Datos adicionales opcionales en el payload data
  */
 export const enviarPushActualizarPerfil = async (
   fcmToken: string,
@@ -148,7 +214,7 @@ export const enviarPushActualizarPerfil = async (
   }
 
   const payload = {
-    token: fcmToken,
+    token: fcmToken.trim(),
     data: {
       tipo: "ACTUALIZAR_PERFIL",
       ...extraData,
@@ -181,8 +247,6 @@ export const enviarPushActualizarPerfil = async (
 
 /**
  * Busca el token FCM del usuario y le envía el mensaje data-only ACTUALIZAR_PERFIL
- * @param uid - ID del usuario a notificar
- * @param extraData - Datos adicionales opcionales
  */
 export const notificarActualizacionPerfilUsuario = async (
   uid: string,
@@ -193,7 +257,13 @@ export const notificarActualizacionPerfilUsuario = async (
     let fcmToken: string | null = null;
     const userDocDirect = await db.collection("users").doc(uid).get();
     if (userDocDirect.exists) {
-      fcmToken = userDocDirect.data()?.fcm_token || userDocDirect.data()?.fcmToken || null;
+      const uData = userDocDirect.data();
+      fcmToken =
+        uData?.sistema?.fcmToken ||
+        uData?.sistema?.fcm_token ||
+        uData?.fcmToken ||
+        uData?.fcm_token ||
+        null;
     }
 
     if (!fcmToken) {
@@ -203,7 +273,13 @@ export const notificarActualizacionPerfilUsuario = async (
         .get();
 
       if (!snapshot.empty) {
-        fcmToken = snapshot.docs[0].data()?.fcm_token || snapshot.docs[0].data()?.fcmToken || null;
+        const uData = snapshot.docs[0].data();
+        fcmToken =
+          uData?.sistema?.fcmToken ||
+          uData?.sistema?.fcm_token ||
+          uData?.fcmToken ||
+          uData?.fcm_token ||
+          null;
       }
     }
 
@@ -220,24 +296,140 @@ export const notificarActualizacionPerfilUsuario = async (
 };
 
 /**
- * Métodos de consulta y compatibilidad que retornan vacío sin crear colecciones
+ * Obtiene todas las notificaciones de un usuario ordenadas de más reciente a más antigua.
  */
-export const obtenerNotificacionesPorUsuarioService = async (_uid: string): Promise<Notificacion[]> => {
-  return [];
+export const obtenerNotificacionesPorUsuarioService = async (uid: string): Promise<Notificacion[]> => {
+  if (!uid) return [];
+
+  try {
+    const notificacionesMap = new Map<string, Notificacion>();
+
+    // Consultar por uidDestinatario
+    const snap1 = await db.collection("notificaciones")
+      .where("uidDestinatario", "==", uid)
+      .get();
+
+    snap1.docs.forEach((doc: any) => {
+      const data = doc.data();
+      notificacionesMap.set(doc.id, {
+        id: doc.id,
+        idDoc: doc.id,
+        ...data,
+      });
+    });
+
+    // Consultar por idDestinatario como respaldo
+    const snap2 = await db.collection("notificaciones")
+      .where("idDestinatario", "==", uid)
+      .get();
+
+    snap2.docs.forEach((doc: any) => {
+      const data = doc.data();
+      notificacionesMap.set(doc.id, {
+        id: doc.id,
+        idDoc: doc.id,
+        ...data,
+      });
+    });
+
+    // Convertir a array y ordenar cronológicamente descendente
+    const lista = Array.from(notificacionesMap.values());
+    lista.sort((a, b) => {
+      const timeA = new Date(a.fechaCreacion || a.fecha || (a as any).createdAt || 0).getTime();
+      const timeB = new Date(b.fechaCreacion || b.fecha || (b as any).createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return lista;
+  } catch (error) {
+    console.error("❌ Error en obtenerNotificacionesPorUsuarioService:", error);
+    return [];
+  }
 };
 
+/**
+ * Marca una sola notificación como leída.
+ */
 export const marcarNotificacionLeidaService = async (idNotificacion: string) => {
-  return { id: idNotificacion, leido: true };
+  if (!idNotificacion) throw new Error("ID de notificación requerido");
+
+  try {
+    const docRef = db.collection("notificaciones").doc(idNotificacion);
+    await docRef.set({
+      leido: true,
+      actualizadoEn: new Date().toISOString(),
+    }, { merge: true });
+
+    return { id: idNotificacion, leido: true };
+  } catch (error) {
+    console.error("❌ Error en marcarNotificacionLeidaService:", error);
+    throw new Error("No se pudo marcar la notificación como leída");
+  }
 };
 
-export const marcarTodasNotificacionesLeidasService = async (_uid: string) => {
-  return { totalActualizadas: 0 };
+/**
+ * Marca todas las notificaciones no leídas de un usuario como leídas.
+ */
+export const marcarTodasNotificacionesLeidasService = async (uid: string) => {
+  if (!uid) throw new Error("UID de usuario requerido");
+
+  try {
+    const snapshot = await db.collection("notificaciones")
+      .where("uidDestinatario", "==", uid)
+      .where("leido", "==", false)
+      .get();
+
+    if (snapshot.empty) {
+      return { totalActualizadas: 0 };
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc: any) => {
+      batch.update(doc.ref, {
+        leido: true,
+        actualizadoEn: new Date().toISOString(),
+      });
+    });
+
+    await batch.commit();
+    return { totalActualizadas: snapshot.size };
+  } catch (error) {
+    console.error("❌ Error en marcarTodasNotificacionesLeidasService:", error);
+    throw new Error("No se pudieron marcar todas las notificaciones como leídas");
+  }
 };
 
+/**
+ * Elimina una notificación por su ID.
+ */
 export const eliminarNotificacionService = async (idNotificacion: string) => {
-  return { success: true, id: idNotificacion };
+  if (!idNotificacion) throw new Error("ID de notificación requerido");
+
+  try {
+    const docRef = db.collection("notificaciones").doc(idNotificacion);
+    await docRef.delete();
+    return { success: true, id: idNotificacion };
+  } catch (error) {
+    console.error("❌ Error en eliminarNotificacionService:", error);
+    throw new Error("No se pudo eliminar la notificación");
+  }
 };
 
-export const obtenerNotificacionesNoLeidasCountService = async (_uid: string) => {
-  return 0;
+/**
+ * Obtiene el conteo total de notificaciones no leídas para el badge de la campana.
+ */
+export const obtenerNotificacionesNoLeidasCountService = async (uid: string): Promise<number> => {
+  if (!uid) return 0;
+
+  try {
+    const snapshot = await db.collection("notificaciones")
+      .where("uidDestinatario", "==", uid)
+      .where("leido", "==", false)
+      .get();
+
+    return snapshot.size;
+  } catch (error) {
+    console.error("❌ Error en obtenerNotificacionesNoLeidasCountService:", error);
+    return 0;
+  }
 };
