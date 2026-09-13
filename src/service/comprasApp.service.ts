@@ -683,18 +683,19 @@ export const procesarReembolsoCompraApp = async (params: {
     const deviceIdUsuario = uDocData.sistema?.ultimoDeviceId || uDocData.ultimoDeviceId;
     const fechaLimite15Dias = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Banear al usuario infractor y fijar plazo de 15 días
+    // Mantener la cuenta ACTIVA con periodo de gracia de 15 días para regularizar pago
     await userRef.update({
-      "sistema.activo": false,
-      "sistema.baneado": true,
-      "sistema.motivoBan": "Fraude por reembolso/contracargo de compra en Google Play",
-      "sistema.fechaBan": fechaActual,
+      "sistema.activo": true,
+      "sistema.baneado": false,
+      "sistema.enPeriodoGracia": true,
+      "sistema.motivoDeuda": `Reembolso de ${cantidadARevertir} monedas pendiente de regularizar en Google Play`,
+      "sistema.fechaInicioGracia": fechaActual,
       "sistema.dispositivoBloqueado": true,
       "sistema.fechaLimitePago": fechaLimite15Dias,
       "sistema.deudaMonedas": cantidadARevertir,
       "sistema.fechaActualizacion": fechaActual,
     });
-    console.warn(`🚫 [Anti-Fraude] Usuario ${targetUid} BANEADO por reembolso de Google Play. Plazo límite: ${fechaLimite15Dias}`);
+    console.warn(`⏳ [Anti-Fraude] Usuario ${targetUid} en PERIODO DE GRACIA (15 días) por reembolso de Google Play. Cuenta permanece ACTIVA. Plazo límite: ${fechaLimite15Dias}`);
 
     // Bloquear el dispositivo físico (Hardware ID) por 15 días en la colección 'dispositivos_bloqueados'
     if (deviceIdUsuario) {

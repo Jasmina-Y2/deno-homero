@@ -167,13 +167,39 @@ export const normalizarUsuarioDoc = (data: any, docId?: string): UsuarioDocument
 
   // 5. Sistema (ÚNICO fcmToken, sin duplicados)
   const fcmTokenVal = data.sistema?.fcmToken || data.sistema?.fcm_token || data.fcmToken || data.fcm_token || "";
+  const enPeriodoGracia = Boolean(data.sistema?.enPeriodoGracia ?? false);
+  const fechaLimitePago = data.sistema?.fechaLimitePago || "";
+  let activoFinal = Boolean(data.sistema?.activo ?? data.activo ?? true);
+  let baneadoFinal = Boolean(data.sistema?.baneado ?? false);
+
+  if (enPeriodoGracia && fechaLimitePago) {
+    const ahoraMs = Date.now();
+    const limiteMs = new Date(fechaLimitePago).getTime();
+    if (ahoraMs > limiteMs) {
+      // Pasaron los 15 días sin pagar la deuda: desactivar y banear
+      activoFinal = false;
+      baneadoFinal = true;
+    } else {
+      // Dentro de los 15 días de gracia: cuenta permanece ACTIVA
+      activoFinal = true;
+      baneadoFinal = false;
+    }
+  }
+
   const sistema: SistemaUsuario = {
     fcmToken: fcmTokenVal,
     ultimoDeviceId: data.sistema?.ultimoDeviceId || data.ultimoDeviceId || "",
     bovedaPin: data.sistema?.bovedaPin || data.bovedaPin || "",
     metodo: data.sistema?.metodo || data.metodo || "email",
     ADMIN: Boolean(data.sistema?.ADMIN ?? data.ADMIN ?? (perfil.rol === "admin" || data.admin === true)),
-    activo: Boolean(data.sistema?.activo ?? data.activo ?? true),
+    activo: activoFinal,
+    baneado: baneadoFinal,
+    motivoBan: data.sistema?.motivoBan,
+    enPeriodoGracia,
+    motivoDeuda: data.sistema?.motivoDeuda,
+    deudaMonedas: Number(data.sistema?.deudaMonedas || 0),
+    fechaLimitePago: fechaLimitePago || undefined,
+    dispositivoBloqueado: Boolean(data.sistema?.dispositivoBloqueado ?? false),
     fechaRegistro: data.sistema?.fechaRegistro || data.fechaRegistro || data.createdAt || ahora,
     fechaActualizacion: data.sistema?.fechaActualizacion || data.fechaActualizacion || ahora,
   };
