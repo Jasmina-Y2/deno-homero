@@ -39,12 +39,6 @@ export interface SistemaUsuario {
   ADMIN: boolean;
   activo: boolean;
   baneado?: boolean;
-  motivoBan?: string;
-  enPeriodoGracia?: boolean;
-  motivoDeuda?: string;
-  deudaMonedas?: number;
-  fechaLimitePago?: string;
-  diasRestantes?: number;
   dispositivoBloqueado?: boolean;
   fechaRegistro: string;
   fechaActualizacion: string;
