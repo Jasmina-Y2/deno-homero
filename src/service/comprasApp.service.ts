@@ -13,12 +13,54 @@ import { bloquearDispositivoService } from "./deviceAdLimit.service.ts";
  * Catálogo exhaustivo de paquetes de monedas conocidos y mapeo por ID de producto.
  */
 const CATALOGO_PAQUETES_MONEDAS: Record<string, number> = {
-  // Paquetes directos por ID de tienda
+  // Paquetes oficiales de Homero Store:
+  // 1. Paquete Básico: 400 monedas ($0.99 USD)
+  "basico": 400,
+  "basic": 400,
+  "paquete_basico": 400,
+  "paquete_basico_400": 400,
+  "buy_basico": 400,
+  "buy_basico_400": 400,
+  "coins_400": 400,
+  "homero_coins_400": 400,
+  "monedas_400": 400,
+  "paquete_400": 400,
+  "paquete_400_monedas": 400,
+
+  // 2. Paquete Popular: 1,250 monedas ($2.99 USD)
+  "popular": 1250,
+  "paquete_popular": 1250,
+  "paquete_popular_1250": 1250,
+  "buy_popular": 1250,
+  "buy_popular_1250": 1250,
+  "coins_1250": 1250,
+  "homero_coins_1250": 1250,
+  "monedas_1250": 1250,
+  "paquete_1250": 1250,
+  "paquete_1250_monedas": 1250,
+
+  // 3. Paquete Pro / Fan: 2,200 monedas ($4.99 USD)
+  "pro": 2200,
+  "fan": 2200,
+  "paquete_pro": 2200,
+  "paquete_pro_2200": 2200,
+  "paquete_fan": 2200,
+  "paquete_fan_2200": 2200,
+  "buy_pro": 2200,
+  "buy_pro_2200": 2200,
+  "buy_fan": 2200,
+  "buy_fan_2200": 2200,
+  "coins_2200": 2200,
+  "homero_coins_2200": 2200,
+  "monedas_2200": 2200,
+  "paquete_2200": 2200,
+  "paquete_2200_monedas": 2200,
+
+  // Otros paquetes por ID numérico de tienda
   "coins_50": 50,
   "coins_100": 100,
   "coins_200": 200,
   "coins_300": 300,
-  "coins_400": 400,
   "coins_500": 500,
   "coins_1000": 1000,
   "coins_1500": 1500,
@@ -34,7 +76,6 @@ const CATALOGO_PAQUETES_MONEDAS: Record<string, number> = {
   "homero_coins_100": 100,
   "homero_coins_200": 200,
   "homero_coins_300": 300,
-  "homero_coins_400": 400,
   "homero_coins_500": 500,
   "homero_coins_1000": 1000,
   "homero_coins_2500": 2500,
@@ -42,25 +83,20 @@ const CATALOGO_PAQUETES_MONEDAS: Record<string, number> = {
 
   // Variantes "monedas_" / "paquete_"
   "monedas_100": 100,
-  "monedas_400": 400,
   "monedas_500": 500,
   "monedas_1000": 1000,
   "paquete_100": 100,
-  "paquete_400": 400,
-  "paquete_400_monedas": 400,
   "paquete_500": 500,
   "paquete_1000": 1000,
   "paquete_2500": 2500,
   "paquete_5000": 5000,
-  "paquete_basico": 100,
-  "paquete_pro": 500,
   "paquete_master": 1000,
   "paquete_legendario": 2500,
 
   // Tiers estándar
-  "coins_tier_1": 100,
-  "coins_tier_2": 400,
-  "coins_tier_3": 1000,
+  "coins_tier_1": 400,
+  "coins_tier_2": 1250,
+  "coins_tier_3": 2200,
   "coins_tier_4": 2500,
   "coins_tier_5": 5000,
 };
@@ -79,7 +115,7 @@ export const resolverCantidadMonedas = (
   }
 
   if (!productId || typeof productId !== "string") {
-    return 100;
+    return 400;
   }
 
   const cleanProductId = productId.toLowerCase().trim();
@@ -89,14 +125,43 @@ export const resolverCantidadMonedas = (
     return CATALOGO_PAQUETES_MONEDAS[cleanProductId];
   }
 
-  // 2. Búsqueda por subcadena de catálogo (por si viene con prefijos de bundle/package)
+  // 2. Detección por palabras clave principales de los 3 paquetes de la tienda
+  if (
+    cleanProductId === "basico" ||
+    cleanProductId === "basic" ||
+    cleanProductId.includes("basico") ||
+    cleanProductId.includes("basic")
+  ) {
+    return 400;
+  }
+  if (
+    cleanProductId === "popular" ||
+    cleanProductId.includes("popular")
+  ) {
+    return 1250;
+  }
+  if (
+    cleanProductId === "pro" ||
+    cleanProductId === "fan" ||
+    cleanProductId.includes("paquete_pro") ||
+    cleanProductId.includes("paquete_fan") ||
+    cleanProductId.includes("buy_pro") ||
+    cleanProductId.includes("buy_fan") ||
+    cleanProductId.includes("pro_2200") ||
+    cleanProductId.includes("fan_2200") ||
+    /(?:^|[_\s-])(pro|fan)(?:[_\s-]|$)/.test(cleanProductId)
+  ) {
+    return 2200;
+  }
+
+  // 3. Búsqueda por subcadena de catálogo (claves de 4 o más caracteres)
   for (const [key, cantidad] of Object.entries(CATALOGO_PAQUETES_MONEDAS)) {
-    if (cleanProductId.includes(key)) {
+    if (key.length >= 4 && cleanProductId.includes(key)) {
       return cantidad;
     }
   }
 
-  // 3. Extracción inteligente: buscar explícitamente patrones numéricos que indiquen monedas
+  // 4. Extracción inteligente: buscar explícitamente patrones numéricos que indiquen monedas
   // Ej: coins400, 400coins, monedas400, pack_400, 400_monedas
   const patronEspecifico = /(?:coins|monedas|pack|paquete)[_\s-]*(\d{2,6})|(\d{2,6})[_\s-]*(?:coins|monedas|pack|paquete)/i;
   const matchEspecifico = cleanProductId.match(patronEspecifico);
@@ -108,7 +173,7 @@ export const resolverCantidadMonedas = (
     }
   }
 
-  // 4. Si hay múltiples números en el string (ej. 'homero_v2_tier2_400_coins'):
+  // 5. Si hay múltiples números en el string (ej. 'homero_v2_tier2_400_coins'):
   // Extraer todos los bloques de dígitos y priorizar aquellos >= 10
   const todosNumeros = cleanProductId.match(/\d+/g);
   if (todosNumeros && todosNumeros.length > 0) {
@@ -117,15 +182,14 @@ export const resolverCantidadMonedas = (
       .filter((n) => !isNaN(n) && n >= 10);
 
     if (candidatos.length > 0) {
-      // Tomar el número representativo más relevante (ej. 400 sobre 2)
       return Math.max(...candidatos);
     }
   }
 
   console.warn(
-    `⚠️ [Compras App] No se pudo determinar con precisión la cantidad de monedas para productId: '${productId}'. Se asignará fallback de 100 monedas.`,
+    `⚠️ [Compras App] No se pudo determinar con precisión la cantidad de monedas para productId: '${productId}'. Se asignará fallback de 400 monedas.`,
   );
-  return 100;
+  return 400;
 };
 
 /**

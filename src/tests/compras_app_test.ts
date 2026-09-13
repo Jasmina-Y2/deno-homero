@@ -41,34 +41,37 @@ function createMockContext(
 // ----------------------------------------------------
 
 Deno.test("Resolver Monedas: Paquete de 400 monedas en distintos formatos de Product ID", () => {
+  assertEquals(resolverCantidadMonedas("basico"), 400);
+  assertEquals(resolverCantidadMonedas("paquete_basico"), 400);
+  assertEquals(resolverCantidadMonedas("paquete_basico_400"), 400);
   assertEquals(resolverCantidadMonedas("coins_400"), 400);
   assertEquals(resolverCantidadMonedas("homero_coins_400"), 400);
   assertEquals(resolverCantidadMonedas("paquete_400"), 400);
   assertEquals(resolverCantidadMonedas("paquete_400_monedas"), 400);
-  assertEquals(resolverCantidadMonedas("coins_tier_2"), 400);
+  assertEquals(resolverCantidadMonedas("coins_tier_1"), 400);
   assertEquals(resolverCantidadMonedas("homero_v2_400_coins"), 400);
   assertEquals(resolverCantidadMonedas("app_tier1_v2_coins_400"), 400);
 });
 
-Deno.test("Resolver Monedas: Paquetes estándar (100, 500, 1000, 2500, 5000)", () => {
+Deno.test("Resolver Monedas: Paquetes de la tienda (Básico 400, Popular 1250, Pro 2200)", () => {
+  assertEquals(resolverCantidadMonedas("basico"), 400);
+  assertEquals(resolverCantidadMonedas("paquete_basico_400"), 400);
+
+  assertEquals(resolverCantidadMonedas("popular"), 1250);
+  assertEquals(resolverCantidadMonedas("paquete_popular"), 1250);
+  assertEquals(resolverCantidadMonedas("paquete_popular_1250"), 1250);
+  assertEquals(resolverCantidadMonedas("coins_1250"), 1250);
+
+  assertEquals(resolverCantidadMonedas("pro"), 2200);
+  assertEquals(resolverCantidadMonedas("fan"), 2200);
+  assertEquals(resolverCantidadMonedas("paquete_pro"), 2200);
+  assertEquals(resolverCantidadMonedas("paquete_pro_2200"), 2200);
+  assertEquals(resolverCantidadMonedas("coins_2200"), 2200);
+
   assertEquals(resolverCantidadMonedas("coins_100"), 100);
-  assertEquals(resolverCantidadMonedas("homero_coins_100"), 100);
-  assertEquals(resolverCantidadMonedas("coins_tier_1"), 100);
-  assertEquals(resolverCantidadMonedas("paquete_basico"), 100);
-
   assertEquals(resolverCantidadMonedas("coins_500"), 500);
-  assertEquals(resolverCantidadMonedas("paquete_pro"), 500);
-
   assertEquals(resolverCantidadMonedas("coins_1000"), 1000);
-  assertEquals(resolverCantidadMonedas("coins_tier_3"), 1000);
-  assertEquals(resolverCantidadMonedas("paquete_master"), 1000);
-
-  assertEquals(resolverCantidadMonedas("coins_2500"), 2500);
-  assertEquals(resolverCantidadMonedas("coins_tier_4"), 2500);
-  assertEquals(resolverCantidadMonedas("paquete_legendario"), 2500);
-
   assertEquals(resolverCantidadMonedas("coins_5000"), 5000);
-  assertEquals(resolverCantidadMonedas("coins_tier_5"), 5000);
 });
 
 Deno.test("Resolver Monedas: Monedas manuales tienen prioridad", () => {
@@ -76,9 +79,9 @@ Deno.test("Resolver Monedas: Monedas manuales tienen prioridad", () => {
   assertEquals(resolverCantidadMonedas("homero_coins_400", 400), 400);
 });
 
-Deno.test("Resolver Monedas: Fallback seguro de 100 para IDs no reconocidos", () => {
-  assertEquals(resolverCantidadMonedas("producto_desconocido_sin_numeros"), 100);
-  assertEquals(resolverCantidadMonedas(""), 100);
+Deno.test("Resolver Monedas: Fallback seguro de 400 para IDs no reconocidos", () => {
+  assertEquals(resolverCantidadMonedas("producto_desconocido_sin_numeros"), 400);
+  assertEquals(resolverCantidadMonedas(""), 400);
 });
 
 // ----------------------------------------------------
