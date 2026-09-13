@@ -255,6 +255,8 @@ export const procesarEntregaMonedasCompraApp = async (
   opciones?: {
     monedasManual?: number;
     motivoManual?: string;
+    transactionIdStore?: string | null;
+    idCompraRevenueCat?: string | null;
   },
 ): Promise<{ compra: CompraApp; nuevoSaldo: number; cantidadAcreditada: number }> => {
   const compraRef = db.collection("compras_app").doc(compraId);
@@ -265,12 +267,21 @@ export const procesarEntregaMonedasCompraApp = async (
   }
 
   const compraData = compraSnap.data() as CompraApp;
+  const finalTransactionIdStore = opciones?.transactionIdStore || compraData.transactionIdStore || null;
+  const finalIdCompraRevenueCat = opciones?.idCompraRevenueCat || compraData.idCompraRevenueCat || null;
 
-  // Si ya estaba concluida, retornar datos directamente sin doble acreditación
+  // Si ya estaba concluida, actualizar transactionIdStore si llegó nuevo y retornar
   if (compraData.estado === "concluido") {
+    if ((!compraData.transactionIdStore && finalTransactionIdStore) || (!compraData.idCompraRevenueCat && finalIdCompraRevenueCat)) {
+      const actualizacion: Record<string, any> = {};
+      if (finalTransactionIdStore) actualizacion.transactionIdStore = finalTransactionIdStore;
+      if (finalIdCompraRevenueCat) actualizacion.idCompraRevenueCat = finalIdCompraRevenueCat;
+      await compraRef.set(actualizacion, { merge: true });
+      await db.collection("transactions").doc(compraId).set(actualizacion, { merge: true });
+    }
     console.log(`ℹ️ [Compras App] La compra ${compraId} ya había sido concluida previamente.`);
     return {
-      compra: compraData,
+      compra: { ...compraData, transactionIdStore: finalTransactionIdStore, idCompraRevenueCat: finalIdCompraRevenueCat },
       nuevoSaldo: compraData.nuevoSaldo || 0,
       cantidadAcreditada: compraData.cantidadMonedas || 0,
     };
@@ -302,8 +313,8 @@ export const procesarEntregaMonedasCompraApp = async (
         id: compraId,
         idUsuario: uid,
         tipo: "compra_monedas",
-        idCompraRevenueCat: compraData.idCompraRevenueCat || null,
-        transactionIdStore: compraData.transactionIdStore || null,
+        idCompraRevenueCat: finalIdCompraRevenueCat,
+        transactionIdStore: finalTransactionIdStore,
         compraAppId: compraId,
         productId: compraData.productId,
         cantidadMonedas: cantidadMonedas,
@@ -328,7 +339,7 @@ export const procesarEntregaMonedasCompraApp = async (
       transaction.set(transactionRef, recibo, { merge: true });
 
       // 3. Marcar compra como concluida en compras_app
-      transaction.update(compraRef, {
+      const updateDataCompra: Record<string, any> = {
         estado: "concluido",
         cantidadMonedas: cantidadMonedas,
         saldoAnterior: isNaN(saldoActual) ? 0 : saldoActual,
@@ -337,7 +348,14 @@ export const procesarEntregaMonedasCompraApp = async (
         fechaActualizacion: fechaActual,
         motivoProblema: null,
         detalleError: null,
-      });
+      };
+      if (finalTransactionIdStore) {
+        updateDataCompra.transactionIdStore = finalTransactionIdStore;
+      }
+      if (finalIdCompraRevenueCat) {
+        updateDataCompra.idCompraRevenueCat = finalIdCompraRevenueCat;
+      }
+      transaction.update(compraRef, updateDataCompra);
 
       return {
         saldoAnterior: isNaN(saldoActual) ? 0 : saldoActual,
@@ -942,25 +960,42 @@ export const obtenerCompraPorIdService = async (
  */
 export const reintentarCompraProblemaService = async (
   compraId: string,
-  monedasManual?: number,
+  opciones?: {
+    monedasManual?: number;
+    transactionIdStore?: string | null;
+    idCompraRevenueCat?: string | null;
+    motivoManual?: string;
+  } | number,
 ): Promise<{ success: boolean; compra: CompraApp; nuevoSaldo?: number; message: string }> => {
   const compra = await obtenerCompraPorIdService(compraId);
   if (!compra) {
     throw new Error(`Compra no encontrada: ${compraId}`);
   }
 
+  const opts = typeof opciones === "number" ? { monedasManual: opciones } : (opciones || {});
+
   if (compra.estado === "concluido") {
+    // Si la compra ya estaba concluida pero viene con transactionIdStore que faltaba, actualizarlo
+    if (opts.transactionIdStore || opts.idCompraRevenueCat) {
+      await procesarEntregaMonedasCompraApp(compraId, opts);
+    }
     return {
       success: true,
-      compra,
+      compra: {
+        ...compra,
+        transactionIdStore: opts.transactionIdStore || compra.transactionIdStore || null,
+        idCompraRevenueCat: opts.idCompraRevenueCat || compra.idCompraRevenueCat || null,
+      },
       nuevoSaldo: compra.nuevoSaldo || 0,
       message: "La compra ya se encuentra en estado concluido.",
     };
   }
 
   const resultado = await procesarEntregaMonedasCompraApp(compraId, {
-    monedasManual,
-    motivoManual: "Reintento administrativo",
+    monedasManual: opts.monedasManual,
+    transactionIdStore: opts.transactionIdStore,
+    idCompraRevenueCat: opts.idCompraRevenueCat,
+    motivoManual: opts.motivoManual || "Reintento administrativo",
   });
 
   return {

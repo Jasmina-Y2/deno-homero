@@ -191,7 +191,7 @@ export const revenueCatWebhookController = async (ctx: Context) => {
             tipoItem: "monedas",
             cantidadMonedas: cantidadMonedasCalculada,
             idCompraRevenueCat: event.id || null,
-            transactionIdStore: event.transaction_id || null,
+            transactionIdStore: event.transaction_id || (event as any).store_transaction_id || (event as any).order_id || null,
             originalTransactionId: event.original_transaction_id || null,
             store: event.store || "PLAY_STORE",
             entorno: event.environment || "PRODUCTION",

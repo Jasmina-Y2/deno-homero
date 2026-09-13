@@ -187,16 +187,30 @@ export const reintentarCompraController = async (ctx: Context) => {
     }
 
     let monedasManual: number | undefined = undefined;
+    let transactionIdStore: string | undefined = undefined;
+    let idCompraRevenueCat: string | undefined = undefined;
     try {
       const body = await extraerBodyJson(ctx);
-      if (body && typeof body.monedasManual === "number") {
-        monedasManual = body.monedasManual;
+      if (body) {
+        if (typeof body.monedasManual === "number") {
+          monedasManual = body.monedasManual;
+        }
+        if (typeof body.transactionIdStore === "string" && body.transactionIdStore.trim()) {
+          transactionIdStore = body.transactionIdStore.trim();
+        }
+        if (typeof body.idCompraRevenueCat === "string" && body.idCompraRevenueCat.trim()) {
+          idCompraRevenueCat = body.idCompraRevenueCat.trim();
+        }
       }
     } catch (_e) {
       // Body opcional
     }
 
-    const resultado = await reintentarCompraProblemaService(id.trim(), monedasManual);
+    const resultado = await reintentarCompraProblemaService(id.trim(), {
+      monedasManual,
+      transactionIdStore,
+      idCompraRevenueCat,
+    });
 
     ctx.response.status = 200;
     ctx.response.body = {
