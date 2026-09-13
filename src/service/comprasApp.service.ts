@@ -490,6 +490,8 @@ export const procesarReembolsoCompraApp = async (params: {
   transactionIdStore?: string;
   originalTransactionId?: string;
   compraId?: string;
+  productId?: string;
+  cantidadMonedas?: number;
   uid?: string;
   motivoReembolso?: string;
   rawEvent?: Record<string, unknown>;
@@ -505,13 +507,14 @@ export const procesarReembolsoCompraApp = async (params: {
     transactionIdStore,
     originalTransactionId,
     compraId,
+    productId,
     uid,
     motivoReembolso,
   } = params;
 
   let docCompraSnap: any = null;
 
-  // 1. Localizar la compra en Firestore
+  // 1. Localizar la compra en Firestore por IDs exactos
   if (compraId) {
     const snap = await db.collection("compras_app").doc(compraId).get();
     if (snap.exists) docCompraSnap = snap;
@@ -541,63 +544,47 @@ export const procesarReembolsoCompraApp = async (params: {
     if (!snap.empty) docCompraSnap = snap.docs[0];
   }
 
+  // Si no se encontró por ID exacto, buscar compras recientes concluidas del usuario
+  if (!docCompraSnap && uid) {
+    try {
+      const snapUsuario = await db.collection("compras_app")
+        .where("idUsuario", "==", uid)
+        .where("estado", "==", "concluido")
+        .get();
+
+      if (!snapUsuario.empty) {
+        // Priorizar por productId coincidente o tomar la más reciente
+        const matchProduct = productId
+          ? snapUsuario.docs.find((d: any) => d.data().productId === productId)
+          : null;
+        docCompraSnap = matchProduct || snapUsuario.docs[snapUsuario.docs.length - 1];
+      }
+    } catch (_errSearch) {}
+  }
+
   const fechaActual = new Date().toISOString();
+  const rawEv = params.rawEvent as Record<string, any> | undefined;
+  const prodIdFallback = productId || rawEv?.product_id || (docCompraSnap ? docCompraSnap.data()?.productId : "coins_200");
+  const cantidadARevertir = params.cantidadMonedas ||
+    (docCompraSnap ? Number(docCompraSnap.data()?.cantidadMonedas || 0) : 0) ||
+    resolverCantidadMonedas(prodIdFallback);
 
-  // Si no se encontró en compras_app pero tenemos UID, intentamos buscar en transactions
-  if (!docCompraSnap) {
-    console.warn(
-      `⚠️ [Compras App Reembolso] No se encontró registro en 'compras_app' para el evento ${idCompraRevenueCat || transactionIdStore || "N/A"}.`,
-    );
+  const targetUid = (docCompraSnap ? docCompraSnap.data()?.idUsuario : null) || uid || "";
 
-    if (uid) {
-      const userRef = await obtenerDocRefUsuario(uid);
-      const transReembolsoRef = db.collection("transactions").doc();
-
-      await db.runTransaction(async (transaction: any) => {
-        const uDoc = await transaction.get(userRef);
-        if (!uDoc.exists) return;
-
-        transaction.set(transReembolsoRef, {
-          id: transReembolsoRef.id,
-          idUsuario: uid,
-          tipo: "reembolso_compra",
-          idCompraRevenueCat: idCompraRevenueCat || null,
-          transactionIdStore: transactionIdStore || null,
-          fecha: fechaActual,
-          estado: "completado",
-          motivo: motivoReembolso || "Reembolso automático de Google Play / Tienda",
-        });
-      });
-    }
-
+  if (!targetUid) {
+    console.warn("⚠️ [Compras App Reembolso] No se pudo determinar el UID para aplicar el reembolso.");
     return {
-      success: true,
+      success: false,
       monedasRevertidas: 0,
-      message: "Evento de reembolso registrado en auditoría.",
+      message: "No se encontró usuario asociado al reembolso.",
     };
   }
 
-  const targetCompraId = docCompraSnap.id;
-  const compraData = docCompraSnap.data() as CompraApp;
-
-  // Si ya estaba reembolsada, no descontar nuevamente
-  if (compraData.reembolsado || compraData.estado === "reembolsado") {
-    console.log(`ℹ️ [Compras App] La compra ${targetCompraId} ya estaba marcada como reembolsada.`);
-    return {
-      success: true,
-      compraId: targetCompraId,
-      monedasRevertidas: 0,
-      nuevoSaldo: compraData.nuevoSaldo,
-      message: "La compra ya había sido reembolsada anteriormente.",
-    };
-  }
-
-  const targetUid = compraData.idUsuario || uid || "";
-  const cantidadARevertir = Number(compraData.cantidadMonedas || 0);
+  const targetCompraId = docCompraSnap ? docCompraSnap.id : (idCompraRevenueCat || transactionIdStore || `reembolso_${Date.now()}`);
   const userRef = await obtenerDocRefUsuario(targetUid);
-  const compraRef = docCompraSnap.ref;
   const transReembolsoRef = db.collection("transactions").doc();
 
+  // 2. Ejecutar descuento atómico de monedas y marcado de auditoría
   const resultado = await db.runTransaction(async (transaction: any) => {
     const userDoc = await transaction.get(userRef);
     let nuevoSaldo = 0;
@@ -606,8 +593,8 @@ export const procesarReembolsoCompraApp = async (params: {
     if (userDoc.exists) {
       const uData = userDoc.data() || {};
       saldoAnterior = Number(uData.billetera?.walletBalance ?? uData.walletBalance ?? 0);
-      // Evitar saldos negativos absurdos si el usuario ya gastó las monedas
-      nuevoSaldo = Math.max(0, saldoAnterior - cantidadARevertir);
+      // Descontar las monedas de la compra reembolsada sin dejar saldos negativos ilógicos
+      nuevoSaldo = Math.max(0, (isNaN(saldoAnterior) ? 0 : saldoAnterior) - cantidadARevertir);
 
       transaction.update(userRef, {
         "billetera.walletBalance": nuevoSaldo,
@@ -617,35 +604,63 @@ export const procesarReembolsoCompraApp = async (params: {
       });
     }
 
-    // Actualizar documento de compra a 'reembolsado'
-    transaction.update(compraRef, {
-      estado: "reembolsado",
-      reembolsado: true,
-      fechaReembolso: fechaActual,
-      motivoReembolso: motivoReembolso || "Reembolso procesado en Google Play / RevenueCat",
-      fechaActualizacion: fechaActual,
-      saldoDescontadoReembolso: cantidadARevertir,
-    });
+    // Si encontramos el documento en compras_app, actualizarlo a 'reembolsado'
+    if (docCompraSnap) {
+      transaction.update(docCompraSnap.ref, {
+        estado: "reembolsado",
+        reembolsado: true,
+        fechaReembolso: fechaActual,
+        motivoReembolso: motivoReembolso || "Reembolso procesado en Google Play / RevenueCat",
+        fechaActualizacion: fechaActual,
+        saldoDescontadoReembolso: cantidadARevertir,
+      });
 
-    // Registrar recibo en transactions
+      // También actualizar el recibo espejo en transactions
+      const transMirrorRef = db.collection("transactions").doc(docCompraSnap.id);
+      transaction.set(transMirrorRef, {
+        estado: "reembolsado",
+        motivo: motivoReembolso || "Reembolso procesado en Google Play",
+        fechaActualizacion: fechaActual,
+      }, { merge: true });
+    }
+
+    // Registrar recibo explícito de auditoría 'reembolso_compra'
     transaction.set(transReembolsoRef, {
       id: transReembolsoRef.id,
       idUsuario: targetUid,
       tipo: "reembolso_compra",
       compraAppId: targetCompraId,
-      idCompraRevenueCat: compraData.idCompraRevenueCat || idCompraRevenueCat || null,
-      transactionIdStore: compraData.transactionIdStore || transactionIdStore || null,
-      productId: compraData.productId,
+      idCompraRevenueCat: idCompraRevenueCat || null,
+      transactionIdStore: transactionIdStore || null,
+      productId: prodIdFallback,
       cantidadMonedas: cantidadARevertir,
       saldoAnterior,
       nuevoSaldo,
       fecha: fechaActual,
       estado: "completado",
-      motivo: motivoReembolso || "Reembolso confirmado de Google Play",
+      motivo: motivoReembolso || "Devolución de cargo / Reembolso confirmado de Google Play",
     });
 
     return { saldoAnterior, nuevoSaldo };
   });
+
+  // 3. Buscar y actualizar compras anteriores en 'transactions' creadas desde el cliente
+  try {
+    const transPrevSnap = await db.collection("transactions")
+      .where("idUsuario", "==", targetUid)
+      .where("tipo", "==", "compra_monedas")
+      .where("estado", "==", "completado")
+      .get();
+
+    if (!transPrevSnap.empty) {
+      const ultimaCompraDoc = transPrevSnap.docs[transPrevSnap.docs.length - 1];
+      await ultimaCompraDoc.ref.set({
+        estado: "reembolsado",
+        descripcion: `Compra Reembolsada en Google Play (-${cantidadARevertir} monedas 🔄)`,
+        fechaActualizacion: fechaActual,
+      }, { merge: true });
+    }
+  } catch (_eTransUpdate) {}
 
   console.log(
     `💸 [Compras App] Compra ${targetCompraId} REEMBOLSADA. Usuario: ${targetUid} (-${cantidadARevertir} monedas). Nuevo saldo: ${resultado.nuevoSaldo}`,
@@ -656,7 +671,7 @@ export const procesarReembolsoCompraApp = async (params: {
     enviarPushAUsuario(
       targetUid,
       "🔄 Reembolso de Compra",
-      `Se ha procesado un reembolso para tu compra de ${compraData.productId}. Se han debitado ${cantidadARevertir} monedas de tu saldo.`,
+      `Se ha procesado un reembolso para tu compra de ${prodIdFallback}. Se han debitado ${cantidadARevertir} monedas de tu saldo.`,
       {
         tipo: "reembolso_compra",
         compraId: targetCompraId,

@@ -271,13 +271,15 @@ export const revenueCatWebhookController = async (ctx: Context) => {
 
       // Reembolso / Revocación originado en Google Play / App Store
       case "REVOCATION": {
-        console.log(`🔄 [RevenueCat Webhook] Procesando REVOCATION para UID: ${uid} (EventID: ${event.id})`);
+        console.log(`🔄 [RevenueCat Webhook] Procesando REVOCATION para UID: ${uid} (EventID: ${event.id}) | Producto: ${productIdStr}`);
 
         if (esCompraMonedas) {
           await procesarReembolsoCompraApp({
             idCompraRevenueCat: event.id,
             transactionIdStore: event.transaction_id,
             originalTransactionId: event.original_transaction_id,
+            productId: productIdStr,
+            cantidadMonedas: resolverCantidadMonedas(productIdStr),
             uid,
             motivoReembolso: event.cancel_reason || "Revocación de compra en Google Play / Tienda",
             rawEvent: event as Record<string, unknown>,
@@ -352,6 +354,8 @@ export const revenueCatWebhookController = async (ctx: Context) => {
               idCompraRevenueCat: event.id,
               transactionIdStore: event.transaction_id,
               originalTransactionId: event.original_transaction_id,
+              productId: productIdStr,
+              cantidadMonedas: resolverCantidadMonedas(productIdStr),
               uid,
               motivoReembolso: `Cancelación con reembolso (${event.cancel_reason})`,
               rawEvent: event as Record<string, unknown>,
