@@ -83,6 +83,11 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     const creadorDoc = await transaction.get(creadorRef);
 
     const oyenteData = oyenteDoc.data() || {};
+
+    if (oyenteData.sistema?.baneado === true || oyenteData.sistema?.activo === false) {
+      throw new Error("Tu cuenta se encuentra suspendida por actividad fraudulenta y no puede enviar propinas.");
+    }
+
     const rawSaldoOyente = oyenteData.billetera?.walletBalance ?? oyenteData.walletBalance ?? 0;
     const saldoActualOyente = Number(rawSaldoOyente);
 

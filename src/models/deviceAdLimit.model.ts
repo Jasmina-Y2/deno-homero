@@ -47,6 +47,16 @@ export interface ResultadoRecompensaDispositivo {
   reciboId?: string;
 }
 
+export interface DispositivoBloqueadoInfo {
+  bloqueado: boolean;
+  motivo?: string;
+  deudaMonedas?: number;
+  fechaBloqueo?: string;
+  fechaLimitePago?: string;
+  diasRestantes?: number;
+  uidPropietario?: string;
+}
+
 export interface EstadoLimiteDispositivo {
   deviceId: string;
   anunciosVistosHoy: number;
@@ -54,4 +64,9 @@ export interface EstadoLimiteDispositivo {
   limiteAlcanzado: boolean;
   fechaUltimoAnuncio: string;
   totalAnunciosHistoricos: number;
+  bloqueado?: boolean;
+  motivoBloqueo?: string;
+  fechaLimitePago?: string;
+  diasRestantes?: number;
+  deudaMonedas?: number;
 }

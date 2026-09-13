@@ -17,6 +17,108 @@ export const MONEDAS_POR_DEFECTO = 10;
 /** Nombre de la colección en Firestore para control de dispositivos */
 export const COLECCION_DEVICE_AD_LIMITS = "device_ad_limits";
 
+/** Nombre de la colección para dispositivos bloqueados por contracargos/fraude */
+export const COLECCION_DISPOSITIVOS_BLOQUEADOS = "dispositivos_bloqueados";
+
+/**
+ * Consulta si un dispositivo físico está bloqueado por reembolso o fraude
+ */
+export const verificarBloqueoDispositivoService = async (
+  deviceId: string,
+): Promise<{
+  bloqueado: boolean;
+  motivo?: string;
+  deudaMonedas?: number;
+  fechaBloqueo?: string;
+  fechaLimitePago?: string;
+  diasRestantes?: number;
+  uidPropietario?: string;
+}> => {
+  if (!deviceId || typeof deviceId !== "string" || deviceId.trim() === "") {
+    return { bloqueado: false };
+  }
+
+  try {
+    const cleanDeviceId = deviceId.trim();
+    const snap = await db.collection(COLECCION_DISPOSITIVOS_BLOQUEADOS).doc(cleanDeviceId).get();
+
+    if (!snap.exists) {
+      return { bloqueado: false };
+    }
+
+    const data = snap.data() || {};
+    if (!data.bloqueado) {
+      return { bloqueado: false };
+    }
+
+    const ahora = Date.now();
+    const fechaLimiteMs = data.fechaLimitePago ? new Date(data.fechaLimitePago).getTime() : ahora;
+    const diasRestantes = Math.max(0, Math.ceil((fechaLimiteMs - ahora) / (1000 * 60 * 60 * 24)));
+
+    return {
+      bloqueado: true,
+      motivo: data.motivo || "Dispositivo bloqueado por reembolso no autorizado. Tienes un plazo de 15 días para regularizar el pago.",
+      deudaMonedas: Number(data.deudaMonedas || 0),
+      fechaBloqueo: data.fechaBloqueo || "",
+      fechaLimitePago: data.fechaLimitePago || "",
+      diasRestantes,
+      uidPropietario: data.uidPropietario || "",
+    };
+  } catch (_e) {
+    return { bloqueado: false };
+  }
+};
+
+/**
+ * Bloquea un dispositivo físico con un plazo de 15 días para regularizar el pago
+ */
+export const bloquearDispositivoService = async (params: {
+  deviceId: string;
+  uid: string;
+  deudaMonedas: number;
+  motivo?: string;
+}): Promise<void> => {
+  const { deviceId, uid, deudaMonedas, motivo } = params;
+  if (!deviceId) return;
+
+  const cleanDeviceId = deviceId.trim();
+  const ahora = new Date();
+  const fechaLimite = new Date(ahora.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+  await db.collection(COLECCION_DISPOSITIVOS_BLOQUEADOS).doc(cleanDeviceId).set({
+    deviceId: cleanDeviceId,
+    uidPropietario: uid,
+    bloqueado: true,
+    deudaMonedas,
+    motivo: motivo || "Dispositivo bloqueado por reembolso no autorizado. Plazo de 15 días para regularizar el pago.",
+    fechaBloqueo: ahora.toISOString(),
+    fechaLimitePago: fechaLimite,
+    diasPlazo: 15,
+    pagado: false,
+    fechaActualizacion: ahora.toISOString(),
+  }, { merge: true });
+
+  console.warn(`🔒 [Device Ban] Dispositivo '${cleanDeviceId}' BLOQUEADO por 15 días (Deuda: ${deudaMonedas} monedas).`);
+};
+
+/**
+ * Desbloquea un dispositivo físico cuando el usuario regulariza el pago
+ */
+export const desbloquearDispositivoService = async (
+  deviceId: string,
+): Promise<boolean> => {
+  if (!deviceId) return false;
+  const cleanDeviceId = deviceId.trim();
+  await db.collection(COLECCION_DISPOSITIVOS_BLOQUEADOS).doc(cleanDeviceId).set({
+    bloqueado: false,
+    pagado: true,
+    fechaDesbloqueo: new Date().toISOString(),
+    fechaActualizacion: new Date().toISOString(),
+  }, { merge: true });
+  console.log(`🔓 [Device Unban] Dispositivo '${cleanDeviceId}' DESBLOQUEADO.`);
+  return true;
+};
+
 /**
  * Obtiene la fecha actual en formato "YYYY-MM-DD" en UTC
  * para garantizar consistencia horaria global entre clientes y servidor.
@@ -39,6 +141,7 @@ export const consultarEstadoLimiteDispositivoService = async (
   }
 
   const cleanDeviceId = deviceId.trim();
+  const infoBloqueo = await verificarBloqueoDispositivoService(cleanDeviceId);
   const deviceRef = db.collection(COLECCION_DEVICE_AD_LIMITS).doc(cleanDeviceId);
   const docSnap = await deviceRef.get();
 
@@ -52,6 +155,11 @@ export const consultarEstadoLimiteDispositivoService = async (
       limiteAlcanzado: false,
       fechaUltimoAnuncio: hoyStr,
       totalAnunciosHistoricos: 0,
+      bloqueado: infoBloqueo.bloqueado,
+      motivoBloqueo: infoBloqueo.motivo,
+      fechaLimitePago: infoBloqueo.fechaLimitePago,
+      diasRestantes: infoBloqueo.diasRestantes,
+      deudaMonedas: infoBloqueo.deudaMonedas,
     };
   }
 
@@ -69,6 +177,11 @@ export const consultarEstadoLimiteDispositivoService = async (
     limiteAlcanzado: anunciosVistosHoy >= MAX_ANUNCIOS_POR_DISPOSITIVO_DIA,
     fechaUltimoAnuncio: fechaUltimo,
     totalAnunciosHistoricos: Number(data.totalAnunciosHistoricos || 0),
+    bloqueado: infoBloqueo.bloqueado,
+    motivoBloqueo: infoBloqueo.motivo,
+    fechaLimitePago: infoBloqueo.fechaLimitePago,
+    diasRestantes: infoBloqueo.diasRestantes,
+    deudaMonedas: infoBloqueo.deudaMonedas,
   };
 };
 
@@ -101,6 +214,12 @@ export const validarYProcesarRecompensaDispositivoService = async (
   const cleanUid = uid.trim();
   const cleanDeviceId = deviceId.trim();
   const cleanAdId = adId ? adId.trim() : undefined;
+
+  // Validar si el dispositivo físico está bloqueado por contracargo/reembolso
+  const infoBloqueo = await verificarBloqueoDispositivoService(cleanDeviceId);
+  if (infoBloqueo.bloqueado) {
+    throw new Error(`Dispositivo bloqueado por reembolso no autorizado. Plazo de 15 días (${infoBloqueo.diasRestantes || 0} días restantes) para regularizar tu pago de ${infoBloqueo.deudaMonedas || 0} monedas.`);
+  }
 
   // Si se envió adId, validar anti-replay preventivo fuera de la transacción
   if (cleanAdId) {

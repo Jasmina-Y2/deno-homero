@@ -7,6 +7,7 @@ import {
 } from "../models/comprasApp.model.ts";
 import { enviarPushAUsuario } from "./notification.service.ts";
 import { obtenerDocRefUsuario } from "./propina.service.ts";
+import { bloquearDispositivoService } from "./deviceAdLimit.service.ts";
 
 /**
  * Catálogo exhaustivo de paquetes de monedas conocidos y mapeo por ID de producto.
@@ -661,6 +662,92 @@ export const procesarReembolsoCompraApp = async (params: {
       }, { merge: true });
     }
   } catch (_eTransUpdate) {}
+
+  // 4. CASCADE ANTI-FRAUDE: Si el usuario gastó monedas donando a otros creadores,
+  // banear al usuario, bloquear su DISPOSITIVO físico por 15 días y anular TODAS las propinas/donaciones enviadas por él.
+  try {
+    const uDocSnap = await userRef.get();
+    const uDocData = uDocSnap.exists ? uDocSnap.data() : {};
+    const deviceIdUsuario = uDocData.sistema?.ultimoDeviceId || uDocData.ultimoDeviceId;
+    const fechaLimite15Dias = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Banear al usuario infractor y fijar plazo de 15 días
+    await userRef.update({
+      "sistema.activo": false,
+      "sistema.baneado": true,
+      "sistema.motivoBan": "Fraude por reembolso/contracargo de compra en Google Play",
+      "sistema.fechaBan": fechaActual,
+      "sistema.dispositivoBloqueado": true,
+      "sistema.fechaLimitePago": fechaLimite15Dias,
+      "sistema.deudaMonedas": cantidadARevertir,
+      "sistema.fechaActualizacion": fechaActual,
+    });
+    console.warn(`🚫 [Anti-Fraude] Usuario ${targetUid} BANEADO por reembolso de Google Play. Plazo límite: ${fechaLimite15Dias}`);
+
+    // Bloquear el dispositivo físico (Hardware ID) por 15 días en la colección 'dispositivos_bloqueados'
+    if (deviceIdUsuario) {
+      await bloquearDispositivoService({
+        deviceId: deviceIdUsuario,
+        uid: targetUid,
+        deudaMonedas: cantidadARevertir,
+        motivo: `Dispositivo bloqueado por reembolso no autorizado de ${cantidadARevertir} monedas. Plazo de 15 días para regularizar pago.`,
+      });
+    }
+
+    // Buscar todas las donaciones/propinas enviadas por este usuario
+    const propinasSnap = await db.collection("transactions")
+      .where("idOyente", "==", targetUid)
+      .where("tipo", "==", "propina")
+      .where("estado", "==", "completado")
+      .get();
+
+    for (const docPropina of propinasSnap.docs) {
+      const pData = docPropina.data();
+      const creadorId = pData.idCreador;
+      const montoDonado = Number(pData.cantidadMonedas || 0);
+
+      // Marcar la transacción como anulada
+      await docPropina.ref.set({
+        estado: "anulado",
+        motivo: "Donación anulada por baneo del emisor (Reembolso de compra fraudulento)",
+        descripcion: `🚫 Donación Anulada (-${montoDonado} monedas por emisor baneado)`,
+        fechaAnulacion: fechaActual,
+        fechaActualizacion: fechaActual,
+      }, { merge: true });
+
+      // Descontar las monedas fraudulentas de la billetera del creador para proteger retiros reales
+      if (creadorId && montoDonado > 0) {
+        try {
+          const creadorRef = await obtenerDocRefUsuario(creadorId);
+          await db.runTransaction(async (t: any) => {
+            const cDoc = await t.get(creadorRef);
+            if (!cDoc.exists) return;
+            const cData = cDoc.data() || {};
+            const saldoActualCreador = Number(cData.billetera?.walletBalance ?? cData.walletBalance ?? 0);
+            const nuevoSaldoCreador = Math.max(0, (isNaN(saldoActualCreador) ? 0 : saldoActualCreador) - montoDonado);
+
+            t.update(creadorRef, {
+              "billetera.walletBalance": nuevoSaldoCreador,
+              walletBalance: nuevoSaldoCreador,
+              "sistema.fechaActualizacion": fechaActual,
+            });
+          });
+
+          // Notificar al creador del ajuste de seguridad
+          enviarPushAUsuario(
+            creadorId,
+            "⚠️ Donación Anulada",
+            `Se han descontado ${montoDonado} monedas recibidas de un usuario que fue suspendido por reembolso fraudulento en Google Play.`,
+            { tipo: "donacion_anulada", cantidadMonedas: String(montoDonado) },
+          ).catch(() => {});
+        } catch (errCr) {
+          console.error(`Error al revertir donación al creador ${creadorId}:`, errCr);
+        }
+      }
+    }
+  } catch (errCascade) {
+    console.error("Error en cascada anti-fraude de donaciones:", errCascade);
+  }
 
   console.log(
     `💸 [Compras App] Compra ${targetCompraId} REEMBOLSADA. Usuario: ${targetUid} (-${cantidadARevertir} monedas). Nuevo saldo: ${resultado.nuevoSaldo}`,

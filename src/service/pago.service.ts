@@ -96,6 +96,11 @@ export const solicitarRetiroService = async (
     const homeroDoc = await transaction.get(homeroRef);
 
     const usuarioData = usuarioDoc.data() || {};
+
+    if (usuarioData.sistema?.baneado === true || usuarioData.sistema?.activo === false) {
+      throw new Error("Tu cuenta se encuentra suspendida por actividad fraudulenta y no puede realizar retiros.");
+    }
+
     const rawSaldoUsuario = usuarioData.billetera?.walletBalance ?? usuarioData.walletBalance ?? 0;
     const saldoActualUsuario = Number(rawSaldoUsuario);
 
