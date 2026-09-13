@@ -144,6 +144,14 @@ import {
   obtenerTodosPagosController,
   solicitarRetiroController,
 } from "../controllers/pago.controller.ts";
+import {
+  actualizarEstadoCompraController,
+  obtenerCompraPorIdController,
+  obtenerComprasUsuarioController,
+  obtenerTodasComprasController,
+  registrarCompraManualController,
+  reintentarCompraController,
+} from "../controllers/comprasApp.controller.ts";
 
 const router = new Router();
 
@@ -322,6 +330,16 @@ router.get("/api/pagos/:id", obtenerPagoPorIdController);
 router.put("/api/pagos/:id/estado", actualizarEstadoPagoController);
 router.get("/api/historial/:uid", obtenerHistorialController);
 router.get("/api/ranking", obtenerRankingController);
+
+// ============================================================================
+// COMPRAS DE LA APP (IN-APP PURCHASES - REVENUECAT / GOOGLE PLAY)
+// ============================================================================
+router.get("/api/compras-app", obtenerTodasComprasController);
+router.get("/api/compras-app/usuario/:uid", obtenerComprasUsuarioController);
+router.get("/api/compras-app/:id", obtenerCompraPorIdController);
+router.post("/api/compras-app/:id/reintentar", reintentarCompraController);
+router.put("/api/compras-app/:id/estado", actualizarEstadoCompraController);
+router.post("/api/compras-app/manual", registrarCompraManualController);
 
 // ============================================================================
 // RECOMPENSAS DE ANUNCIOS Y CONTROL DE DISPOSITIVOS FÍSICOS

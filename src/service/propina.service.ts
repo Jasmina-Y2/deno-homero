@@ -291,6 +291,14 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
         totalGanancias += cantidad;
         contraparteUid = t.idRemitente || "";
         descripcion = "Reembolso por solicitud de retiro cancelada/rechazada";
+      } else if (t.tipo === "compra_monedas") {
+        tipoMovimiento = "ganancia";
+        totalGanancias += cantidad;
+        descripcion = t.descripcion || `Compra de paquete de monedas (+${cantidad} monedas 🪙)`;
+      } else if (t.tipo === "reembolso_compra") {
+        tipoMovimiento = "gasto";
+        totalGastos += cantidad;
+        descripcion = t.descripcion || `Reembolso de compra de monedas (-${cantidad} monedas 🔄)`;
       } else if (esRecompensa) {
         tipoMovimiento = "recompensa";
         totalRecompensas += cantidad;
@@ -670,24 +678,49 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     }
   }
 
-  // 2. Determinar cantidad de monedas según productId
+  // 2. Determinar cantidad de monedas con resolución robusta
   let cantidadMonedas = params.monedasManual || 0;
   if (!cantidadMonedas) {
-    const match = productId.match(/(\d+)/);
-    if (match) {
-      cantidadMonedas = parseInt(match[1], 10);
+    const MAPA_MONEDAS: Record<string, number> = {
+      "coins_50": 50,
+      "coins_100": 100,
+      "coins_200": 200,
+      "coins_300": 300,
+      "coins_400": 400,
+      "coins_500": 500,
+      "coins_1000": 1000,
+      "coins_2500": 2500,
+      "coins_5000": 5000,
+      "homero_coins_400": 400,
+      "paquete_400": 400,
+      "paquete_400_monedas": 400,
+      "coins_tier_1": 100,
+      "coins_tier_2": 400,
+      "coins_tier_3": 1000,
+      "coins_tier_4": 2500,
+      "coins_tier_5": 5000,
+      "paquete_basico": 100,
+      "paquete_pro": 500,
+      "paquete_master": 1000,
+      "paquete_legendario": 2500,
+    };
+
+    const pLower = productId.toLowerCase().trim();
+    if (MAPA_MONEDAS[pLower]) {
+      cantidadMonedas = MAPA_MONEDAS[pLower];
     } else {
-      const MAPA_MONEDAS: Record<string, number> = {
-        "coins_tier_1": 100,
-        "coins_tier_2": 500,
-        "coins_tier_3": 1000,
-        "coins_tier_4": 2500,
-        "coins_tier_5": 5000,
-        "paquete_basico": 100,
-        "paquete_pro": 500,
-        "paquete_master": 1000,
-      };
-      cantidadMonedas = MAPA_MONEDAS[productId.toLowerCase()] || 100;
+      const match = pLower.match(/(?:coins|monedas|pack|paquete)[_\s-]*(\d{2,6})|(\d{2,6})[_\s-]*(?:coins|monedas|pack|paquete)/i);
+      if (match) {
+        cantidadMonedas = parseInt(match[1] || match[2], 10);
+      } else {
+        const todosNumeros = pLower.match(/\d+/g);
+        if (todosNumeros && todosNumeros.length > 0) {
+          const candidatos = todosNumeros.map((n) => parseInt(n, 10)).filter((n) => !isNaN(n) && n >= 10);
+          cantidadMonedas = candidatos.length > 0 ? Math.max(...candidatos) : 100;
+        } else {
+          cantidadMonedas = 100;
+        }
+      }
     }
   }
 
