@@ -17,9 +17,18 @@ export interface ReciboTransaccion {
   publicacionId?: string;
   cantidadMonedas: number;
   tipoSticker?: string;
-  tipo: "propina" | "recompensa_anuncio" | "recarga" | "solicitud_retiro" | "retiro" | "reembolso_retiro";
+  tipo:
+    | "propina"
+    | "recompensa_anuncio"
+    | "compra_monedas"
+    | "reembolso_compra"
+    | "recarga"
+    | "solicitud_retiro"
+    | "retiro"
+    | "reembolso_retiro"
+    | string;
   fecha: string;
-  estado: "completado" | "fallido";
+  estado: "completado" | "fallido" | string;
   saldoAnteriorOyente?: number;
   nuevoSaldoOyente?: number;
   saldoAnteriorCreador?: number;
@@ -27,6 +36,7 @@ export interface ReciboTransaccion {
   adId?: string;
   adNetwork?: string;
   deviceId?: string;
+  descripcion?: string;
   [key: string]: any;
 }
 
@@ -64,4 +74,6 @@ export interface RecompensaAnuncioDto {
   deviceId?: string;
   cantidadMonedas?: number;
   adNetwork?: string;
+  tipo?: string;
+  productId?: string;
 }

@@ -193,3 +193,9 @@ Deno.test("RevenueCat Webhook: Evento sin app_user_id responde 200 con aviso", a
     "Evento recibido pero sin app_user_id asociado",
   );
 });
+
+Deno.test("Detección Compras: Identificadores tipo 'buy_basico_...' se resuelven como paquetes de compras", () => {
+  assertEquals(resolverCantidadMonedas("buy_basico_1789270519526", 50), 50);
+  assertEquals(resolverCantidadMonedas("buy_400_coins_1789270519526"), 400);
+  assertEquals(resolverCantidadMonedas("buy_paquete_500_monedas"), 500);
+});

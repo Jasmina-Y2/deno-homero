@@ -114,11 +114,18 @@ export const validarYProcesarRecompensaDispositivoService = async (
     }
   }
 
-  // Establecer recompensa segura de monedas (mínimo 1, máximo 50, default 10)
-  const monedasOtorgadas = Math.min(
-    Math.max(Number(cantidadMonedas ?? MONEDAS_POR_DEFECTO), 1),
-    50,
-  );
+  // Detección automática de compra en la aplicación
+  const esCompra =
+    (params as any).tipo === "compra_monedas" ||
+    (params as any).tipo === "compras_app" ||
+    (params as any).tipo === "compra" ||
+    Boolean(cleanAdId && (cleanAdId.startsWith("buy_") || cleanAdId.startsWith("compra_") || cleanAdId.startsWith("paquete_") || cleanAdId.startsWith("coins_") || cleanAdId.startsWith("monedas_"))) ||
+    Boolean(adNetwork && (adNetwork.includes("inapp") || adNetwork.includes("google") || adNetwork.includes("store")));
+
+  // Si es compra, entregar la cantidad completa sin limitar a 50 monedas
+  const monedasOtorgadas = esCompra
+    ? Math.max(1, Number(cantidadMonedas || 50))
+    : Math.min(Math.max(Number(cantidadMonedas ?? MONEDAS_POR_DEFECTO), 1), 50);
 
   // Obtener referencia al documento del usuario
   const userRef = await obtenerDocRefUsuario(cleanUid);
@@ -149,7 +156,7 @@ export const validarYProcesarRecompensaDispositivoService = async (
     const nuevoSaldo = (isNaN(saldoActual) ? 0 : saldoActual) + monedasOtorgadas;
 
     // -----------------------------------------------------------------
-    // FASE 2: EVALUACIÓN DE REGLAS DE NEGOCIO Y LÍMITE POR DISPOSITIVO
+    // FASE 2: EVALUACIÓN DE REGLAS DE NEGOCIO Y LÍMITE POR DISPOSITIVO (SOLO ANUNCIOS)
     // -----------------------------------------------------------------
     let anunciosVistosHoy = 0;
     let totalHistorico = 0;
@@ -171,16 +178,16 @@ export const validarYProcesarRecompensaDispositivoService = async (
       }
     }
 
-    // ⛔ RECHAZO INMEDIATO: Si ya vio 3 anuncios hoy en este dispositivo
-    if (anunciosVistosHoy >= MAX_ANUNCIOS_POR_DISPOSITIVO_DIA) {
+    // ⛔ RECHAZO INMEDIATO: Si ya vio 3 anuncios hoy en este dispositivo (solo para anuncios)
+    if (!esCompra && anunciosVistosHoy >= MAX_ANUNCIOS_POR_DISPOSITIVO_DIA) {
       throw new Error(
         `El dispositivo ha alcanzado el límite diario de ${MAX_ANUNCIOS_POR_DISPOSITIVO_DIA} anuncios. No se pueden otorgar más monedas hoy.`,
       );
     }
 
     // Calcular nuevos valores
-    const nuevoConteoHoy = anunciosVistosHoy + 1;
-    const nuevoTotalHistorico = totalHistorico + 1;
+    const nuevoConteoHoy = esCompra ? anunciosVistosHoy : (anunciosVistosHoy + 1);
+    const nuevoTotalHistorico = esCompra ? totalHistorico : (totalHistorico + 1);
 
     if (!uidsList.includes(cleanUid)) {
       uidsList.push(cleanUid);
@@ -222,21 +229,46 @@ export const validarYProcesarRecompensaDispositivoService = async (
     });
 
     // 3. Registrar comprobante en "transactions"
+    const tipoTransaccion = esCompra ? "compra_monedas" : "recompensa_anuncio";
+    const descripcionTransaccion = esCompra
+      ? `Compras en la aplicación (+${monedasOtorgadas} monedas 🪙)`
+      : `Recompensa por video de anuncio (${adNetwork || "AdMob"})`;
+
     const recibo: ReciboTransaccion = {
       id: transactionRef.id,
       idUsuario: cleanUid,
       deviceId: cleanDeviceId,
-      tipo: "recompensa_anuncio",
-      adId: cleanAdId || `ad_${Date.now()}_${cleanDeviceId.slice(0, 6)}`,
-      adNetwork: adNetwork || "admob",
+      tipo: tipoTransaccion,
+      adId: cleanAdId || (esCompra ? `buy_${Date.now()}` : `ad_${Date.now()}_${cleanDeviceId.slice(0, 6)}`),
+      adNetwork: esCompra ? "inapp" : (adNetwork || "admob"),
       cantidadMonedas: monedasOtorgadas,
       fecha: ahoraIso,
       estado: "completado",
       saldoAnteriorOyente: saldoActual,
       nuevoSaldoOyente: nuevoSaldo,
+      descripcion: descripcionTransaccion,
     };
 
     transaction.set(transactionRef, recibo);
+
+    // 4. Si es compra, registrar también en compras_app
+    if (esCompra) {
+      const compraRef = db.collection("compras_app").doc(transactionRef.id);
+      transaction.set(compraRef, {
+        id: transactionRef.id,
+        idUsuario: cleanUid,
+        productId: cleanAdId || "paquete_monedas",
+        tipoItem: "monedas",
+        cantidadMonedas: monedasOtorgadas,
+        estado: "concluido",
+        reembolsado: false,
+        fechaCreacion: ahoraIso,
+        fechaActualizacion: ahoraIso,
+        fechaConclusion: ahoraIso,
+        saldoAnterior: saldoActual,
+        nuevoSaldo: nuevoSaldo,
+      });
+    }
 
     return {
       exito: true,
@@ -251,9 +283,15 @@ export const validarYProcesarRecompensaDispositivoService = async (
     };
   });
 
-  console.log(
-    `📱 [Device Ad Limit] Device "${cleanDeviceId}" acreditó +${monedasOtorgadas} monedas a UID "${cleanUid}". Vistos hoy: ${resultado.anunciosVistosHoy}/${MAX_ANUNCIOS_POR_DISPOSITIVO_DIA}. Nuevo saldo: ${resultado.nuevoSaldo}`,
-  );
+  if (esCompra) {
+    console.log(
+      `🛒 [Compras App] Device "${cleanDeviceId}" procesó compra de +${monedasOtorgadas} monedas a UID "${cleanUid}" (${cleanAdId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
+    );
+  } else {
+    console.log(
+      `📱 [Device Ad Limit] Device "${cleanDeviceId}" acreditó +${monedasOtorgadas} monedas a UID "${cleanUid}". Vistos hoy: ${resultado.anunciosVistosHoy}/${MAX_ANUNCIOS_POR_DISPOSITIVO_DIA}. Nuevo saldo: ${resultado.nuevoSaldo}`,
+    );
+  }
 
   return resultado;
 };

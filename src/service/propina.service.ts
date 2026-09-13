@@ -281,6 +281,12 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
       let contraparteUid = "";
       let descripcion = "";
 
+      const esCompraIdentificada =
+        t.tipo === "compra_monedas" ||
+        t.tipo === "compras_app" ||
+        t.tipo === "compra" ||
+        (typeof t.adId === "string" && (t.adId.startsWith("buy_") || t.adId.startsWith("compra_") || t.adId.startsWith("paquete_") || t.adId.startsWith("coins_")));
+
       if (t.tipo === "solicitud_retiro" || t.tipo === "retiro") {
         tipoMovimiento = "gasto";
         totalGastos += cantidad;
@@ -291,10 +297,10 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
         totalGanancias += cantidad;
         contraparteUid = t.idRemitente || "";
         descripcion = "Reembolso por solicitud de retiro cancelada/rechazada";
-      } else if (t.tipo === "compra_monedas") {
+      } else if (esCompraIdentificada) {
         tipoMovimiento = "ganancia";
         totalGanancias += cantidad;
-        descripcion = t.descripcion || `Compra de paquete de monedas (+${cantidad} monedas 🪙)`;
+        descripcion = t.descripcion || `Compras en la aplicación (+${cantidad} monedas 🪙)`;
       } else if (t.tipo === "reembolso_compra") {
         tipoMovimiento = "gasto";
         totalGastos += cantidad;
@@ -484,8 +490,22 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     throw new Error("Esta recompensa de anuncio ya fue reclamada");
   }
 
-  // Establecer recompensa segura de monedas (entre 1 y 50 monedas, default 10)
-  const monedasOtorgadas = Math.min(Math.max(Number(datos.cantidadMonedas || 10), 1), 50);
+  // Detección automática de si la petición corresponde a una compra en la aplicación
+  const esCompra =
+    datos.tipo === "compra_monedas" ||
+    datos.tipo === "compras_app" ||
+    datos.tipo === "compra" ||
+    cleanAdId.startsWith("buy_") ||
+    cleanAdId.startsWith("compra_") ||
+    cleanAdId.startsWith("paquete_") ||
+    cleanAdId.startsWith("coins_") ||
+    cleanAdId.startsWith("monedas_") ||
+    Boolean(adNetwork && (adNetwork.includes("inapp") || adNetwork.includes("google") || adNetwork.includes("store")));
+
+  // Si es compra, entregar la cantidad completa sin limitar a 50 monedas
+  const monedasOtorgadas = esCompra
+    ? Math.max(1, Number(datos.cantidadMonedas || 50))
+    : Math.min(Math.max(Number(datos.cantidadMonedas || 10), 1), 50);
 
   const userRef = await obtenerDocRefUsuario(cleanUid);
   const deviceRef = cleanDeviceId ? db.collection("device_ad_limits").doc(cleanDeviceId) : null;
@@ -510,12 +530,11 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     const saldoActual = Number(userData.billetera?.walletBalance ?? userData.walletBalance ?? 0);
     const nuevoSaldo = (isNaN(saldoActual) ? 0 : saldoActual) + monedasOtorgadas;
 
-    // --- FASE 2: VALIDACIÓN DE LÍMITES DIARIOS (MÁX 3/DÍA) ---
+    // --- FASE 2: VALIDACIÓN DE LÍMITES DIARIOS (SOLO PARA ANUNCIOS, NO PARA COMPRAS) ---
     let anunciosVistosHoy = 0;
     let totalHistoricoDispositivo = 0;
     let uidsList: string[] = [];
 
-    // Si hay deviceId, el límite prioritario es el del hardware/dispositivo
     if (deviceDoc && deviceDoc.exists) {
       const deviceData = deviceDoc.data() || {};
       const fechaUltimoDevice = deviceData.fechaUltimoAnuncio || "";
@@ -528,7 +547,6 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
         anunciosVistosHoy = 0;
       }
     } else if (!deviceDoc) {
-      // Fallback a nivel de usuario si no se envió deviceId
       const fechaUltimoAnuncio = userData.actividadDiaria?.fechaUltimoAnuncio || userData.fechaUltimoAnuncio || "";
       if (fechaUltimoAnuncio === hoyStr) {
         anunciosVistosHoy = Number(userData.actividadDiaria?.anunciosVistosHoy ?? userData.anunciosVistosHoy ?? 0);
@@ -537,8 +555,8 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       }
     }
 
-    // ⛔ Validar límite diario (máximo 3 anuncios por día)
-    if (anunciosVistosHoy >= 3) {
+    // ⛔ Si es anuncio real, validar límite diario (máximo 3 anuncios por día)
+    if (!esCompra && anunciosVistosHoy >= 3) {
       if (cleanDeviceId) {
         throw new Error("El dispositivo ha alcanzado el límite de 3 anuncios por hoy. Vuelve mañana.");
       } else {
@@ -546,8 +564,8 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       }
     }
 
-    const nuevoConteoHoy = anunciosVistosHoy + 1;
-    const nuevoTotalHistorico = totalHistoricoDispositivo + 1;
+    const nuevoConteoHoy = esCompra ? anunciosVistosHoy : (anunciosVistosHoy + 1);
+    const nuevoTotalHistorico = esCompra ? totalHistoricoDispositivo : (totalHistoricoDispositivo + 1);
 
     if (cleanDeviceId && !uidsList.includes(cleanUid)) {
       uidsList.push(cleanUid);
@@ -569,7 +587,7 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       }, { merge: true });
     }
 
-    // 2. Actualizar usuario con saldo y nuevo conteo diario
+    // 2. Actualizar usuario con saldo
     transaction.update(userRef, {
       "billetera.walletBalance": nuevoSaldo,
       "actividadDiaria.fechaUltimoAnuncio": hoyStr,
@@ -583,21 +601,46 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     });
 
     // 3. Guardar recibo en transactions
+    const tipoTransaccion = esCompra ? "compra_monedas" : "recompensa_anuncio";
+    const descripcionTransaccion = esCompra
+      ? `Compras en la aplicación (+${monedasOtorgadas} monedas 🪙)`
+      : `Recompensa por video de anuncio (${adNetwork || "AdMob"})`;
+
     const recibo: ReciboTransaccion = {
       id: transactionRef.id,
       idUsuario: cleanUid,
       ...(cleanDeviceId ? { deviceId: cleanDeviceId } : {}),
-      tipo: "recompensa_anuncio",
+      tipo: tipoTransaccion,
       adId: cleanAdId,
-      adNetwork: adNetwork || "admob",
+      adNetwork: esCompra ? "inapp" : (adNetwork || "admob"),
       cantidadMonedas: monedasOtorgadas,
       fecha: fechaActual,
       estado: "completado",
       saldoAnteriorOyente: saldoActual,
       nuevoSaldoOyente: nuevoSaldo,
+      descripcion: descripcionTransaccion,
     };
 
     transaction.set(transactionRef, recibo);
+
+    // 4. Si es compra, guardar también en compras_app para trazabilidad
+    if (esCompra) {
+      const compraRef = db.collection("compras_app").doc(transactionRef.id);
+      transaction.set(compraRef, {
+        id: transactionRef.id,
+        idUsuario: cleanUid,
+        productId: cleanAdId,
+        tipoItem: "monedas",
+        cantidadMonedas: monedasOtorgadas,
+        estado: "concluido",
+        reembolsado: false,
+        fechaCreacion: fechaActual,
+        fechaActualizacion: fechaActual,
+        fechaConclusion: fechaActual,
+        saldoAnterior: saldoActual,
+        nuevoSaldo: nuevoSaldo,
+      });
+    }
 
     return {
       nuevoSaldo,
@@ -608,9 +651,15 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     };
   });
 
-  console.log(
-    `🎬 [Anuncio Recompensado] Usuario ${cleanUid} (Device: ${cleanDeviceId || "N/A"}) recibió +${monedasOtorgadas} monedas (adId: ${cleanAdId}). Vistos hoy: ${resultado.anunciosVistosHoy}/3. Nuevo saldo: ${resultado.nuevoSaldo}`,
-  );
+  if (esCompra) {
+    console.log(
+      `🛒 [Compra en la Aplicación] Usuario ${cleanUid} recibió +${monedasOtorgadas} monedas (productId: ${cleanAdId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
+    );
+  } else {
+    console.log(
+      `🎬 [Anuncio Recompensado] Usuario ${cleanUid} (Device: ${cleanDeviceId || "N/A"}) recibió +${monedasOtorgadas} monedas (adId: ${cleanAdId}). Vistos hoy: ${resultado.anunciosVistosHoy}/3. Nuevo saldo: ${resultado.nuevoSaldo}`,
+    );
+  }
 
   return resultado;
 };
