@@ -869,7 +869,7 @@ export const obtenerCompraPorIdService = async (
 export const reintentarCompraProblemaService = async (
   compraId: string,
   monedasManual?: number,
-): Promise<{ success: boolean; compra: CompraApp; message: string }> => {
+): Promise<{ success: boolean; compra: CompraApp; nuevoSaldo?: number; message: string }> => {
   const compra = await obtenerCompraPorIdService(compraId);
   if (!compra) {
     throw new Error(`Compra no encontrada: ${compraId}`);
@@ -879,6 +879,7 @@ export const reintentarCompraProblemaService = async (
     return {
       success: true,
       compra,
+      nuevoSaldo: compra.nuevoSaldo || 0,
       message: "La compra ya se encuentra en estado concluido.",
     };
   }
@@ -891,6 +892,7 @@ export const reintentarCompraProblemaService = async (
   return {
     success: true,
     compra: resultado.compra,
+    nuevoSaldo: resultado.nuevoSaldo,
     message: `Compra ${compraId} acreditada exitosamente tras reintento.`,
   };
 };

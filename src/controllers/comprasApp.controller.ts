@@ -203,6 +203,7 @@ export const reintentarCompraController = async (ctx: Context) => {
       success: true,
       message: resultado.message,
       compra: resultado.compra,
+      nuevoSaldo: resultado.nuevoSaldo,
     };
   } catch (error: any) {
     console.error("❌ Error en reintentarCompraController:", error);
