@@ -216,8 +216,8 @@ export const guardarNotificacionEnBD = async (
       idDestinatario: uidDestinatario,
       uidUsuario: uidEmisor || "", // UID DEL EMISOR QUE REALIZÓ LA ACCIÓN (NUNCA el del destinatario)
       idUsuario: uidEmisor || "",
-      nombreUsuario: nombreEmisor || undefined,
-      fotoUsuario: fotoEmisor || undefined,
+      nombreUsuario: nombreEmisor || "",
+      fotoUsuario: fotoEmisor || "",
       titulo,
       mensaje: mensajeFinal,
       icono: ICONO_APP,

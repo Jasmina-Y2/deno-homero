@@ -386,3 +386,41 @@ export const registrarCompraPendienteController = async (ctx: Context) => {
     };
   }
 };
+
+/**
+ * Procesa o simula un reembolso para una compra específica o por UID.
+ * Endpoint: POST /api/compras-app/:id/reembolsar o POST /api/compras-app/reembolsar
+ */
+export const reembolsarCompraController = async (ctx: Context) => {
+  try {
+    const params = (ctx as any).params || {};
+    const id = params.id;
+    const body = await extraerBodyJson(ctx);
+    const targetId = id || body.id || body.compraId || body.transaccionId;
+    const uid = body.uid || body.idUsuario;
+    const cantidadMonedas = body.cantidadMonedas ? Number(body.cantidadMonedas) : undefined;
+    const motivo = body.motivo || "Reembolso procesado en Google Play / Solicitud";
+
+    const resultado = await procesarReembolsoCompraApp({
+      compraId: targetId,
+      uid,
+      cantidadMonedas,
+      motivoReembolso: motivo,
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: resultado.message,
+      data: resultado,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en reembolsarCompraController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al procesar el reembolso",
+      error: error?.message || "Error desconocido",
+    };
+  }
+};

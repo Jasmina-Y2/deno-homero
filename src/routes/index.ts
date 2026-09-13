@@ -149,6 +149,7 @@ import {
   obtenerCompraPorIdController,
   obtenerComprasUsuarioController,
   obtenerTodasComprasController,
+  reembolsarCompraController,
   registrarCompraManualController,
   registrarCompraPendienteController,
   reintentarCompraController,
@@ -278,6 +279,8 @@ router.post("/api/users/migrar-estructura", migrarEstructuraUsuariosController);
 // REVENUECAT WEBHOOK
 // ============================================================================
 router.post("/api/revenuecat-webhook", revenueCatWebhookController);
+router.post("/api/revenuecat/webhook", revenueCatWebhookController);
+router.post("/api/webhook/revenuecat", revenueCatWebhookController);
 
 // ============================================================================
 // SONIDOS
@@ -341,6 +344,8 @@ router.get("/api/compras-app/:id", obtenerCompraPorIdController);
 router.post("/api/compras-app/pendiente", registrarCompraPendienteController);
 router.post("/api/compras-app/iniciar", registrarCompraPendienteController);
 router.post("/api/compras-app/:id/reintentar", reintentarCompraController);
+router.post("/api/compras-app/:id/reembolsar", reembolsarCompraController);
+router.post("/api/compras-app/reembolsar", reembolsarCompraController);
 router.put("/api/compras-app/:id/estado", actualizarEstadoCompraController);
 router.post("/api/compras-app/manual", registrarCompraManualController);
 
