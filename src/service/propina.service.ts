@@ -299,8 +299,20 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
         descripcion = "Reembolso por solicitud de retiro cancelada/rechazada";
       } else if (esCompraIdentificada) {
         tipoMovimiento = "ganancia";
-        totalGanancias += cantidad;
-        descripcion = t.descripcion || `Compras en la aplicación (+${cantidad} monedas 🪙)`;
+        if (t.estado === "completado" || t.estado === "concluido") {
+          totalGanancias += cantidad;
+        }
+        if (t.estado === "pendiente") {
+          descripcion = t.descripcion || `Compra de monedas (+${cantidad} monedas - Pendiente en Google Play ⏳)`;
+        } else if (t.estado === "rechazado") {
+          descripcion = t.descripcion || `Compra rechazada por Google Play (${t.motivoProblema || "Pago no completado"} ❌)`;
+        } else if (t.estado === "problema") {
+          descripcion = t.descripcion || `Problema en compra de monedas (${t.motivoProblema || "En revisión"} ⚠️)`;
+        } else if (t.estado === "cancelado") {
+          descripcion = t.descripcion || `Compra cancelada en Google Play 🚫`;
+        } else {
+          descripcion = t.descripcion || `Compras en la aplicación (+${cantidad} monedas 🪙)`;
+        }
       } else if (t.tipo === "reembolso_compra") {
         tipoMovimiento = "gasto";
         totalGastos += cantidad;

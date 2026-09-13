@@ -199,3 +199,24 @@ Deno.test("Detección Compras: Identificadores tipo 'buy_basico_...' se resuelve
   assertEquals(resolverCantidadMonedas("buy_400_coins_1789270519526"), 400);
   assertEquals(resolverCantidadMonedas("buy_paquete_500_monedas"), 500);
 });
+
+// ----------------------------------------------------
+// 4. PRUEBAS DE REGISTRO DE COMPRA PENDIENTE (Google Play Slow Payment)
+// ----------------------------------------------------
+
+Deno.test("Compras App Controller: registrarCompraPendienteController requiere idUsuario o uid", async () => {
+  const { registrarCompraPendienteController } = await import("../controllers/comprasApp.controller.ts");
+  const ctx = createMockContext({
+    productId: "coins_400",
+    cantidadMonedas: 400,
+  });
+
+  await registrarCompraPendienteController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+  assertEquals(
+    ctx.response.body.message.includes("idUsuario"),
+    true,
+  );
+});

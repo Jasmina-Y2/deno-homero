@@ -324,3 +324,64 @@ export const registrarCompraManualController = async (ctx: Context) => {
     };
   }
 };
+
+/**
+ * Endpoint para registrar una compra inmediatamente en estado 'pendiente' cuando el usuario inicia el pago en Google Play o cuando está en verificación.
+ * Endpoint: POST /api/compras-app/pendiente o POST /api/compras-app/iniciar
+ */
+export const registrarCompraPendienteController = async (ctx: Context) => {
+  try {
+    const body = await extraerBodyJson(ctx);
+    const {
+      idUsuario,
+      productId,
+      cantidadMonedas,
+      precio,
+      moneda,
+      transactionIdStore,
+      store,
+    } = body || {};
+
+    const cleanUid = (idUsuario || body.uid || "").trim();
+
+    if (!cleanUid) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El campo 'idUsuario' (o 'uid') es requerido",
+      };
+      return;
+    }
+
+    const monedasAcreditar = cantidadMonedas || resolverCantidadMonedas(productId || "coins_100");
+
+    const { compra, esNuevo } = await crearRegistroCompraApp({
+      idUsuario: cleanUid,
+      productId: productId || `coins_${monedasAcreditar}`,
+      tipoItem: "monedas",
+      cantidadMonedas: monedasAcreditar,
+      transactionIdStore: transactionIdStore || null,
+      store: store || "PLAY_STORE",
+      entorno: "PRODUCTION",
+      precio: precio || null,
+      moneda: moneda || "USD",
+    });
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: esNuevo
+        ? "Transacción registrada exitosamente en estado 'pendiente' (procesando en Google Play)"
+        : "La transacción pendiente ya existía previamente",
+      compra,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en registrarCompraPendienteController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al registrar la compra pendiente",
+      error: error?.message || "Error desconocido",
+    };
+  }
+};

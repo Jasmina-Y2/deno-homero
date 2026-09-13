@@ -150,6 +150,7 @@ import {
   obtenerComprasUsuarioController,
   obtenerTodasComprasController,
   registrarCompraManualController,
+  registrarCompraPendienteController,
   reintentarCompraController,
 } from "../controllers/comprasApp.controller.ts";
 
@@ -337,6 +338,8 @@ router.get("/api/ranking", obtenerRankingController);
 router.get("/api/compras-app", obtenerTodasComprasController);
 router.get("/api/compras-app/usuario/:uid", obtenerComprasUsuarioController);
 router.get("/api/compras-app/:id", obtenerCompraPorIdController);
+router.post("/api/compras-app/pendiente", registrarCompraPendienteController);
+router.post("/api/compras-app/iniciar", registrarCompraPendienteController);
 router.post("/api/compras-app/:id/reintentar", reintentarCompraController);
 router.put("/api/compras-app/:id/estado", actualizarEstadoCompraController);
 router.post("/api/compras-app/manual", registrarCompraManualController);

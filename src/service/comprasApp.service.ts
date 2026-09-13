@@ -128,7 +128,7 @@ export const resolverCantidadMonedas = (
 };
 
 /**
- * Crea un nuevo registro en la colección 'compras_app' con estado 'pendiente'.
+ * Crea un nuevo registro en la colección 'compras_app' y 'transactions' con estado 'pendiente'.
  * Si el evento ya existía por idCompraRevenueCat o transactionIdStore, retorna el existente.
  */
 export const crearRegistroCompraApp = async (
@@ -210,7 +210,30 @@ export const crearRegistroCompraApp = async (
     rawEvent: datos.rawEvent || null,
   };
 
+  // 1. Guardar en 'compras_app'
   await docRef.set(nuevaCompra);
+
+  // 2. Guardar en 'transactions' con estado 'pendiente' para que el usuario lo vea de inmediato en el Historial
+  const descripcionPendiente = nuevaCompra.tipoItem === "suscripcion"
+    ? `Suscripción (${productId}) - Pendiente de confirmación en Google Play ⏳`
+    : `Compra de paquete de monedas (+${cantidadMonedas} monedas - Pendiente en Google Play ⏳)`;
+
+  await db.collection("transactions").doc(docRef.id).set({
+    id: docRef.id,
+    idUsuario: cleanUid,
+    tipo: "compra_monedas",
+    compraAppId: docRef.id,
+    idCompraRevenueCat: idCompraRevenueCat || null,
+    transactionIdStore: transactionIdStore || null,
+    productId: productId || "paquete_monedas",
+    cantidadMonedas,
+    fecha: fechaActual,
+    estado: "pendiente",
+    precio: datos.precio !== undefined ? datos.precio : null,
+    moneda: datos.moneda || "USD",
+    descripcion: descripcionPendiente,
+  }, { merge: true });
+
   console.log(
     `📝 [Compras App] Registro creado [PENDIENTE]: ${docRef.id} | UID: ${cleanUid} | Producto: ${productId} | Monedas: ${cantidadMonedas}`,
   );
@@ -223,7 +246,7 @@ export const crearRegistroCompraApp = async (
  * - Verifica usuario
  * - Suma monedas a su billetera
  * - Actualiza el estado de la compra a 'concluido'
- * - Registra la transacción en 'transactions'
+ * - Actualiza/Registra la transacción en 'transactions'
  * - Envía notificación push
  */
 export const procesarEntregaMonedasCompraApp = async (
@@ -260,7 +283,7 @@ export const procesarEntregaMonedasCompraApp = async (
     : (compraData.cantidadMonedas || resolverCantidadMonedas(compraData.productId));
 
   const fechaActual = new Date().toISOString();
-  const transactionRef = db.collection("transactions").doc();
+  const transactionRef = db.collection("transactions").doc(compraId);
 
   try {
     const resultado = await db.runTransaction(async (transaction: any) => {
@@ -275,7 +298,7 @@ export const procesarEntregaMonedasCompraApp = async (
       const saldoFinal = (isNaN(saldoActual) ? 0 : saldoActual) + cantidadMonedas;
 
       const recibo = {
-        id: transactionRef.id,
+        id: compraId,
         idUsuario: uid,
         tipo: "compra_monedas",
         idCompraRevenueCat: compraData.idCompraRevenueCat || null,
@@ -289,6 +312,7 @@ export const procesarEntregaMonedasCompraApp = async (
         nuevoSaldoOyente: saldoFinal,
         precio: compraData.precio || null,
         moneda: compraData.moneda || "USD",
+        descripcion: `Compras en la aplicación (+${cantidadMonedas} monedas 🪙)`,
       };
 
       // 1. Actualizar usuario
@@ -299,10 +323,10 @@ export const procesarEntregaMonedasCompraApp = async (
         fechaActualizacion: fechaActual,
       });
 
-      // 2. Registrar en transactions
-      transaction.set(transactionRef, recibo);
+      // 2. Registrar/actualizar en transactions con estado 'completado'
+      transaction.set(transactionRef, recibo, { merge: true });
 
-      // 3. Marcar compra como concluida
+      // 3. Marcar compra como concluida en compras_app
       transaction.update(compraRef, {
         estado: "concluido",
         cantidadMonedas: cantidadMonedas,
@@ -366,6 +390,64 @@ export const procesarEntregaMonedasCompraApp = async (
 };
 
 /**
+ * Marca una compra con estado 'rechazado' (ej: rechazo de banco o tarjeta en Google Play).
+ */
+export const marcarRechazoCompraApp = async (
+  compraId: string,
+  motivo: string,
+  detalleError?: string,
+): Promise<void> => {
+  try {
+    const fechaActual = new Date().toISOString();
+    await db.collection("compras_app").doc(compraId).update({
+      estado: "rechazado",
+      motivoProblema: motivo,
+      detalleError: detalleError || null,
+      fechaActualizacion: fechaActual,
+    });
+
+    await db.collection("transactions").doc(compraId).set({
+      estado: "rechazado",
+      motivoProblema: motivo,
+      descripcion: `Compra rechazada por Google Play (${motivo} ❌)`,
+      fechaActualizacion: fechaActual,
+    }, { merge: true });
+
+    console.warn(`❌ [Compras App] Compra ${compraId} marcada como RECHAZADA: ${motivo}`);
+  } catch (err) {
+    console.error("Error al actualizar estado a rechazado en compras_app:", err);
+  }
+};
+
+/**
+ * Marca una compra con estado 'cancelado' (ej: expiración de pago en efectivo o cancelación voluntaria).
+ */
+export const marcarCanceladoCompraApp = async (
+  compraId: string,
+  motivo: string,
+): Promise<void> => {
+  try {
+    const fechaActual = new Date().toISOString();
+    await db.collection("compras_app").doc(compraId).update({
+      estado: "cancelado",
+      motivoProblema: motivo,
+      fechaActualizacion: fechaActual,
+    });
+
+    await db.collection("transactions").doc(compraId).set({
+      estado: "cancelado",
+      motivoProblema: motivo,
+      descripcion: `Compra cancelada en Google Play (${motivo} 🚫)`,
+      fechaActualizacion: fechaActual,
+    }, { merge: true });
+
+    console.warn(`🚫 [Compras App] Compra ${compraId} marcada como CANCELADA: ${motivo}`);
+  } catch (err) {
+    console.error("Error al actualizar estado a cancelado en compras_app:", err);
+  }
+};
+
+/**
  * Marca una compra con estado 'problema' e inserta el detalle del fallo.
  */
 export const marcarProblemaCompraApp = async (
@@ -381,6 +463,14 @@ export const marcarProblemaCompraApp = async (
       detalleError: detalleError || null,
       fechaActualizacion: fechaActual,
     });
+
+    await db.collection("transactions").doc(compraId).set({
+      estado: "problema",
+      motivoProblema: motivo,
+      descripcion: `Problema en compra de monedas (${motivo} ⚠️)`,
+      fechaActualizacion: fechaActual,
+    }, { merge: true });
+
     console.warn(`⚠️ [Compras App] Compra ${compraId} marcada como PROBLEMA: ${motivo}`);
   } catch (err) {
     console.error("Error al actualizar estado a problema en compras_app:", err);

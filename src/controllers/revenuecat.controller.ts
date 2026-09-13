@@ -1,8 +1,12 @@
 import { Context } from "https://deno.land/x/oak/mod.ts";
+import { db } from "../config/firebase.ts";
 import { actualizarSuscripcionUsuarioService } from "../service/users.service.ts";
+import { enviarPushAUsuario } from "../service/notification.service.ts";
 import {
   crearRegistroCompraApp,
+  marcarCanceladoCompraApp,
   marcarProblemaCompraApp,
+  marcarRechazoCompraApp,
   procesarEntregaMonedasCompraApp,
   procesarReembolsoCompraApp,
   resolverCantidadMonedas,
@@ -324,7 +328,23 @@ export const revenueCatWebhookController = async (ctx: Context) => {
           `❌ [RevenueCat Webhook] Usuario ${uid} canceló renovación. Válido hasta: ${fechaVencimiento || 'fin de ciclo'} (Motivo: ${event.cancel_reason || 'N/A'})`,
         );
 
-        // Si la cancelación es con reembolso inmediato por atención al cliente de Google Play
+        // 1. Si había compras de monedas pendientes para este usuario, marcarlas como canceladas
+        try {
+          const pendingSnap = await db.collection("compras_app")
+            .where("idUsuario", "==", uid)
+            .where("estado", "==", "pendiente")
+            .limit(5)
+            .get();
+
+          for (const doc of pendingSnap.docs) {
+            await marcarCanceladoCompraApp(
+              doc.id,
+              event.cancel_reason || "Compra cancelada o expirada en Google Play"
+            );
+          }
+        } catch (_errCancel) {}
+
+        // 2. Si la cancelación es con reembolso inmediato por atención al cliente de Google Play
         const razon = (event.cancel_reason || "").toUpperCase();
         if (razon.includes("CUSTOMER_SUPPORT") || razon.includes("REFUND") || razon.includes("CHARGEBACK")) {
           if (esCompraMonedas) {
@@ -343,6 +363,35 @@ export const revenueCatWebhookController = async (ctx: Context) => {
 
       case "BILLING_ISSUE": {
         console.warn(`⚠️ [RevenueCat Webhook] Problema de cobro/facturación para UID: ${uid}`);
+        try {
+          // Buscar compras pendientes del usuario y marcarlas como rechazadas
+          const pendingSnap = await db.collection("compras_app")
+            .where("idUsuario", "==", uid)
+            .where("estado", "==", "pendiente")
+            .limit(5)
+            .get();
+
+          for (const doc of pendingSnap.docs) {
+            await marcarRechazoCompraApp(
+              doc.id,
+              "Problema de facturación o pago rechazado por el banco en Google Play",
+              `Billing issue reportado por RevenueCat (${event.id || 'N/A'})`
+            );
+          }
+
+          // Notificar al usuario por push para que no se preocupe ni piense que es estafa
+          enviarPushAUsuario(
+            uid,
+            "⚠️ Problema con tu compra en Google Play",
+            "Google Play no pudo procesar el pago de tu compra. Revisa tu método de pago para evitar que sea rechazada.",
+            {
+              tipo: "compra_problema",
+              eventId: event.id || "",
+            },
+          ).catch(() => {});
+        } catch (errBilling) {
+          console.error("Error al procesar BILLING_ISSUE:", errBilling);
+        }
         break;
       }
 

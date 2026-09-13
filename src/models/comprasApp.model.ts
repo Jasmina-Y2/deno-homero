@@ -2,6 +2,7 @@ export type EstadoCompraApp =
   | "pendiente"
   | "concluido"
   | "problema"
+  | "rechazado"
   | "reembolsado"
   | "cancelado";
 
