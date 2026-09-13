@@ -304,11 +304,23 @@ export const obtenerHistorialUsuarioService = async (uid: string) => {
         descripcion = "Reembolso por solicitud de retiro cancelada/rechazada";
       } else if (esCompraIdentificada) {
         tipoMovimiento = "ganancia";
+        const ahora = Date.now();
+        const fechaTransMs = new Date(t.fecha || 0).getTime();
+        const estaExpirado = t.estado === "pendiente" && (ahora - fechaTransMs > 15 * 60 * 1000);
+
+        if (estaExpirado) {
+          t.estado = "error";
+          t.motivoProblema = "Pago no completado a tiempo en Google Play (Expirado ⏱️)";
+        }
+
         if (t.estado === "completado" || t.estado === "concluido") {
           totalGanancias += cantidad;
         }
+
         if (t.estado === "pendiente") {
           descripcion = t.descripcion || `Compra de monedas (+${cantidad} monedas - Pendiente en Google Play ⏳)`;
+        } else if (t.estado === "error") {
+          descripcion = t.descripcion || `Compra no completada en Google Play (Expirada ⏱️)`;
         } else if (t.estado === "rechazado") {
           descripcion = t.descripcion || `Compra rechazada por Google Play (${t.motivoProblema || "Pago no completado"} ❌)`;
         } else if (t.estado === "problema") {

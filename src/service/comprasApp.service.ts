@@ -545,20 +545,25 @@ export const procesarReembolsoCompraApp = async (params: {
     if (!snap.empty) docCompraSnap = snap.docs[0];
   }
 
-  // Si no se encontró por ID exacto, buscar compras recientes concluidas del usuario
+  // Si no se encontró por ID exacto, buscar compras recientes del usuario que no estén ya reembolsadas
   if (!docCompraSnap && uid) {
     try {
       const snapUsuario = await db.collection("compras_app")
         .where("idUsuario", "==", uid)
-        .where("estado", "==", "concluido")
         .get();
 
       if (!snapUsuario.empty) {
-        // Priorizar por productId coincidente o tomar la más reciente
+        // Filtrar las compras que no hayan sido reembolsadas aún
+        const candidatas = snapUsuario.docs.filter((d: any) => {
+          const dat = d.data();
+          return !dat.reembolsado && dat.estado !== "reembolsado";
+        });
+
+        const pool = candidatas.length > 0 ? candidatas : snapUsuario.docs;
         const matchProduct = productId
-          ? snapUsuario.docs.find((d: any) => d.data().productId === productId)
+          ? pool.find((d: any) => d.data().productId === productId)
           : null;
-        docCompraSnap = matchProduct || snapUsuario.docs[snapUsuario.docs.length - 1];
+        docCompraSnap = matchProduct || pool[pool.length - 1];
       }
     } catch (_errSearch) {}
   }
@@ -621,6 +626,7 @@ export const procesarReembolsoCompraApp = async (params: {
       transaction.set(transMirrorRef, {
         estado: "reembolsado",
         motivo: motivoReembolso || "Reembolso procesado en Google Play",
+        descripcion: `Compra Reembolsada en Google Play (-${cantidadARevertir} monedas 🔄)`,
         fechaActualizacion: fechaActual,
       }, { merge: true });
     }
@@ -640,6 +646,7 @@ export const procesarReembolsoCompraApp = async (params: {
       fecha: fechaActual,
       estado: "completado",
       motivo: motivoReembolso || "Devolución de cargo / Reembolso confirmado de Google Play",
+      descripcion: `Reembolso de compra de monedas (-${cantidadARevertir} monedas 🔄)`,
     });
 
     return { saldoAnterior, nuevoSaldo };
@@ -650,12 +657,17 @@ export const procesarReembolsoCompraApp = async (params: {
     const transPrevSnap = await db.collection("transactions")
       .where("idUsuario", "==", targetUid)
       .where("tipo", "==", "compra_monedas")
-      .where("estado", "==", "completado")
       .get();
 
     if (!transPrevSnap.empty) {
-      const ultimaCompraDoc = transPrevSnap.docs[transPrevSnap.docs.length - 1];
-      await ultimaCompraDoc.ref.set({
+      const transNoReembolsadas = transPrevSnap.docs.filter(
+        (d: any) => d.data().estado !== "reembolsado"
+      );
+      const targetDoc = transNoReembolsadas.length > 0
+        ? transNoReembolsadas[transNoReembolsadas.length - 1]
+        : transPrevSnap.docs[transPrevSnap.docs.length - 1];
+
+      await targetDoc.ref.set({
         estado: "reembolsado",
         descripcion: `Compra Reembolsada en Google Play (-${cantidadARevertir} monedas 🔄)`,
         fechaActualizacion: fechaActual,
@@ -777,6 +789,64 @@ export const procesarReembolsoCompraApp = async (params: {
 };
 
 /**
+ * Auto-expira compras que llevan más de 15 minutos en estado 'pendiente' sin confirmarse.
+ * Las marca automáticamente como 'error' para no dejarlas colgadas indefinidamente.
+ */
+export const autoExpirarComprasPendientesAntiguas = async (
+  compras: any[],
+): Promise<any[]> => {
+  const limiteMinutos = 15;
+  const limiteMs = limiteMinutos * 60 * 1000;
+  const ahora = Date.now();
+  const fechaActual = new Date().toISOString();
+
+  const tareasActualizacion: Promise<any>[] = [];
+
+  for (const compra of compras) {
+    const est = String(compra.estado || "").toLowerCase().trim();
+    if (est === "pendiente" || est === "iniciado") {
+      const fechaCreacionMs = new Date(compra.fechaCreacion || compra.fecha || 0).getTime();
+      if (fechaCreacionMs > 0 && ahora - fechaCreacionMs > limiteMs) {
+        // Actualizar en memoria
+        compra.estado = "error";
+        compra.motivoProblema = "Pago no completado a tiempo en Google Play (Expirado ⏱️)";
+        compra.detalleError = `Expirado tras más de ${limiteMinutos} minutos sin confirmación de pago`;
+        compra.error = "No se completó el pago en Google Play (Expirado ⏱️)";
+        compra.descripcion = `Compra no completada en Google Play (Expirada ⏱️)`;
+
+        const idDoc = compra.id || compra._id || compra.transaccionId;
+        if (idDoc) {
+          tareasActualizacion.push(
+            db.collection("compras_app").doc(idDoc).set({
+              estado: "error",
+              motivoProblema: "Pago no completado a tiempo en Google Play (Expirado ⏱️)",
+              detalleError: `Expirado tras más de ${limiteMinutos} minutos sin confirmación`,
+              fechaActualizacion: fechaActual,
+            }, { merge: true }).catch(() => {})
+          );
+
+          tareasActualizacion.push(
+            db.collection("transactions").doc(idDoc).set({
+              estado: "error",
+              motivoProblema: "Pago no completado a tiempo en Google Play (Expirado ⏱️)",
+              error: "No se completó el pago en Google Play (Expirado ⏱️)",
+              descripcion: `Compra no completada en Google Play (Expirada ⏱️)`,
+              fechaActualizacion: fechaActual,
+            }, { merge: true }).catch(() => {})
+          );
+        }
+      }
+    }
+  }
+
+  if (tareasActualizacion.length > 0) {
+    Promise.all(tareasActualizacion).catch(() => {});
+  }
+
+  return compras;
+};
+
+/**
  * Consulta las compras de la app de un usuario específico.
  */
 export const obtenerComprasUsuarioService = async (
@@ -787,10 +857,13 @@ export const obtenerComprasUsuarioService = async (
       .where("idUsuario", "==", idUsuario)
       .get();
 
-    const compras: CompraApp[] = snap.docs.map((doc: any) => ({
+    let compras: CompraApp[] = snap.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
     }));
+
+    // Auto-expirar compras pendientes de más de 15 minutos
+    compras = await autoExpirarComprasPendientesAntiguas(compras);
 
     compras.sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
     return compras;

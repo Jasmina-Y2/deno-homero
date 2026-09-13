@@ -270,8 +270,9 @@ export const revenueCatWebhookController = async (ctx: Context) => {
       }
 
       // Reembolso / Revocación originado en Google Play / App Store
-      case "REVOCATION": {
-        console.log(`🔄 [RevenueCat Webhook] Procesando REVOCATION para UID: ${uid} (EventID: ${event.id}) | Producto: ${productIdStr}`);
+      case "REVOCATION":
+      case "REFUND": {
+        console.log(`🔄 [RevenueCat Webhook] Procesando ${type} para UID: ${uid} (EventID: ${event.id}) | Producto: ${productIdStr}`);
 
         if (esCompraMonedas) {
           await procesarReembolsoCompraApp({
@@ -281,7 +282,7 @@ export const revenueCatWebhookController = async (ctx: Context) => {
             productId: productIdStr,
             cantidadMonedas: resolverCantidadMonedas(productIdStr),
             uid,
-            motivoReembolso: event.cancel_reason || "Revocación de compra en Google Play / Tienda",
+            motivoReembolso: event.cancel_reason || "Revocación / Reembolso de compra en Google Play",
             rawEvent: event as Record<string, unknown>,
           });
         } else {
@@ -327,40 +328,37 @@ export const revenueCatWebhookController = async (ctx: Context) => {
 
       case "CANCELLATION": {
         console.log(
-          `❌ [RevenueCat Webhook] Usuario ${uid} canceló renovación. Válido hasta: ${fechaVencimiento || 'fin de ciclo'} (Motivo: ${event.cancel_reason || 'N/A'})`,
+          `❌ [RevenueCat Webhook] Evento CANCELLATION para UID: ${uid} (Motivo: ${event.cancel_reason || 'N/A'})`,
         );
 
-        // 1. Si había compras de monedas pendientes para este usuario, marcarlas como canceladas
-        try {
-          const pendingSnap = await db.collection("compras_app")
-            .where("idUsuario", "==", uid)
-            .where("estado", "==", "pendiente")
-            .limit(5)
-            .get();
+        // 1. Si era compra de monedas, en Google Play una cancelación de consumible es siempre una revocación/reembolso
+        if (esCompraMonedas) {
+          await procesarReembolsoCompraApp({
+            idCompraRevenueCat: event.id,
+            transactionIdStore: event.transaction_id,
+            originalTransactionId: event.original_transaction_id,
+            productId: productIdStr,
+            cantidadMonedas: resolverCantidadMonedas(productIdStr),
+            uid,
+            motivoReembolso: `Cancelación/Devolución en Google Play (${event.cancel_reason || 'Devolución de cargo'})`,
+            rawEvent: event as Record<string, unknown>,
+          });
+        } else {
+          // 2. Si era suscripción, marcar compras pendientes de monedas como canceladas
+          try {
+            const pendingSnap = await db.collection("compras_app")
+              .where("idUsuario", "==", uid)
+              .where("estado", "==", "pendiente")
+              .limit(5)
+              .get();
 
-          for (const doc of pendingSnap.docs) {
-            await marcarCanceladoCompraApp(
-              doc.id,
-              event.cancel_reason || "Compra cancelada o expirada en Google Play"
-            );
-          }
-        } catch (_errCancel) {}
-
-        // 2. Si la cancelación es con reembolso inmediato por atención al cliente de Google Play
-        const razon = (event.cancel_reason || "").toUpperCase();
-        if (razon.includes("CUSTOMER_SUPPORT") || razon.includes("REFUND") || razon.includes("CHARGEBACK")) {
-          if (esCompraMonedas) {
-            await procesarReembolsoCompraApp({
-              idCompraRevenueCat: event.id,
-              transactionIdStore: event.transaction_id,
-              originalTransactionId: event.original_transaction_id,
-              productId: productIdStr,
-              cantidadMonedas: resolverCantidadMonedas(productIdStr),
-              uid,
-              motivoReembolso: `Cancelación con reembolso (${event.cancel_reason})`,
-              rawEvent: event as Record<string, unknown>,
-            });
-          }
+            for (const doc of pendingSnap.docs) {
+              await marcarCanceladoCompraApp(
+                doc.id,
+                event.cancel_reason || "Compra cancelada o expirada en Google Play"
+              );
+            }
+          } catch (_errCancel) {}
         }
         break;
       }
