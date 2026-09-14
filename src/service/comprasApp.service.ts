@@ -193,8 +193,12 @@ export const resolverCantidadMonedas = (
 };
 
 /**
- * Crea un nuevo registro en la colección 'compras_app' y 'transactions' con estado 'pendiente'.
- * Si el evento ya existía por idCompraRevenueCat o transactionIdStore, retorna el existente.
+ * Crea o actualiza un registro en la colección 'compras_app' y 'transactions'.
+ * Estrategia Anti-Duplicados:
+ * 1. Si ya existía por idCompraRevenueCat o transactionIdStore, retorna el existente (Idempotencia).
+ * 2. Si es una confirmación de pago (trae idCompraRevenueCat o transactionIdStore):
+ *    Busca el intento 'pendiente' (o recientemente expirado) del usuario y lo ACTUALIZA en vez de duplicarlo.
+ * 3. Si es un intento nuevo desde frontend: Evita duplicar si ya tiene un intento idéntico en los últimos 2 minutos.
  */
 export const crearRegistroCompraApp = async (
   datos: CrearCompraAppDto,
@@ -211,7 +215,11 @@ export const crearRegistroCompraApp = async (
     throw new Error("El ID del usuario es requerido para registrar la compra de la app");
   }
 
-  // 1. Verificar si ya existe registro previo para evitar duplicados (Idempotencia)
+  const cleanUid = idUsuario.trim();
+  const fechaActual = new Date().toISOString();
+  const esConfirmacion = Boolean(idCompraRevenueCat || transactionIdStore);
+
+  // 1. Verificar si ya existe registro previo con exactamente ese idCompraRevenueCat (Idempotencia)
   if (idCompraRevenueCat) {
     const existingSnap = await db.collection("compras_app")
       .where("idCompraRevenueCat", "==", idCompraRevenueCat)
@@ -227,6 +235,7 @@ export const crearRegistroCompraApp = async (
     }
   }
 
+  // 2. Verificar si ya existe registro previo con exactamente ese transactionIdStore (Idempotencia)
   if (transactionIdStore) {
     const existingSnap = await db.collection("compras_app")
       .where("transactionIdStore", "==", transactionIdStore)
@@ -242,13 +251,143 @@ export const crearRegistroCompraApp = async (
     }
   }
 
-  const cleanUid = idUsuario.trim();
-  const fechaActual = new Date().toISOString();
-  const docRef = db.collection("compras_app").doc();
-
   const cantidadMonedas = datos.cantidadMonedas !== undefined
     ? datos.cantidadMonedas
     : resolverCantidadMonedas(productId);
+
+  // 3. ESTRATEGIA DE VINCULACIÓN (Actualizar, No Duplicar):
+  // Si RevenueCat o Google Play está confirmando el pago, buscar la compra "pendiente"
+  // que el usuario abrió previamente en la app para ese usuario y producto.
+  if (esConfirmacion) {
+    const comprasPendientesSnap = await db.collection("compras_app")
+      .where("idUsuario", "==", cleanUid)
+      .where("estado", "==", "pendiente")
+      .get();
+
+    let candidateDoc: any = null;
+
+    if (!comprasPendientesSnap.empty) {
+      const docs = comprasPendientesSnap.docs;
+      // Prioridad 1: Coincidencia de productId o cantidadMonedas
+      candidateDoc = docs.find((d: any) => {
+        const data = d.data();
+        return data.productId === productId ||
+               data.cantidadMonedas === cantidadMonedas ||
+               (productId && data.productId && (
+                 productId.toLowerCase().includes(data.productId.toLowerCase()) ||
+                 data.productId.toLowerCase().includes(productId.toLowerCase())
+               ));
+      });
+
+      // Prioridad 2: La compra pendiente más reciente del usuario
+      if (!candidateDoc && docs.length > 0) {
+        candidateDoc = docs.sort((a: any, b: any) => {
+          const tA = new Date(a.data().fechaCreacion || 0).getTime();
+          const tB = new Date(b.data().fechaCreacion || 0).getTime();
+          return tB - tA;
+        })[0];
+      }
+    }
+
+    // Fallback: Si no había en 'pendiente', buscar si expiró a 'error' o 'problema' hace menos de 60 minutos
+    if (!candidateDoc) {
+      const unHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const comprasRecientesSnap = await db.collection("compras_app")
+        .where("idUsuario", "==", cleanUid)
+        .get();
+
+      if (!comprasRecientesSnap.empty) {
+        const recientes = comprasRecientesSnap.docs.filter((d: any) => {
+          const data = d.data();
+          const est = data.estado;
+          const fechaC = data.fechaCreacion || "";
+          return (est === "error" || est === "problema") &&
+                 !data.transactionIdStore &&
+                 fechaC >= unHoraAtras &&
+                 (data.productId === productId || data.cantidadMonedas === cantidadMonedas);
+        });
+
+        if (recientes.length > 0) {
+          candidateDoc = recientes[0];
+        }
+      }
+    }
+
+    if (candidateDoc) {
+      const candidateId = candidateDoc.id;
+      const prevData = candidateDoc.data() as CompraApp;
+
+      const datosActualizados: Partial<CompraApp> = {
+        idCompraRevenueCat: idCompraRevenueCat || prevData.idCompraRevenueCat || null,
+        transactionIdStore: transactionIdStore || prevData.transactionIdStore || null,
+        originalTransactionId: originalTransactionId || prevData.originalTransactionId || null,
+        store: (datos.store as any) || prevData.store || "PLAY_STORE",
+        entorno: datos.entorno || prevData.entorno || "PRODUCTION",
+        precio: datos.precio !== undefined && datos.precio !== null ? datos.precio : prevData.precio,
+        moneda: datos.moneda || prevData.moneda || "USD",
+        productId: productId || prevData.productId,
+        cantidadMonedas: cantidadMonedas || prevData.cantidadMonedas,
+        fechaActualizacion: fechaActual,
+        rawEvent: datos.rawEvent || prevData.rawEvent || null,
+        motivoProblema: null,
+        detalleError: null,
+      };
+
+      await db.collection("compras_app").doc(candidateId).set(datosActualizados, { merge: true });
+
+      await db.collection("transactions").doc(candidateId).set({
+        idCompraRevenueCat: idCompraRevenueCat || prevData.idCompraRevenueCat || null,
+        transactionIdStore: transactionIdStore || prevData.transactionIdStore || null,
+        precio: datos.precio !== undefined && datos.precio !== null ? datos.precio : prevData.precio,
+        moneda: datos.moneda || prevData.moneda || "USD",
+        productId: productId || prevData.productId,
+        cantidadMonedas: cantidadMonedas || prevData.cantidadMonedas,
+        fechaActualizacion: fechaActual,
+        motivoProblema: null,
+        error: null,
+      }, { merge: true });
+
+      console.log(
+        `🔗 [Compras App] Intento de compra vinculado [UPDATE]: ID ${candidateId} | UID: ${cleanUid} | StoreTx: ${transactionIdStore || idCompraRevenueCat} | Monedas: ${cantidadMonedas}`,
+      );
+
+      const compraActualizada: CompraApp = {
+        ...prevData,
+        ...datosActualizados,
+        id: candidateId,
+      };
+
+      return { compra: compraActualizada, esNuevo: false };
+    }
+  }
+
+  // 4. Si el usuario está registrando un intento pendiente desde el frontend, evitar duplicados si ya abrió uno en los últimos 2 minutos
+  if (!esConfirmacion) {
+    const dosMinutosAtras = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const intentosPreviosSnap = await db.collection("compras_app")
+      .where("idUsuario", "==", cleanUid)
+      .where("estado", "==", "pendiente")
+      .get();
+
+    if (!intentosPreviosSnap.empty) {
+      const matchReciente = intentosPreviosSnap.docs.find((d: any) => {
+        const data = d.data();
+        return (data.productId === productId || data.cantidadMonedas === cantidadMonedas) &&
+               (data.fechaCreacion || "") >= dosMinutosAtras;
+      });
+
+      if (matchReciente) {
+        console.log(`ℹ️ [Compras App] Reusando intento de compra pendiente reciente: ${matchReciente.id}`);
+        return {
+          compra: { id: matchReciente.id, ...matchReciente.data() } as CompraApp,
+          esNuevo: false,
+        };
+      }
+    }
+  }
+
+  // 5. Crear un nuevo registro limpio
+  const docRef = db.collection("compras_app").doc();
 
   const nuevaCompra: CompraApp = {
     id: docRef.id,

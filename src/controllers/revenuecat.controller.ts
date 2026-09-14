@@ -208,7 +208,10 @@ export const revenueCatWebhookController = async (ctx: Context) => {
 
           // 3. Ejecutar entrega atómica de saldo y pasar a estado 'concluido'
           try {
-            const resultadoEntrega = await procesarEntregaMonedasCompraApp(compra.id);
+            const resultadoEntrega = await procesarEntregaMonedasCompraApp(compra.id, {
+              transactionIdStore: event.transaction_id || (event as any).store_transaction_id || (event as any).order_id || null,
+              idCompraRevenueCat: event.id || null,
+            });
             console.log(
               `💰 [RevenueCat Webhook] Compra ${compra.id} concluida exitosamente (+${resultadoEntrega.cantidadAcreditada} monedas para ${uid}). Nuevo saldo: ${resultadoEntrega.nuevoSaldo}`,
             );
