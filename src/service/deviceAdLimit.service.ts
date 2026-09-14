@@ -1,4 +1,4 @@
-import { db } from "../config/firebase.ts";
+import { db, fieldValue } from "../config/firebase.ts";
 import {
   DeviceAdLimitDoc,
   EstadoLimiteDispositivo,
@@ -340,11 +340,11 @@ export const validarYProcesarRecompensaDispositivoService = async (
       "actividadDiaria.anunciosVistosHoy": nuevoConteoHoy,
       "sistema.ultimoDeviceId": cleanDeviceId,
       "sistema.fechaActualizacion": ahoraIso,
-      walletBalance: nuevoSaldo,
-      fechaUltimoAnuncio: hoyStr,
-      anunciosVistosHoy: nuevoConteoHoy,
-      ultimoDeviceId: cleanDeviceId,
-      fechaActualizacion: ahoraIso,
+      ...(userData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+      ...(userData.fechaUltimoAnuncio !== undefined ? { fechaUltimoAnuncio: fieldValue.delete() } : {}),
+      ...(userData.anunciosVistosHoy !== undefined ? { anunciosVistosHoy: fieldValue.delete() } : {}),
+      ...(userData.ultimoDeviceId !== undefined ? { ultimoDeviceId: fieldValue.delete() } : {}),
+      ...(userData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
     });
 
     // 3. Registrar comprobante en "transactions"

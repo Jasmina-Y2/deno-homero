@@ -1,4 +1,4 @@
-import { db } from "../config/firebase.ts";
+import { db, fieldValue } from "../config/firebase.ts";
 import {
   EnviarPropinaDto,
   HistorialMovimientoDto,
@@ -128,8 +128,8 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     transaction.update(oyenteRef, {
       "billetera.walletBalance": nuevoSaldoOyente,
       "sistema.fechaActualizacion": fechaActual,
-      walletBalance: nuevoSaldoOyente,
-      fechaActualizacion: fechaActual,
+      ...(oyenteData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+      ...(oyenteData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
     });
 
     // Comando 2: Sumar la misma cantidad al creador
@@ -137,8 +137,8 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
       transaction.update(creadorRef, {
         "billetera.walletBalance": nuevoSaldoCreador,
         "sistema.fechaActualizacion": fechaActual,
-        walletBalance: nuevoSaldoCreador,
-        fechaActualizacion: fechaActual,
+        ...(creadorData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+        ...(creadorData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
       });
     } else {
       transaction.set(
@@ -146,9 +146,10 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
         {
           uid: idCreador,
           billetera: { walletBalance: nuevoSaldoCreador },
-          walletBalance: nuevoSaldoCreador,
-          fechaCreacion: fechaActual,
-          fechaActualizacion: fechaActual,
+          sistema: {
+            fechaRegistro: fechaActual,
+            fechaActualizacion: fechaActual,
+          },
         },
         { merge: true },
       );
@@ -621,12 +622,13 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
       "billetera.walletBalance": nuevoSaldo,
       "actividadDiaria.fechaUltimoAnuncio": hoyStr,
       "actividadDiaria.anunciosVistosHoy": nuevoConteoHoy,
-      ...(cleanDeviceId ? { "sistema.ultimoDeviceId": cleanDeviceId, ultimoDeviceId: cleanDeviceId } : {}),
+      ...(cleanDeviceId ? { "sistema.ultimoDeviceId": cleanDeviceId } : {}),
       "sistema.fechaActualizacion": fechaActual,
-      walletBalance: nuevoSaldo,
-      fechaUltimoAnuncio: hoyStr,
-      anunciosVistosHoy: nuevoConteoHoy,
-      fechaActualizacion: fechaActual,
+      ...(userData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+      ...(userData.fechaUltimoAnuncio !== undefined ? { fechaUltimoAnuncio: fieldValue.delete() } : {}),
+      ...(userData.anunciosVistosHoy !== undefined ? { anunciosVistosHoy: fieldValue.delete() } : {}),
+      ...(userData.ultimoDeviceId !== undefined ? { ultimoDeviceId: fieldValue.delete() } : {}),
+      ...(userData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
     });
 
     // 3. Guardar recibo en transactions
@@ -834,8 +836,8 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
     transaction.update(userRef, {
       "billetera.walletBalance": nuevoSaldo,
       "sistema.fechaActualizacion": fechaActual,
-      walletBalance: nuevoSaldo,
-      fechaActualizacion: fechaActual,
+      ...(userData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+      ...(userData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
     });
 
     transaction.set(transactionRef, recibo);

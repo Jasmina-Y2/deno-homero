@@ -1,4 +1,4 @@
-import { db } from "../config/firebase.ts";
+import { db, fieldValue } from "../config/firebase.ts";
 import {
   CompraApp,
   CrearCompraAppDto,
@@ -395,8 +395,8 @@ export const procesarEntregaMonedasCompraApp = async (
       transaction.update(userRef, {
         "billetera.walletBalance": saldoFinal,
         "sistema.fechaActualizacion": fechaActual,
-        walletBalance: saldoFinal,
-        fechaActualizacion: fechaActual,
+        ...(userData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+        ...(userData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
       });
 
       // 2. Registrar/actualizar en transactions con estado 'completado'
@@ -687,8 +687,8 @@ export const procesarReembolsoCompraApp = async (params: {
       transaction.update(userRef, {
         "billetera.walletBalance": nuevoSaldo,
         "sistema.fechaActualizacion": fechaActual,
-        walletBalance: nuevoSaldo,
-        fechaActualizacion: fechaActual,
+        ...(uData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+        ...(uData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
       });
     }
 
@@ -761,7 +761,7 @@ export const procesarReembolsoCompraApp = async (params: {
   // banear al usuario, bloquear su DISPOSITIVO físico por 15 días y anular TODAS las propinas/donaciones enviadas por él.
   try {
     const uDocSnap = await userRef.get();
-    const uDocData = uDocSnap.exists ? uDocSnap.data() : {};
+    const uDocData: any = uDocSnap.exists ? (uDocSnap.data() || {}) : {};
     const deviceIdUsuario = uDocData.sistema?.ultimoDeviceId || uDocData.ultimoDeviceId;
     const fechaLimite15Dias = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -817,8 +817,9 @@ export const procesarReembolsoCompraApp = async (params: {
 
             t.update(creadorRef, {
               "billetera.walletBalance": nuevoSaldoCreador,
-              walletBalance: nuevoSaldoCreador,
               "sistema.fechaActualizacion": fechaActual,
+              ...(cData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+              ...(cData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
             });
           });
 

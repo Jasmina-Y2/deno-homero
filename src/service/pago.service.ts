@@ -1,4 +1,4 @@
-import { db } from "../config/firebase.ts";
+import { db, fieldValue } from "../config/firebase.ts";
 import {
   EstadoPago,
   Pago,
@@ -179,8 +179,8 @@ export const solicitarRetiroService = async (
     transaction.update(usuarioRef, {
       "billetera.walletBalance": nuevoSaldoUsuario,
       "sistema.fechaActualizacion": fechaActual,
-      walletBalance: nuevoSaldoUsuario,
-      fechaActualizacion: fechaActual,
+      ...(usuarioData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+      ...(usuarioData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
     });
 
     // 2. Sumar monedas a la cuenta de Homero
@@ -188,8 +188,8 @@ export const solicitarRetiroService = async (
       transaction.update(homeroRef, {
         "billetera.walletBalance": nuevoSaldoHomero,
         "sistema.fechaActualizacion": fechaActual,
-        walletBalance: nuevoSaldoHomero,
-        fechaActualizacion: fechaActual,
+        ...(homeroData.walletBalance !== undefined ? { walletBalance: fieldValue.delete() } : {}),
+        ...(homeroData.fechaActualizacion !== undefined ? { fechaActualizacion: fieldValue.delete() } : {}),
       });
     } else {
       transaction.set(
@@ -197,9 +197,10 @@ export const solicitarRetiroService = async (
         {
           uid: idDestino,
           billetera: { walletBalance: nuevoSaldoHomero },
-          walletBalance: nuevoSaldoHomero,
-          fechaCreacion: fechaActual,
-          fechaActualizacion: fechaActual,
+          sistema: {
+            fechaRegistro: fechaActual,
+            fechaActualizacion: fechaActual,
+          },
         },
         { merge: true },
       );
@@ -392,8 +393,8 @@ export const actualizarEstadoPagoService = async (
       transaction.update(usuarioRef, {
         "billetera.walletBalance": nuevoSaldoU,
         "sistema.fechaActualizacion": fechaActual,
-        walletBalance: nuevoSaldoU,
-        fechaActualizacion: fechaActual,
+        ...((uDoc.data()?.walletBalance !== undefined) ? { walletBalance: fieldValue.delete() } : {}),
+        ...((uDoc.data()?.fechaActualizacion !== undefined) ? { fechaActualizacion: fieldValue.delete() } : {}),
       });
 
       // Descontar saldo de Homero
@@ -401,8 +402,8 @@ export const actualizarEstadoPagoService = async (
         transaction.update(homeroRef, {
           "billetera.walletBalance": nuevoSaldoH,
           "sistema.fechaActualizacion": fechaActual,
-          walletBalance: nuevoSaldoH,
-          fechaActualizacion: fechaActual,
+          ...((hDoc.data()?.walletBalance !== undefined) ? { walletBalance: fieldValue.delete() } : {}),
+          ...((hDoc.data()?.fechaActualizacion !== undefined) ? { fechaActualizacion: fieldValue.delete() } : {}),
         });
       }
 
