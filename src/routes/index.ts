@@ -79,7 +79,6 @@ import {
 } from "../controllers/users.controller.ts";
 import { getHistoriaCardByAutor } from "../controllers/cardhistoria.controller.ts";
 import {
-  comentariosWebSocketController,
   eliminarComentario,
   guardarComentario,
   obtenerComentarios,
@@ -233,9 +232,8 @@ router.get("/api/seguiruser/siguiendo/:uid", getGenteQueYoSigo);
 router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);
 
 // ============================================================================
-// COMENTARIOS (REST + WEBSOCKET EN TIEMPO REAL)
+// COMENTARIOS (REST)
 // ============================================================================
-router.get("/ws/comentarios", comentariosWebSocketController);
 router.post("/api/comentarios/guardar", guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
 router.delete("/api/comentarios/:id", eliminarComentario);

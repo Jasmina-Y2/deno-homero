@@ -16,11 +16,3 @@ export interface ComentarioItem {
   [key: string]: any;
 }
 
-export type WebSocketAction = "join" | "leave" | "new_comment" | "ping";
-
-export interface ComentarioWebSocketMessage {
-  action: WebSocketAction;
-  publicacionId?: string;
-  uid?: string;
-  comentario?: any;
-}

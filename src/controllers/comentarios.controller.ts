@@ -4,15 +4,10 @@ import {
   guardarComentarioService,
   obtenerComentariosService,
 } from "../service/comentarios.service.ts";
-import {
-  broadcastComentario,
-  handleComentariosWebSocket,
-  verificarRateLimit,
-} from "../service/comentariosSocket.service.ts";
 
 export const guardarComentario = async (ctx: RouterContext<string>) => {
   try {
-    const { publicacionId, comentario, uid } = await ctx.request.body.json();
+    const { publicacionId, comentario } = await ctx.request.body.json();
 
     if (!publicacionId || !comentario) {
       ctx.response.status = 400;
@@ -21,23 +16,6 @@ export const guardarComentario = async (ctx: RouterContext<string>) => {
         message: "Faltan datos requeridos (publicacionId, comentario)",
       };
       return;
-    }
-
-    // Control de cadencia (Rate Limiting: 3 segundos por usuario)
-    const autorUid = uid || comentario?.idAutor || comentario?.uid;
-    if (autorUid) {
-      const rateCheck = verificarRateLimit(autorUid);
-      if (!rateCheck.permitido) {
-        const segundos = (rateCheck.restanteMs / 1000).toFixed(1);
-        ctx.response.status = 429;
-        ctx.response.body = {
-          success: false,
-          error: "rate_limit",
-          message: `Control de cadencia: Espera ${segundos}s antes de enviar otro comentario.`,
-          restanteMs: rateCheck.restanteMs,
-        };
-        return;
-      }
     }
 
     const result = await guardarComentarioService(publicacionId, comentario);
@@ -49,9 +27,6 @@ export const guardarComentario = async (ctx: RouterContext<string>) => {
       ...(typeof comentario === "object" ? comentario : { comentario }),
       createdAt: new Date().toISOString(),
     };
-
-    // Emitir en tiempo real ÚNICAMENTE a la sala del audiolibro/historia
-    broadcastComentario(publicacionId, comentarioCompleto);
 
     ctx.response.status = 201;
     ctx.response.body = {
@@ -70,7 +45,7 @@ export const guardarComentario = async (ctx: RouterContext<string>) => {
 };
 
 /**
- * Carga inicial pasiva: Obtiene los últimos comentarios (por defecto 50)
+ * Carga de comentarios (por defecto 50)
  */
 export const obtenerComentarios = async (ctx: RouterContext<string>) => {
   try {
@@ -96,27 +71,6 @@ export const obtenerComentarios = async (ctx: RouterContext<string>) => {
         : "Error al obtener comentarios",
     };
   }
-};
-
-/**
- * Endpoint WebSocket para comentarios en tiempo real
- * GET /ws/comentarios?publicacionId=:id&uid=:uid
- */
-export const comentariosWebSocketController = (ctx: RouterContext<string>) => {
-  if (!ctx.isUpgradable) {
-    ctx.response.status = 400;
-    ctx.response.body = {
-      success: false,
-      message: "La conexión no es actualizable a WebSocket.",
-    };
-    return;
-  }
-
-  const publicacionId = ctx.request.url.searchParams.get("publicacionId");
-  const uid = ctx.request.url.searchParams.get("uid");
-
-  const ws = ctx.upgrade();
-  handleComentariosWebSocket(ws, publicacionId, uid);
 };
 
 export const eliminarComentario = async (ctx: RouterContext<string>) => {

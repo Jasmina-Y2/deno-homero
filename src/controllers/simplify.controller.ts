@@ -1,11 +1,17 @@
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { obtenerCardHistoriaService } from "../service/cardhistoria.service.ts";
 import { getUsuarioByUidService } from "../service/users.service.ts";
-import { getHistoriaByIdService } from "../service/historiaInfo.service.ts";
+import {
+  getHistoriaByIdService,
+  getHistoriasPorVistas,
+  getCardHistoriasService,
+} from "../service/historiaInfo.service.ts";
 import { checkIfLikedService, obtenerTotalLikesService } from "../service/likeuser.service.ts";
 import { obtenerComentariosService } from "../service/comentarios.service.ts";
 import { getColeccionPorNombreService } from "../service/coleccionids.service.ts";
+import { getTodasLasColeccionesService } from "../service/coleccion.service.ts";
 import { verificarHistoriaVistaService } from "../service/vistasuser.service.ts";
+import { obtenerRankingCreadoresService } from "../service/propina.service.ts";
 
 // ============================================================================
 // CONTROLADOR SIMPLIFICADO: TRAE 10 CARDS Y LLAMA A LOS SERVICES CON PROMISE.ALL
@@ -183,6 +189,197 @@ export const getSimplifyTab1CardsController = async (
     ctx.response.body = {
       success: false,
       message: "Error al obtener las cards simplificadas",
+      error: error?.message || "Error interno del servidor",
+    };
+  }
+};
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO TAB2: RANKING, MOST-VISTAS, HISTORIAS-INFO Y COLECCIONES
+// ============================================================================
+export const getSimplifyTab2DataController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const periodo = url.searchParams.get("periodo") || url.searchParams.get("mes") || "mes";
+    const limiteRankingParam = parseInt(url.searchParams.get("limite") || "10", 10);
+    const limiteRanking = isNaN(limiteRankingParam) || limiteRankingParam <= 0 ? 10 : limiteRankingParam;
+
+    // 1. Ejecución paralela de las 4 fuentes de datos de Tab2
+    const [
+      rankingRaw,
+      historiasPorVistasRaw,
+      todasLasHistoriasRaw,
+      todasLasColeccionesRaw,
+    ] = await Promise.all([
+      // A) Ranking mensual de creadores más apoyados
+      (async () => {
+        try {
+          const res = await obtenerRankingCreadoresService(periodo);
+          const items = Array.isArray(res?.ranking) ? res.ranking : [];
+          return items.slice(0, limiteRanking);
+        } catch (err) {
+          console.warn("⚠️ Aviso al cargar ranking para Tab2:", err);
+          return [];
+        }
+      })(),
+
+      // B) Historias más vistas (HistoriaInfo)
+      (async () => {
+        try {
+          return await getHistoriasPorVistas();
+        } catch (err) {
+          console.warn("⚠️ Aviso al cargar historias más vistas para Tab2:", err);
+          return [];
+        }
+      })(),
+
+      // C) Catálogo completo de historias (HistoriaInfo)
+      (async () => {
+        try {
+          return await getCardHistoriasService();
+        } catch (err) {
+          console.warn("⚠️ Aviso al cargar catálogo de historias para Tab2:", err);
+          return [];
+        }
+      })(),
+
+      // D) Todas las colecciones
+      (async () => {
+        try {
+          return await getTodasLasColeccionesService();
+        } catch (err) {
+          console.warn("⚠️ Aviso al cargar colecciones para Tab2:", err);
+          return [];
+        }
+      })(),
+    ]);
+
+    const listaCatalogo: any[] = Array.isArray(todasLasHistoriasRaw) ? (todasLasHistoriasRaw as any[]) : [];
+
+    // 2. Enriquecer las historias más vistas con el catálogo y perfil completo de cada autor
+    const promesasVistasEnriquecidas = (historiasPorVistasRaw || []).map(async (item: any) => {
+      const match: any = listaCatalogo.find((h: any) => {
+        if (!h) return false;
+        const hId = String(h.id || h.idDoc || "");
+        const itemId = String(item.id || item.idDoc || "");
+        const hDoc = String(h.idDoc || h.id || "");
+        const itemDoc = String(item.idDoc || item.id || "");
+        const hTitulo = (h.titulo || h.nombre || "").trim().toLowerCase();
+        const itemTitulo = (item.titulo || item.nombre || "").trim().toLowerCase();
+
+        return (
+          (hId && (hId === itemId || hId === itemDoc)) ||
+          (hDoc && (hDoc === itemId || hDoc === itemDoc)) ||
+          (hTitulo && itemTitulo && hTitulo === itemTitulo)
+        );
+      });
+
+      const authorId = String(
+        item.idAutor ||
+        item.autorId ||
+        item.uidAutor ||
+        match?.idAutor ||
+        match?.autorId ||
+        match?.uidAutor ||
+        item.idUsuario ||
+        "",
+      );
+
+      let autorPerfil: any = null;
+      if (authorId) {
+        try {
+          const userDoc = (await getUsuarioByUidService(authorId)) as any;
+          if (userDoc) {
+            autorPerfil = {
+              uid: userDoc.uid || authorId,
+              name: userDoc.perfil?.name || userDoc.name || item.autor || match?.autor || "Creador Homero",
+              displayName: userDoc.perfil?.name || userDoc.name || item.autor || match?.autor || "Creador Homero",
+              photoURL: userDoc.perfil?.photoURL || userDoc.photoURL || item.photoURL || match?.photoURL || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+              foto: userDoc.perfil?.photoURL || userDoc.photoURL || item.photoURL || match?.photoURL || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+              avatar: userDoc.perfil?.photoURL || userDoc.photoURL || item.photoURL || match?.photoURL || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+              descripcion: userDoc.perfil?.descripcion || userDoc.descripcion || "",
+              bio: userDoc.perfil?.descripcion || userDoc.descripcion || "",
+              verificado: Boolean(userDoc.perfil?.verificado ?? userDoc.verificado ?? false),
+              marco_perfil_id: userDoc.perfil?.marco_perfil_id ?? userDoc.marco_perfil_id ?? null,
+            };
+          }
+        } catch (e) {
+          console.warn(`Aviso al cargar perfil de autor ${authorId}:`, e);
+        }
+      }
+
+      const autorNombre =
+        autorPerfil?.name ||
+        autorPerfil?.displayName ||
+        item.autor ||
+        match?.autor ||
+        "Creador Homero";
+
+      const autorFoto =
+        autorPerfil?.photoURL ||
+        autorPerfil?.foto ||
+        autorPerfil?.avatar ||
+        item.fotoAutor ||
+        item.photoURL ||
+        match?.fotoAutor ||
+        match?.photoURL ||
+        "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
+
+      const descEncontrada =
+        item.descripcion ||
+        item.descripcionES ||
+        item.descripcionEN ||
+        item.sinopsis ||
+        item.resumen ||
+        (match
+          ? match.descripcion ||
+            match.descripcionES ||
+            match.descripcionEN ||
+            match.sinopsis ||
+            match.resumen ||
+            match.detalles ||
+            match.description
+          : "") ||
+        autorPerfil?.descripcion ||
+        autorPerfil?.bio ||
+        "";
+
+      return {
+        ...(match || {}),
+        ...item,
+        id: String(item.id || item.idDoc || match?.id || ""),
+        idDoc: String(item.idDoc || item.id || match?.idDoc || ""),
+        autorPerfil,
+        autorNombre,
+        autorFoto,
+        idAutor: authorId,
+        descripcion: descEncontrada,
+      };
+    });
+
+    const mostVistasEnriquecidas = await Promise.all(promesasVistasEnriquecidas);
+
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos de Tab2 obtenidos correctamente",
+      data: {
+        ranking: rankingRaw,
+        mostVistas: mostVistasEnriquecidas,
+        vistas: mostVistasEnriquecidas,
+        historiasInfo: listaCatalogo,
+        colecciones: todasLasColeccionesRaw,
+      },
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyTab2DataController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener datos de Tab2",
       error: error?.message || "Error interno del servidor",
     };
   }
