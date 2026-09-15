@@ -15,17 +15,22 @@ export const guardarCardHistoriaEnFirestoreService = async (
   }
 };
 
-export const obtenerCardHistoriaService = async (): Promise<CardHistoria[]> => {
+export const obtenerCardHistoriaService = async (
+  limitCount?: number,
+): Promise<CardHistoria[]> => {
   try {
-    const snapshot = await db.collection("CardHistoria")
-      .orderBy("fecha", "desc")
-      .get();
+    let query: any = db.collection("CardHistoria").orderBy("fecha", "desc");
+    if (limitCount && limitCount > 0) {
+      query = query.limit(limitCount);
+    }
+    const snapshot = await query.get();
     if (snapshot.empty) {
       console.log("⚠️ La colección CardHistoria está vacía.");
       return [];
     }
 
-    const data = snapshot.docs.map((doc) => ({
+    const data = snapshot.docs.map((doc: any) => ({
+      idDoc: doc.id,
       ...doc.data(),
     })) as CardHistoria[];
 

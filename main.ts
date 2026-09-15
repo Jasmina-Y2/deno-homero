@@ -4,6 +4,7 @@ import router from "./src/routes/index.ts";
 import "./src/config/firebase.ts";
 import awsRoutes from "./src/routes/aws.ts";
 import elevenLabsRoutes from "./src/routes/elevenlabs.ts";
+import simplifyRoutes from "./src/routes/simplify.ts";
 
 const app = new Application();
 const PORT = 8000;
@@ -47,6 +48,9 @@ app.use(awsRoutes.allowedMethods());
 
 app.use(elevenLabsRoutes.routes());
 app.use(elevenLabsRoutes.allowedMethods());
+
+app.use(simplifyRoutes.routes());
+app.use(simplifyRoutes.allowedMethods());
 
 console.log(`🦕 Servidor Deno escuchando en puerto ${PORT}`);
 await app.listen({ port: PORT });
