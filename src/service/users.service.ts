@@ -424,67 +424,25 @@ export const getUsuarioByUidService = async (uid: string) => {
     const cleanUid = (uid || "").trim();
     if (!cleanUid) return null;
 
-    console.log("🔍 [getUsuarioByUidService] Buscando usuario con UID:", cleanUid);
+    console.log("🔍 [getUsuarioByUidService] Buscando usuario ÚNICAMENTE por campo 'uid':", cleanUid);
 
-    // 1. Priorizar búsqueda por campo 'uid' (Auth UID) en Firestore
+    // Búsqueda ESTRICTA únicamente por el campo 'uid' en Firestore
     const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
-    if (!snapshot.empty) {
-      const userDoc = snapshot.docs[0];
-      const rawData = userDoc.data() || {};
-      const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
-      const authUid = rawData.uid || data.uid || cleanUid;
-      console.log(`✅ [getUsuarioByUidService] Encontrado por where('uid'): Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
-      return {
-        ...data,
-        uid: authUid,
-      };
+    if (snapshot.empty) {
+      console.warn(`❌ [getUsuarioByUidService] No existe ningún usuario con el campo uid = '${cleanUid}'`);
+      return null;
     }
 
-    // 2. Si no se encuentra por 'uid', buscar por ID de documento directo
-    const directDoc = await db.collection("users").doc(cleanUid).get();
-    if (directDoc.exists) {
-      const rawData = directDoc.data() || {};
-      const data = await verificarExpiracionSuscripcion(directDoc.ref, rawData);
-      const authUid = rawData.uid || data.uid || cleanUid;
-      console.log(`✅ [getUsuarioByUidService] Encontrado por doc(cleanUid): Doc ID = ${directDoc.id}, campo uid = ${authUid}`);
-      return {
-        ...data,
-        uid: authUid,
-      };
-    }
+    const userDoc = snapshot.docs[0];
+    const rawData = userDoc.data() || {};
+    const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
+    const authUid = rawData.uid || cleanUid;
 
-    // 3. Fallback: buscar por campo 'id' si existiera
-    const snapshotId = await db.collection("users").where("id", "==", cleanUid).limit(1).get();
-    if (!snapshotId.empty) {
-      const userDoc = snapshotId.docs[0];
-      const rawData = userDoc.data() || {};
-      const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
-      const authUid = rawData.uid || data.uid || cleanUid;
-      console.log(`✅ [getUsuarioByUidService] Encontrado por where('id'): Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
-      return {
-        ...data,
-        uid: authUid,
-      };
-    }
-
-    // 4. Fallback: buscar por email si cleanUid contiene @
-    if (cleanUid.includes("@")) {
-      const emailSnap = await db.collection("users").where("perfil.email", "==", cleanUid).limit(1).get();
-      if (!emailSnap.empty) {
-        const userDoc = emailSnap.docs[0];
-        const rawData = userDoc.data() || {};
-        const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
-        const authUid = rawData.uid || data.uid || cleanUid;
-        console.log(`✅ [getUsuarioByUidService] Encontrado por email: Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
-        return {
-          ...data,
-          uid: authUid,
-        };
-      }
-    }
-
-    console.warn(`⚠️ No se encontró usuario con UID / ID: ${cleanUid}`);
-    return null;
+    console.log(`✅ [getUsuarioByUidService] Usuario encontrado exitosamente por uid:`, authUid);
+    return {
+      ...data,
+      uid: authUid,
+    };
   } catch (error) {
     console.error("❌ Error en getUsuarioByUidService:", error);
     throw new Error("Error al obtener los datos del usuario");
