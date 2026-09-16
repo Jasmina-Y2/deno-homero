@@ -903,7 +903,6 @@ export const getSimplifyUserInfoController = async (
       siguiendo: siguiendoLista,
       topDonadores: topDonadoresEnriquecidos,
       totalGastado: totalGastos,
-      totalGastos: totalGastos,
       totalGanancias: totalGanancias,
       totalRecompensas: totalRecompensas,
       totalMonedas: saldoMonedas,
@@ -928,9 +927,8 @@ export const getSimplifyUserInfoController = async (
     ctx.response.status = 200;
     ctx.response.body = {
       success: true,
-      message: "Datos completos de usuario (perfil, historial, colecciones, posts, seguidores y top donadores) obtenidos correctamente",
+      message: "Datos de usuario obtenidos correctamente",
       data: respuestaCompleta,
-      ...respuestaCompleta,
     };
   } catch (error: any) {
     console.error("❌ Error en getSimplifyUserInfoController:", error);
