@@ -65,7 +65,7 @@ Deno.test("Normalización Usuario: Convierte documento plano al esquema modular 
     fechaRegistro: "2026-09-09T21:00:00.000Z",
   };
 
-  const modular = normalizarUsuarioDoc(usuarioPlano, usuarioPlano.uid);
+  const modular = normalizarUsuarioDoc(usuarioPlano);
 
   // 1. Validar campos de raíz
   assertEquals(modular.uid, "7cBW5g7xYGbh7Fh2zTCHvNBdGHx1");
@@ -151,7 +151,7 @@ Deno.test("Normalización Usuario: Maneja array de suscripciones múltiples (lec
     },
   };
 
-  const res = normalizarUsuarioDoc(usuarioConArraySuscripciones, usuarioConArraySuscripciones.uid);
+  const res = normalizarUsuarioDoc(usuarioConArraySuscripciones);
 
   assertEquals(Array.isArray(res.suscripciones), true);
   assertEquals(res.suscripciones.length, 2);

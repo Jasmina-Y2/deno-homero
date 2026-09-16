@@ -73,16 +73,12 @@ export const obtenerEliminacionesObsoletas = (rawData: any): Record<string, any>
  * Normaliza un documento de usuario de Firestore a la estructura estrictamente modular:
  * { uid, perfil, suscripciones, billetera, actividadDiaria, sistema }
  */
-export const normalizarUsuarioDoc = (data: any, docId?: string): UsuarioDocumento => {
+export const normalizarUsuarioDoc = (data: any): UsuarioDocumento => {
   if (!data) {
     data = {};
   }
 
-  // Respetar prioritariamente el UID de autenticación almacenado en el documento de Firestore
-  const rawUid = data.uid || data.idUsuario || data.usuarioId || data.uidUsuario || data.id_usuario;
-  const uid = (rawUid !== undefined && rawUid !== null && String(rawUid).trim() !== "")
-    ? String(rawUid).trim()
-    : (docId || "");
+  const uid = data.uid || "";
   const ahora = new Date().toISOString();
   const mesActual = ahora.slice(0, 7);
 
@@ -205,7 +201,7 @@ export const getUsuariosService = async () => {
     const snapshot = await db.collection("users").get();
     return snapshot.docs.map((doc: any) => {
       const data = doc.data();
-      return normalizarUsuarioDoc(data, doc.id);
+      return normalizarUsuarioDoc(data);
     });
   } catch (error) {
     console.error("❌ Error en getUsuariosService:", error);
@@ -342,7 +338,7 @@ const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
     necesitaLimpieza = true;
   }
 
-  const normalizado = normalizarUsuarioDoc(rawData, rawData.uid || docRef.id);
+  const normalizado = normalizarUsuarioDoc(rawData);
   const ahora = new Date();
   const mesActual = ahora.toISOString().slice(0, 7);
 
@@ -424,25 +420,21 @@ export const getUsuarioByUidService = async (uid: string) => {
     const cleanUid = (uid || "").trim();
     if (!cleanUid) return null;
 
-    console.log("🔍 [getUsuarioByUidService] Buscando usuario ÚNICAMENTE por campo 'uid':", cleanUid);
-
-    // Búsqueda ESTRICTA únicamente por el campo 'uid' en Firestore
-    const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
-    if (snapshot.empty) {
-      console.warn(`❌ [getUsuarioByUidService] No existe ningún usuario con el campo uid = '${cleanUid}'`);
-      return null;
+    // 1. Buscar documento directamente por ID en Firestore (UID de Firebase)
+    const directDoc = await db.collection("users").doc(cleanUid).get();
+    if (directDoc.exists) {
+      return normalizarUsuarioDoc(directDoc.data());
     }
 
-    const userDoc = snapshot.docs[0];
-    const rawData = userDoc.data() || {};
-    const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
-    const authUid = rawData.uid || cleanUid;
+    // 2. Buscar por campo 'uid' en Firestore
+    const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
+    if (!snapshot.empty) {
+      const userDoc = snapshot.docs[0];
+      return normalizarUsuarioDoc(userDoc.data());
+    }
 
-    console.log(`✅ [getUsuarioByUidService] Usuario encontrado exitosamente por uid:`, authUid);
-    return {
-      ...data,
-      uid: authUid,
-    };
+    console.warn(`⚠️ No se encontró usuario con UID: ${cleanUid}`);
+    return null;
   } catch (error) {
     console.error("❌ Error en getUsuarioByUidService:", error);
     throw new Error("Error al obtener los datos del usuario");
@@ -687,7 +679,7 @@ export const actualizarSuscripcionUsuarioService = async (
       rawUserData = snap.docs[0].data();
     }
 
-    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const usuario = normalizarUsuarioDoc(rawUserData);
     const ahora = new Date();
     const ahoraIso = ahora.toISOString();
     const mesActual = ahoraIso.slice(0, 7);
@@ -846,7 +838,7 @@ export const asignarPrivilegiosUsuarioService = async (params: ParametrosPrivile
       throw new Error(`No se encontró ningún usuario con ${uid ? `UID: ${uid}` : `Email: ${email}`}`);
     }
 
-    const usuario = normalizarUsuarioDoc(rawUserData, uid || docRef.id);
+    const usuario = normalizarUsuarioDoc(rawUserData);
     const ahora = new Date();
     const ahoraIso = ahora.toISOString();
 
@@ -1066,7 +1058,7 @@ export const actualizarMarcoUsuarioService = async (params: ParametrosMarcoUsuar
       const userData = docSnap.data();
       fcmToken = userData?.sistema?.fcmToken || null;
       if (finalMarcoId && esMarcoDeSuscripcion(finalMarcoId)) {
-        const usuarioNorm = normalizarUsuarioDoc(userData, userId);
+        const usuarioNorm = normalizarUsuarioDoc(userData);
         const tieneEscritor = tieneSubEscritorActiva(usuarioNorm.suscripciones);
         const tieneLector = tieneSubLectorActiva(usuarioNorm.suscripciones);
         const tieneActivas = tieneSubGlobalActiva(usuarioNorm.suscripciones);
@@ -1081,7 +1073,7 @@ export const actualizarMarcoUsuarioService = async (params: ParametrosMarcoUsuar
         const userData = snapshot.docs[0].data();
         fcmToken = userData?.sistema?.fcmToken || null;
         if (finalMarcoId && esMarcoDeSuscripcion(finalMarcoId)) {
-          const usuarioNorm = normalizarUsuarioDoc(userData, userId);
+          const usuarioNorm = normalizarUsuarioDoc(userData);
           const tieneEscritor = tieneSubEscritorActiva(usuarioNorm.suscripciones);
           const tieneLector = tieneSubLectorActiva(usuarioNorm.suscripciones);
           const tieneActivas = tieneSubGlobalActiva(usuarioNorm.suscripciones);
@@ -1300,7 +1292,7 @@ export const migrarTodosLosUsuariosService = async () => {
     let migrados = 0;
     for (const doc of snapshot.docs) {
       const rawData = doc.data();
-      const normalizado = normalizarUsuarioDoc(rawData, doc.id);
+      const normalizado = normalizarUsuarioDoc(rawData);
 
       // set con merge: false sobreescribe el documento entero sin dejar campos fantasma en la raíz
       await doc.ref.set(normalizado);
@@ -1428,7 +1420,7 @@ export const agregarSuscripcionUsuarioService = async (params: ParametrosCrearSu
       rawUserData = snap.docs[0].data();
     }
 
-    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const usuario = normalizarUsuarioDoc(rawUserData);
     const ahora = new Date();
     const ahoraIso = ahora.toISOString();
     const mesActual = ahoraIso.slice(0, 7);
@@ -1560,7 +1552,7 @@ export const editarSuscripcionUsuarioService = async (params: ParametrosEditarSu
       rawUserData = snap.docs[0].data();
     }
 
-    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const usuario = normalizarUsuarioDoc(rawUserData);
     const ahora = new Date();
     const ahoraIso = ahora.toISOString();
     const mesActual = ahoraIso.slice(0, 7);
@@ -1718,7 +1710,7 @@ export const eliminarSuscripcionUsuarioService = async (
       rawUserData = snap.docs[0].data();
     }
 
-    const usuario = normalizarUsuarioDoc(rawUserData, uid);
+    const usuario = normalizarUsuarioDoc(rawUserData);
     const ahora = new Date();
     const ahoraIso = ahora.toISOString();
     const mesActual = ahoraIso.slice(0, 7);

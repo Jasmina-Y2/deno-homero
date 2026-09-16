@@ -22,14 +22,14 @@ export const userWebSocketController = (ctx: RouterContext<string>) => {
   const uid =
     ctx.params?.uid ||
     ctx.request.url.searchParams.get("uid") ||
-    ctx.request.url.searchParams.get("idUsuario") ||
     "";
 
   if (!uid || uid.trim() === "") {
+    console.warn("❌ [WS User] Intento de conexión WebSocket rechazado: UID no proporcionado.");
     ctx.response.status = 400;
     ctx.response.body = {
       success: false,
-      message: "El parámetro UID es obligatorio para establecer la conexión WebSocket.",
+      message: "Error: El parámetro UID es estrictamente obligatorio para establecer la conexión WebSocket.",
     };
     return;
   }

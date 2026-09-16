@@ -9,7 +9,7 @@ export const syncUserWithGoogleService = async (userData: any) => {
         const docSnap = await userRef.get();
 
         if (docSnap.exists) {
-            return normalizarUsuarioDoc(docSnap.data(), docSnap.id);
+            return normalizarUsuarioDoc(docSnap.data());
         }
 
         let finalPhotoUrl = "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg";
