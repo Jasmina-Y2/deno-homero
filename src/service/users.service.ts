@@ -78,10 +78,11 @@ export const normalizarUsuarioDoc = (data: any, docId?: string): UsuarioDocument
     data = {};
   }
 
-  // Respetar el UID original del usuario en Firestore si existe
-  const uid = (data.uid !== undefined && data.uid !== null && String(data.uid).trim() !== "")
-    ? String(data.uid).trim()
-    : (data.id || docId || "");
+  // Respetar prioritariamente el UID de autenticación almacenado en el documento de Firestore
+  const rawUid = data.uid || data.idUsuario || data.usuarioId || data.uidUsuario || data.id_usuario;
+  const uid = (rawUid !== undefined && rawUid !== null && String(rawUid).trim() !== "")
+    ? String(rawUid).trim()
+    : (docId || "");
   const ahora = new Date().toISOString();
   const mesActual = ahora.slice(0, 7);
 
@@ -341,7 +342,7 @@ const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
     necesitaLimpieza = true;
   }
 
-  const normalizado = normalizarUsuarioDoc(rawData, docRef.id);
+  const normalizado = normalizarUsuarioDoc(rawData, rawData.uid || docRef.id);
   const ahora = new Date();
   const mesActual = ahora.toISOString().slice(0, 7);
 
@@ -427,8 +428,13 @@ export const getUsuarioByUidService = async (uid: string) => {
     const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
     if (!snapshot.empty) {
       const userDoc = snapshot.docs[0];
-      const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
-      return { idDoc: userDoc.id, ...data };
+      const rawData = userDoc.data() || {};
+      const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
+      const authUid = rawData.uid || data.uid || cleanUid;
+      return {
+        ...data,
+        uid: authUid,
+      };
     }
 
     // 2. Si no se encuentra por 'uid', buscar por ID de documento directo
@@ -436,15 +442,39 @@ export const getUsuarioByUidService = async (uid: string) => {
     if (directDoc.exists) {
       const rawData = directDoc.data() || {};
       const data = await verificarExpiracionSuscripcion(directDoc.ref, rawData);
-      return { idDoc: directDoc.id, ...data };
+      const authUid = rawData.uid || data.uid || cleanUid;
+      return {
+        ...data,
+        uid: authUid,
+      };
     }
 
     // 3. Fallback: buscar por campo 'id' si existiera
     const snapshotId = await db.collection("users").where("id", "==", cleanUid).limit(1).get();
     if (!snapshotId.empty) {
       const userDoc = snapshotId.docs[0];
-      const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
-      return { idDoc: userDoc.id, ...data };
+      const rawData = userDoc.data() || {};
+      const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
+      const authUid = rawData.uid || data.uid || cleanUid;
+      return {
+        ...data,
+        uid: authUid,
+      };
+    }
+
+    // 4. Fallback: buscar por email si cleanUid contiene @
+    if (cleanUid.includes("@")) {
+      const emailSnap = await db.collection("users").where("perfil.email", "==", cleanUid).limit(1).get();
+      if (!emailSnap.empty) {
+        const userDoc = emailSnap.docs[0];
+        const rawData = userDoc.data() || {};
+        const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
+        const authUid = rawData.uid || data.uid || cleanUid;
+        return {
+          ...data,
+          uid: authUid,
+        };
+      }
     }
 
     console.warn(`⚠️ No se encontró usuario con UID / ID: ${cleanUid}`);

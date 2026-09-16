@@ -464,15 +464,19 @@ export const getSimplifyUserDataController = async (
       saldoMonedas = Math.max(0, (ganancias + recompensas) - gastos);
     }
 
-    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas
+    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas (sin idDoc)
+    const rawUser = { ...(userDoc as any) };
+    delete rawUser.idDoc;
+
+    const finalUid = rawUser.uid || cleanUid;
+
     const usuarioConMonedas = {
-      ...(userDoc as any),
-      idDoc: (userDoc as any).idDoc || "",
-      uid: (userDoc as any).uid || (userDoc as any).idDoc || "",
+      ...rawUser,
+      uid: finalUid,
       monedas: saldoMonedas,
       saldoMonedas: saldoMonedas,
       billetera: {
-        ...((userDoc as any).billetera || {}),
+        ...(rawUser.billetera || {}),
         monedas: saldoMonedas,
       },
     };
