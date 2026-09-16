@@ -78,7 +78,10 @@ export const normalizarUsuarioDoc = (data: any, docId?: string): UsuarioDocument
     data = {};
   }
 
-  const uid = data.uid || docId || "";
+  // Respetar el UID original del usuario en Firestore si existe
+  const uid = (data.uid !== undefined && data.uid !== null && String(data.uid).trim() !== "")
+    ? String(data.uid).trim()
+    : (data.id || docId || "");
   const ahora = new Date().toISOString();
   const mesActual = ahora.slice(0, 7);
 
@@ -417,21 +420,35 @@ const verificarExpiracionSuscripcion = async (docRef: any, rawData: any) => {
  */
 export const getUsuarioByUidService = async (uid: string) => {
   try {
-    const directDoc = await db.collection("users").doc(uid).get();
+    const cleanUid = (uid || "").trim();
+    if (!cleanUid) return null;
+
+    // 1. Priorizar búsqueda por campo 'uid' (Auth UID) en Firestore
+    const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
+    if (!snapshot.empty) {
+      const userDoc = snapshot.docs[0];
+      const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
+      return { idDoc: userDoc.id, ...data };
+    }
+
+    // 2. Si no se encuentra por 'uid', buscar por ID de documento directo
+    const directDoc = await db.collection("users").doc(cleanUid).get();
     if (directDoc.exists) {
-      const data = await verificarExpiracionSuscripcion(directDoc.ref, directDoc.data());
+      const rawData = directDoc.data() || {};
+      const data = await verificarExpiracionSuscripcion(directDoc.ref, rawData);
       return { idDoc: directDoc.id, ...data };
     }
 
-    const snapshot = await db.collection("users").where("uid", "==", uid).limit(1).get();
-    if (snapshot.empty) {
-      console.warn(`⚠️ No se encontró usuario con UID: ${uid}`);
-      return null;
+    // 3. Fallback: buscar por campo 'id' si existiera
+    const snapshotId = await db.collection("users").where("id", "==", cleanUid).limit(1).get();
+    if (!snapshotId.empty) {
+      const userDoc = snapshotId.docs[0];
+      const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
+      return { idDoc: userDoc.id, ...data };
     }
 
-    const userDoc = snapshot.docs[0];
-    const data = await verificarExpiracionSuscripcion(userDoc.ref, userDoc.data());
-    return { idDoc: userDoc.id, ...data };
+    console.warn(`⚠️ No se encontró usuario con UID / ID: ${cleanUid}`);
+    return null;
   } catch (error) {
     console.error("❌ Error en getUsuarioByUidService:", error);
     throw new Error("Error al obtener los datos del usuario");

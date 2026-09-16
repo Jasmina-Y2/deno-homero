@@ -467,6 +467,8 @@ export const getSimplifyUserDataController = async (
     // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas
     const usuarioConMonedas = {
       ...(userDoc as any),
+      idDoc: (userDoc as any).idDoc || "",
+      uid: (userDoc as any).uid || (userDoc as any).idDoc || "",
       monedas: saldoMonedas,
       saldoMonedas: saldoMonedas,
       billetera: {
