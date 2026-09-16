@@ -1,6 +1,7 @@
 import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
   getSimplifyBilleteraController,
+  getSimplifyHistoriaDetalleController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,
   getSimplifyNotificacionesNoLeidasController,
@@ -11,11 +12,12 @@ import {
   getSimplifyUserInfoController,
   getSimplifyVocesController,
 } from "../controllers/simplify.controller.ts";
+import { authOpcional } from "../middlewares/auth.middleware.ts";
 
 const router = new Router();
 
 // ============================================================================
-// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, BILLETERA, VOCES, NOTIFICACIONES, LIKES)
+// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, BILLETERA, VOCES, NOTIFICACIONES, LIKES, HISTORIA)
 // ============================================================================
 router.get("/api/simplify/tab1", getSimplifyTab1CardsController);
 router.get("/api/simplify/tab2", getSimplifyTab2DataController);
@@ -39,8 +41,13 @@ router.get("/api/simplify/voces", getSimplifyVocesController);
 // Conteo de likes y estado Me Gusta (isLiked) unificado
 router.get(
   "/api/simplify/likes/:idPublicacion",
+  authOpcional,
   getSimplifyLikesStatusController,
 );
+
+// Ruta unificada para Historia Completa (Contenido + Total Likes + Estado Liked de Usuario)
+router.get("/api/simplify/historia/:id", authOpcional, getSimplifyHistoriaDetalleController);
+router.get("/api/simplify/historia", authOpcional, getSimplifyHistoriaDetalleController);
 
 router.get(
   "/api/simplify/notificaciones/no-leidas",
@@ -53,6 +60,7 @@ router.get(
 
 export {
   getSimplifyBilleteraController,
+  getSimplifyHistoriaDetalleController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,
   getSimplifyNotificacionesNoLeidasController,

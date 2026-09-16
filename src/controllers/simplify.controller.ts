@@ -3,6 +3,7 @@ import {
   getHistoriaCardByCustomId2Service,
   obtenerCardHistoriaService,
 } from "../service/cardhistoria.service.ts";
+import { getHistoriaByCustomIdService } from "../service/historia.service.ts";
 import { getUsuarioByUidService } from "../service/users.service.ts";
 import {
   getCardHistoriasService,
@@ -1816,5 +1817,117 @@ export const getSimplifyBilleteraController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO: HISTORIA COMPLETA + LIKES + ESTADO LIKED (UNIFICADO)
+// ============================================================================
+export const getSimplifyHistoriaDetalleController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const idHistoria = ctx.params?.id ||
+      ctx.params?.idHistoria ||
+      ctx.params?.idPublicacion ||
+      url.searchParams.get("id") ||
+      url.searchParams.get("idHistoria") ||
+      url.searchParams.get("idPublicacion") ||
+      "";
+
+    const stateUser = (ctx.state as any)?.user;
+    const uid = url.searchParams.get("uid") ||
+      url.searchParams.get("idUsuario") ||
+      url.searchParams.get("idUser") ||
+      stateUser?.uid ||
+      "";
+
+    const cleanId = idHistoria.trim();
+    const cleanUid = uid.trim();
+
+    if (!cleanId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El ID de la historia es requerido (/api/simplify/historia/:id o ?id=...)",
+        data: null,
+      };
+      return;
+    }
+
+    // 1. Ejecutar en paralelo con Promise.all: Historia, Total Likes y Estado Liked
+    const [historiaDocs, totalLikes, isLiked] = await Promise.all([
+      (async () => {
+        try {
+          return await getHistoriaByCustomIdService(cleanId);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/historia] Error al obtener contenido de historia ${cleanId}:`, err);
+          return [];
+        }
+      })(),
+      (async () => {
+        try {
+          return await obtenerTotalLikesService(cleanId);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/historia] Error al obtener total de likes para ${cleanId}:`, err);
+          return 0;
+        }
+      })(),
+      (async () => {
+        if (!cleanUid) return false;
+        try {
+          return await checkIfLikedService(cleanId, cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/historia] Error al verificar like de ${cleanUid} para ${cleanId}:`, err);
+          return false;
+        }
+      })(),
+    ]);
+
+    const historiaData = Array.isArray(historiaDocs) ? historiaDocs : [];
+    const itemPrincipal = historiaData.length > 0 ? historiaData[0] : null;
+
+    ctx.response.headers.set(
+      "Cache-Control",
+      "private, max-age=30",
+    );
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Historia, conteo de likes y estado obtenidos correctamente",
+      data: {
+        id: cleanId,
+        idHistoria: cleanId,
+        idPublicacion: cleanId,
+        historia: historiaData,
+        item: itemPrincipal,
+        totalLikes: totalLikes,
+        likes: totalLikes,
+        isLiked: Boolean(isLiked),
+        liked: Boolean(isLiked),
+        hasLiked: Boolean(isLiked),
+        uid: cleanUid || null,
+        idUsuario: cleanUid || null,
+      },
+      // Campos directos para máxima compatibilidad con el frontend
+      historia: historiaData,
+      item: itemPrincipal,
+      totalLikes: totalLikes,
+      likes: totalLikes,
+      isLiked: Boolean(isLiked),
+      liked: Boolean(isLiked),
+      hasLiked: Boolean(isLiked),
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyHistoriaDetalleController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener historia simplificada con likes",
+      error: error?.message || "Error interno del servidor",
+      data: null,
+    };
+  }
+};
+
 
 
