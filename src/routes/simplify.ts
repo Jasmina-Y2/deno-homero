@@ -1,5 +1,6 @@
 import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
+  getSimplifyBilleteraController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,
   getSimplifyNotificacionesNoLeidasController,
@@ -14,7 +15,7 @@ import {
 const router = new Router();
 
 // ============================================================================
-// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, VOCES, NOTIFICACIONES, LIKES)
+// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, BILLETERA, VOCES, NOTIFICACIONES, LIKES)
 // ============================================================================
 router.get("/api/simplify/tab1", getSimplifyTab1CardsController);
 router.get("/api/simplify/tab2", getSimplifyTab2DataController);
@@ -27,6 +28,10 @@ router.get("/api/simplify/user-info/:uid", getSimplifyUserInfoController);
 router.get("/api/simplify/user-info", getSimplifyUserInfoController);
 router.get("/api/simplify/userinfo/:uid", getSimplifyUserInfoController);
 router.get("/api/simplify/userinfo", getSimplifyUserInfoController);
+
+// Ruta unificada para Billetera (Pagos/Retiros + Compras de App + Límites de Anuncios por Dispositivo)
+router.get("/api/simplify/billetera/:uid", getSimplifyBilleteraController);
+router.get("/api/simplify/billetera", getSimplifyBilleteraController);
 
 // Catálogo unificado de todas las voces IA (Azure, Gemini, ElevenLabs)
 router.get("/api/simplify/voces", getSimplifyVocesController);
@@ -47,6 +52,7 @@ router.get(
 );
 
 export {
+  getSimplifyBilleteraController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,
   getSimplifyNotificacionesNoLeidasController,

@@ -32,6 +32,9 @@ import { getGenteQueMeSigueService } from "../service/seguir.service.ts";
 import { getGenteQueYoSigoService } from "../service/seguiruser.service.ts";
 import { CATALOGO_VOCES_AZURE, LISTA_VOCES_GEMINI } from "./ia.controller.ts";
 import { ElevenLabsService } from "../service/elevenlabs.service.ts";
+import { obtenerPagosUsuarioService } from "../service/pago.service.ts";
+import { obtenerComprasUsuarioService } from "../service/comprasApp.service.ts";
+import { consultarEstadoLimiteDispositivoService } from "../service/deviceAdLimit.service.ts";
 import { db } from "../config/firebase.ts";
 
 // ============================================================================
@@ -1584,4 +1587,160 @@ export const getSimplifyLikesStatusController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO BILLETERA: PAGOS/RETIROS, COMPRAS EN APP Y LÍMITES DE ANUNCIOS
+// (GET /api/simplify/billetera/:uid o ?uid=...&deviceId=...)
+// ============================================================================
+export const getSimplifyBilleteraController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const uid = ctx.params?.uid ||
+      url.searchParams.get("uid") ||
+      url.searchParams.get("idUsuario") ||
+      url.searchParams.get("id") || "";
+
+    const rawDeviceId = url.searchParams.get("deviceId") ||
+      url.searchParams.get("idDispositivo") || "";
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message:
+          "El parámetro UID es requerido en la URL (/api/simplify/billetera/:uid) o como query parameter (?uid=...)",
+        data: null,
+      };
+      return;
+    }
+
+    const cleanUid = uid.trim();
+    let cleanDeviceId = rawDeviceId ? rawDeviceId.trim() : "";
+
+    console.log("📥 [API /api/simplify/billetera] Petición recibida para UID:", cleanUid, "DeviceId:", cleanDeviceId || "N/A");
+
+    // 1. Obtener usuario para conocer su saldo y fallback de deviceId
+    let userDoc: any = null;
+    try {
+      userDoc = await getUsuarioByUidService(cleanUid);
+    } catch (err) {
+      console.warn(`⚠️ [billetera] Error al consultar usuario ${cleanUid}:`, err);
+    }
+
+    if (!cleanDeviceId && userDoc) {
+      cleanDeviceId = String(
+        userDoc.sistema?.ultimoDeviceId ||
+        userDoc.ultimoDeviceId ||
+        userDoc.deviceId ||
+        "",
+      ).trim();
+    }
+
+    // 2. Ejecutar consultas concurrentes con Promise.all:
+    //    A) Pagos / Solicitudes de retiro del usuario
+    //    B) Compras de la app del usuario
+    //    C) Estado de límite de anuncios del dispositivo
+    const [pagosRaw, comprasRaw, deviceLimitsRaw] = await Promise.all([
+      // A) Pagos
+      (async () => {
+        try {
+          return await obtenerPagosUsuarioService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [billetera] Error al cargar pagos de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+
+      // B) Compras App
+      (async () => {
+        try {
+          return await obtenerComprasUsuarioService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [billetera] Error al cargar compras de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+
+      // C) Límites de anuncios del dispositivo
+      (async () => {
+        if (!cleanDeviceId) {
+          const vistos = Number(userDoc?.actividadDiaria?.anunciosVistosHoy ?? 0);
+          return {
+            deviceId: "",
+            anunciosVistosHoy: vistos,
+            anunciosRestantes: Math.max(0, 3 - vistos),
+            limiteAlcanzado: vistos >= 3,
+            fechaUltimoAnuncio: userDoc?.actividadDiaria?.fechaUltimoAnuncio || "",
+            totalAnunciosHistoricos: 0,
+            bloqueado: false,
+          };
+        }
+        try {
+          return await consultarEstadoLimiteDispositivoService(cleanDeviceId);
+        } catch (err) {
+          console.warn(`⚠️ [billetera] Error al consultar límites de dispositivo ${cleanDeviceId}:`, err);
+          const vistos = Number(userDoc?.actividadDiaria?.anunciosVistosHoy ?? 0);
+          return {
+            deviceId: cleanDeviceId,
+            anunciosVistosHoy: vistos,
+            anunciosRestantes: Math.max(0, 3 - vistos),
+            limiteAlcanzado: vistos >= 3,
+            fechaUltimoAnuncio: userDoc?.actividadDiaria?.fechaUltimoAnuncio || "",
+            totalAnunciosHistoricos: 0,
+            bloqueado: false,
+          };
+        }
+      })(),
+    ]);
+
+    const saldoMonedas = Number(
+      userDoc?.billetera?.walletBalance ??
+      userDoc?.walletBalance ??
+      userDoc?.monedas ??
+      0,
+    );
+
+    const dataBilletera = {
+      uid: cleanUid,
+      deviceId: cleanDeviceId || null,
+      saldoMonedas: saldoMonedas,
+      monedas: saldoMonedas,
+      billetera: userDoc?.billetera || {
+        walletBalance: saldoMonedas,
+        elevensLab: 0,
+        monedas: saldoMonedas,
+      },
+      pagos: Array.isArray(pagosRaw) ? pagosRaw : [],
+      totalPagos: (Array.isArray(pagosRaw) ? pagosRaw : []).length,
+      compras: Array.isArray(comprasRaw) ? comprasRaw : [],
+      totalCompras: (Array.isArray(comprasRaw) ? comprasRaw : []).length,
+      deviceLimits: deviceLimitsRaw,
+      anunciosVistosHoy: deviceLimitsRaw?.anunciosVistosHoy ?? 0,
+      anunciosRestantes: deviceLimitsRaw?.anunciosRestantes ?? 3,
+      limiteAnunciosAlcanzado: Boolean(deviceLimitsRaw?.limiteAlcanzado),
+    };
+
+    ctx.response.headers.set(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate",
+    );
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos de billetera (pagos, compras y límites de anuncios) obtenidos correctamente",
+      data: dataBilletera,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyBilleteraController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener datos simplificados de billetera",
+      error: error?.message || "Error interno del servidor",
+    };
+  }
+};
+
 
