@@ -7,6 +7,7 @@ import {
 } from "../models/deviceAdLimit.model.ts";
 import { ReciboTransaccion } from "../models/propina.model.ts";
 import { obtenerDocRefUsuario } from "./propina.service.ts";
+import { enviarActualizacion } from "./userSocket.service.ts";
 
 /** Límite diario de anuncios permitidos por dispositivo físico */
 export const MAX_ANUNCIOS_POR_DISPOSITIVO_DIA = 3;
@@ -411,6 +412,19 @@ export const validarYProcesarRecompensaDispositivoService = async (
       `📱 [Device Ad Limit] Device "${cleanDeviceId}" acreditó +${monedasOtorgadas} monedas a UID "${cleanUid}". Vistos hoy: ${resultado.anunciosVistosHoy}/${MAX_ANUNCIOS_POR_DISPOSITIVO_DIA}. Nuevo saldo: ${resultado.nuevoSaldo}`,
     );
   }
+
+  // Emitir actualización de saldo en tiempo real por WebSocket
+  try {
+    enviarActualizacion(cleanUid, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldo,
+      saldoMonedas: resultado.nuevoSaldo,
+      walletBalance: resultado.nuevoSaldo,
+      anunciosVistosHoy: resultado.anunciosVistosHoy,
+      anunciosRestantes: resultado.anunciosRestantes,
+      tipo: esCompra ? "compra_monedas" : "recompensa_anuncio",
+      cantidad: resultado.monedasOtorgadas,
+    });
+  } catch (_wsErr) {}
 
   return resultado;
 };

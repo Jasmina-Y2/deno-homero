@@ -9,6 +9,7 @@ import {
 import { enviarPushAUsuario } from "./notification.service.ts";
 import { enviarAlertaTelegram } from "./soporte.service.ts";
 import { obtenerDocRefUsuario } from "./propina.service.ts";
+import { enviarActualizacion } from "./userSocket.service.ts";
 
 /**
  * ID por defecto de Homero para recibir las monedas retenidas durante la solicitud de retiro.
@@ -223,6 +224,22 @@ export const solicitarRetiroService = async (
   console.log(
     `✅ [Pagos/Retiro] Solicitud registrada. Pago ID: ${resultado.pago.id} | Usuario: ${cleanUid} (-${cantidadMonedas} monedas) -> Homero: ${idDestino} (+${cantidadMonedas} monedas)`,
   );
+
+  // Emitir saldo actualizado por WebSocket
+  try {
+    enviarActualizacion(cleanUid, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldoUsuario,
+      saldoMonedas: resultado.nuevoSaldoUsuario,
+      walletBalance: resultado.nuevoSaldoUsuario,
+      tipo: "solicitud_retiro",
+      cantidad: cantidadMonedas,
+    });
+    enviarActualizacion(idDestino, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldoHomero,
+      saldoMonedas: resultado.nuevoSaldoHomero,
+      walletBalance: resultado.nuevoSaldoHomero,
+    });
+  } catch (_wsErr) {}
 
   // Notificación Push al usuario confirmando la solicitud
   enviarPushAUsuario(
@@ -444,6 +461,14 @@ export const actualizarEstadoPagoService = async (
         pagoId,
       },
     ).catch(() => {});
+
+    // Emitir saldo actualizado por WebSocket al usuario que recibió el reembolso
+    try {
+      enviarActualizacion(pagoData.idUsuario, "saldo_actualizado", {
+        monedas: Number(pagoData.cantidadMonedas || 0),
+        tipo: "reembolso_retiro",
+      });
+    } catch (_wsErr) {}
 
     return {
       success: true,

@@ -719,6 +719,19 @@ export const reclamarRecompensaAnuncioService = async (datos: RecompensaAnuncioD
     );
   }
 
+  // Emitir actualización de saldo en tiempo real por WebSocket
+  try {
+    enviarActualizacion(cleanUid, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldo,
+      saldoMonedas: resultado.nuevoSaldo,
+      walletBalance: resultado.nuevoSaldo,
+      anunciosVistosHoy: resultado.anunciosVistosHoy,
+      anunciosRestantes: resultado.anunciosRestantes,
+      tipo: esCompra ? "compra_monedas" : "recompensa_anuncio",
+      cantidad: resultado.monedasOtorgadas,
+    });
+  } catch (_wsErr) {}
+
   return resultado;
 };
 
@@ -879,6 +892,17 @@ export const acreditarMonedasCompraRevenueCatService = async (params: {
   console.log(
     `💰 [RevenueCat Monedas] Compra acreditada a ${uid}: +${cantidadMonedas} monedas (productId: ${productId}). Nuevo saldo: ${resultado.nuevoSaldo}`,
   );
+
+  // Emitir actualización de saldo en tiempo real por WebSocket
+  try {
+    enviarActualizacion(uid, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldo,
+      saldoMonedas: resultado.nuevoSaldo,
+      walletBalance: resultado.nuevoSaldo,
+      tipo: "compra_monedas",
+      cantidad: resultado.cantidadMonedas,
+    });
+  } catch (_wsErr) {}
 
   // 4. Notificar al usuario por Push FCM e In-App
   try {
