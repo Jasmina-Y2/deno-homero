@@ -1819,7 +1819,7 @@ export const getSimplifyBilleteraController = async (
 };
 
 // ============================================================================
-// CONTROLADOR SIMPLIFICADO: HISTORIA COMPLETA + LIKES + ESTADO LIKED (UNIFICADO)
+// CONTROLADOR SIMPLIFICADO: HISTORIA COMPLETA + LIKES + ESTADO LIKED + COMENTARIOS (UNIFICADO)
 // ============================================================================
 export const getSimplifyHistoriaDetalleController = async (
   ctx: RouterContext<string>,
@@ -1841,6 +1841,10 @@ export const getSimplifyHistoriaDetalleController = async (
       stateUser?.uid ||
       "";
 
+    const limitParam = url.searchParams.get("limit") ||
+      url.searchParams.get("limite") || "50";
+    const limit = Math.min(Math.max(1, parseInt(limitParam, 10) || 50), 100);
+
     const cleanId = idHistoria.trim();
     const cleanUid = uid.trim();
 
@@ -1854,8 +1858,8 @@ export const getSimplifyHistoriaDetalleController = async (
       return;
     }
 
-    // 1. Ejecutar en paralelo con Promise.all: Historia, Total Likes y Estado Liked
-    const [historiaDocs, totalLikes, isLiked] = await Promise.all([
+    // 1. Ejecutar en paralelo con Promise.all: Historia, Total Likes, Estado Liked y Comentarios
+    const [historiaDocs, totalLikes, isLiked, comentariosRaw] = await Promise.all([
       (async () => {
         try {
           return await getHistoriaByCustomIdService(cleanId);
@@ -1881,10 +1885,19 @@ export const getSimplifyHistoriaDetalleController = async (
           return false;
         }
       })(),
+      (async () => {
+        try {
+          return await obtenerComentariosService(cleanId, limit);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/historia] Error al obtener comentarios para ${cleanId}:`, err);
+          return [];
+        }
+      })(),
     ]);
 
     const historiaData = Array.isArray(historiaDocs) ? historiaDocs : [];
     const itemPrincipal = historiaData.length > 0 ? historiaData[0] : null;
+    const comentariosData = Array.isArray(comentariosRaw) ? comentariosRaw : [];
 
     const dataLimpia = itemPrincipal
       ? {
@@ -1893,6 +1906,8 @@ export const getSimplifyHistoriaDetalleController = async (
         likes: totalLikes,
         liked: Boolean(isLiked),
         isLiked: Boolean(isLiked),
+        comentarios: comentariosData,
+        totalComentarios: comentariosData.length,
       }
       : {
         id: cleanId,
@@ -1901,6 +1916,8 @@ export const getSimplifyHistoriaDetalleController = async (
         likes: totalLikes,
         liked: Boolean(isLiked),
         isLiked: Boolean(isLiked),
+        comentarios: comentariosData,
+        totalComentarios: comentariosData.length,
       };
 
     ctx.response.headers.set(
@@ -1918,7 +1935,7 @@ export const getSimplifyHistoriaDetalleController = async (
     ctx.response.status = 500;
     ctx.response.body = {
       success: false,
-      message: "Error al obtener historia simplificada con likes",
+      message: "Error al obtener historia simplificada con likes y comentarios",
       error: error?.message || "Error interno del servidor",
       data: null,
     };
