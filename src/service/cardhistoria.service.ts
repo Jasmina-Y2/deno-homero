@@ -44,11 +44,28 @@ export const obtenerCardHistoriaService = async (
 
 export const eliminarCardPorIdService = async (
   idCard: string,
-): Promise<boolean> => {
+  userUid?: string,
+  isAdmin?: boolean,
+): Promise<{ success: boolean; motivo?: string }> => {
   const colecciones = ["CardHistoria", "Historia", "HistoriaInfo"];
   let encontrado = false;
 
   try {
+    // Si se pasa userUid y NO es admin, verificamos pertenencia
+    if (userUid && !isAdmin) {
+      const cardSnap = await db.collection("CardHistoria")
+        .where("id", "==", idCard)
+        .get();
+
+      if (!cardSnap.empty) {
+        const cardData = cardSnap.docs[0].data();
+        const idAutor = cardData.idAutor || cardData.uid || cardData.autorId;
+        if (idAutor && idAutor !== userUid) {
+          return { success: false, motivo: "FORBIDDEN" };
+        }
+      }
+    }
+
     const batch = db.batch();
     let totalOperaciones = 0;
 
@@ -67,16 +84,20 @@ export const eliminarCardPorIdService = async (
     }
     if (encontrado && totalOperaciones > 0) {
       await batch.commit();
-      return true;
+      return { success: true };
     }
 
-    return false;
+    return { success: false, motivo: "NOT_FOUND" };
   } catch (error) {
     console.error("❌ Error en servicio eliminarCardPorId:", error);
     throw new Error("Error al intentar eliminar la historia");
   }
 };
-export const eliminarImagenesDeHistoria = async (customId: string) => {
+export const eliminarImagenesDeHistoria = async (
+  customId: string,
+  userUid?: string,
+  isAdmin?: boolean,
+) => {
   try {
     const [historiaSnap, cardSnap, historiaInfoSnap] = await Promise.all([
       db.collection("Historia").where("id", "==", customId).get(),
@@ -89,6 +110,16 @@ export const eliminarImagenesDeHistoria = async (customId: string) => {
         `❌ Error: El ID ${customId} no existe en la base de datos.`,
       );
       throw new Error("NOT_FOUND");
+    }
+
+    // Si se pasa userUid y NO es admin, verificamos pertenencia
+    if (userUid && !isAdmin) {
+      const cardData = !cardSnap.empty ? cardSnap.docs[0].data() : null;
+      const historiaData = !historiaSnap.empty ? historiaSnap.docs[0].data() : null;
+      const idAutor = cardData?.idAutor || cardData?.uid || historiaData?.idAutor || historiaData?.uid;
+      if (idAutor && idAutor !== userUid) {
+        throw new Error("FORBIDDEN");
+      }
     }
 
     let urlsParaBorrar: string[] = [];

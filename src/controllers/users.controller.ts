@@ -19,6 +19,7 @@ import {
   obtenerDiaRachaUsuarioService,
   obtenerSuscripcionesUsuarioService,
 } from "../service/users.service.ts";
+import { generarToken } from "../utils/jwt.ts";
 
 // ==========================================
 // OBTENER TODOS LOS USUARIOS
@@ -141,8 +142,23 @@ export const crearUsuario = async (ctx: RouterContext<string>) => {
 
     const user = await crearUsuarioService(datos);
 
+    const esAdmin = Boolean(
+      user.sistema?.ADMIN === true ||
+      (user as any).ADMIN === true ||
+      user.perfil?.rol?.toLowerCase() === "admin"
+    );
+
+    const token = generarToken({
+      uid: user.uid,
+      email: user.perfil?.email || (user as any).email || datos.email,
+      name: user.perfil?.name || (user as any).name || datos.name || "",
+      rol: user.perfil?.rol || (esAdmin ? "admin" : "usuario"),
+      isAdmin: esAdmin,
+      verificado: Boolean(user.perfil?.verificado),
+    });
+
     ctx.response.status = 201;
-    ctx.response.body = { success: true, data: user };
+    ctx.response.body = { success: true, token, data: user };
   } catch (error: unknown) {
     ctx.response.status = 500;
     const errorMessage = error instanceof Error
@@ -164,12 +180,23 @@ export const actualizarNombreUsuario = async (ctx: RouterContext<string>) => {
   try {
     const body = await ctx.request.body.json();
     const { uid, nuevoNombre } = body;
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
 
     if (!uid || !nuevoNombre) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
         message: "Faltan datos requeridos: uid o nuevoNombre",
+      };
+      return;
+    }
+
+    if (user?.uid && !isAdmin && user.uid !== uid) {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: No tienes permiso para modificar el nombre de otro usuario.",
       };
       return;
     }
@@ -204,12 +231,23 @@ export const actualizarDescripcionUsuario = async (
   try {
     const body = await ctx.request.body.json();
     const { uid, nuevaDescripcion } = body;
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
 
     if (!uid || !nuevaDescripcion) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
         message: "Faltan datos requeridos: uid o nuevaDescripcion",
+      };
+      return;
+    }
+
+    if (user?.uid && !isAdmin && user.uid !== uid) {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: No tienes permiso para modificar la descripción de otro usuario.",
       };
       return;
     }
@@ -242,12 +280,23 @@ export const actualizarFotoUsuario = async (ctx: RouterContext<string>) => {
   try {
     const body = await ctx.request.body.json();
     const { uid, nuevaFotoURL } = body;
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
 
     if (!uid || !nuevaFotoURL) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
         message: "Faltan datos requeridos: uid o nuevaFotoURL",
+      };
+      return;
+    }
+
+    if (user?.uid && !isAdmin && user.uid !== uid) {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: No tienes permiso para modificar la foto de otro usuario.",
       };
       return;
     }
@@ -358,6 +407,18 @@ export const migrarEstructuraUsuariosController = async (ctx: Context) => {
 // ==========================================
 export const asignarPrivilegiosUsuarioController = async (ctx: Context) => {
   try {
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
+    if (user && !isAdmin) {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: Solo el Administrador puede asignar privilegios o modificar saldos.",
+      };
+      return;
+    }
+
     let body: Record<string, any> = {};
     try {
       if (typeof (ctx.request.body as any)?.json === "function") {
@@ -488,12 +549,23 @@ export const actualizarMarcoUsuarioController = async (ctx: Context) => {
     const searchParams = ctx.request.url.searchParams;
 
     const userId = body.userId || body.uid || params.uid || params.userId || searchParams.get("userId") || searchParams.get("uid");
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
 
     if (!userId) {
       ctx.response.status = 400;
       ctx.response.body = {
         success: false,
         message: "Falta el parámetro requerido: userId o uid",
+      };
+      return;
+    }
+
+    if (user?.uid && !isAdmin && user.uid !== userId) {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: No tienes permiso para modificar el marco de otro usuario.",
       };
       return;
     }

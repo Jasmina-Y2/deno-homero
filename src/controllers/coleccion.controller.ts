@@ -14,7 +14,14 @@ import { ColeccionData } from "../models/coleccion.model.ts";
 export const crearColeccionController = async (ctx: RouterContext<string>) => {
     try {
         const body = await ctx.request.body.json();
-        console.log(body);
+        const user = (ctx.state as any)?.user;
+        const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
+        if (user?.uid && !isAdmin) {
+            body.idAutor = user.uid;
+            body.uid = user.uid;
+        }
+
         if (!body.idAutor) {
             ctx.response.status = 400;
             ctx.response.body = { success: false, error: "Faltan idAutor" };
@@ -71,13 +78,27 @@ export const getColeccionesPorId = async (ctx: RouterContext<string>) => {
 export const eliminarColeccionesPorUid = async (ctx: RouterContext<string>) => {
     try {
         const { uid } = ctx.params;
+        const user = (ctx.state as any)?.user;
+        const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
         if (!uid) {
             ctx.response.status = 400;
             ctx.response.body = { success: false, message: "UID es requerido" };
             return;
         }
+
+        if (user?.uid && !isAdmin && user.uid !== uid) {
+            ctx.response.status = 403;
+            ctx.response.body = {
+                success: false,
+                message: "Acceso denegado: Solo el autor o un Administrador pueden eliminar estas colecciones.",
+            };
+            return;
+        }
+
         const data = await eliminarColeccionesPorUidService(uid);
         
+        ctx.response.status = 200;
         ctx.response.body = { success: true, data };
     } catch (error) {
         ctx.response.status = 500;

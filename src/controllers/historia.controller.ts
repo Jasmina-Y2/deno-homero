@@ -5,6 +5,13 @@ import { guardarHistoriaEnFirestoreService, getHistoriaByCustomIdService } from 
 export const crearHistoriaController = async (ctx: RouterContext<string>) => {
     try {
         const body = await ctx.request.body.json();
+        const user = (ctx.state as any)?.user;
+        const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
+        if (user?.uid && !isAdmin) {
+            if (body.idAutor) body.idAutor = user.uid;
+            if (body.uid) body.uid = user.uid;
+        }
 
         const historiaId = await guardarHistoriaEnFirestoreService(body as HistoriaData);
 

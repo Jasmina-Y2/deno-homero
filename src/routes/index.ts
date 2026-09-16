@@ -157,45 +157,46 @@ import {
   registrarCompraPendienteController,
   reintentarCompraController,
 } from "../controllers/comprasApp.controller.ts";
+import { requerirAdmin, requerirAuth } from "../middlewares/auth.middleware.ts";
 
 const router = new Router();
 
 // ============================================================================
 // COLECCIONES Y DETALLES
 // ============================================================================
-router.post("/api/colecciones/crear", crearColeccionController);
+router.post("/api/colecciones/crear", requerirAuth, crearColeccionController);
 router.get("/api/colecciones/mostrar", mostrarColeccionesPorAutorController);
 router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
 router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
-router.delete("/api/colecciones/eliminar/:uid", eliminarColeccionesPorUid);
-router.post("/api/coleccion-ids/crear", agregarHistoriaAColeccionController);
+router.delete("/api/colecciones/eliminar/:uid", requerirAuth, eliminarColeccionesPorUid);
+router.post("/api/coleccion-ids/crear", requerirAuth, agregarHistoriaAColeccionController);
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);
-router.put("/api/coleccionesids/reordenar", reordenarEpisodiosColeccionController);
-router.post("/api/coleccionesids/reordenar", reordenarEpisodiosColeccionController);
-router.put("/api/coleccion-ids/reordenar", reordenarEpisodiosColeccionController);
-router.post("/api/coleccion-ids/reordenar", reordenarEpisodiosColeccionController);
-router.post("/api/colecciones/calificar", calificarColeccionController);
-router.put("/api/colecciones/calificar", calificarColeccionController);
+router.put("/api/coleccionesids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
+router.post("/api/coleccionesids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
+router.put("/api/coleccion-ids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
+router.post("/api/coleccion-ids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
+router.post("/api/colecciones/calificar", requerirAuth, calificarColeccionController);
+router.put("/api/colecciones/calificar", requerirAuth, calificarColeccionController);
 router.get("/api/colecciones/calificacion/:idColeccion", obtenerCalificacionColeccionController);
 router.get("/api/colecciones/calificacion/:idColeccion/:idUsuario", obtenerCalificacionColeccionController);
-router.delete("/api/colecciones/calificar", eliminarCalificacionColeccionController);
+router.delete("/api/colecciones/calificar", requerirAuth, eliminarCalificacionColeccionController);
 
 // ============================================================================
 // HISTORIAS Y CARDS
 // ============================================================================
-router.post("/api/historias/crear", crearHistoriaController);
+router.post("/api/historias/crear", requerirAuth, crearHistoriaController);
 router.get("/api/historia/:id", getHistoriaByCustomId);
-router.post("/api/card-historias/crear", crearCardHistoriaController);
+router.post("/api/card-historias/crear", requerirAuth, crearCardHistoriaController);
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 router.get("/api/historias-card/mostrar/:idAutor", getHistoriaCardByAutor);
 router.get("/api/historias-card/mostrar-id/:id", getHistoriaCardById);
-router.delete("/api/card-historias/eliminar/:id", eliminarCardController);
-router.delete("/api/multimedia/limpiar/:id", eliminarMultimediaController);
+router.delete("/api/card-historias/eliminar/:id", requerirAuth, eliminarCardController);
+router.delete("/api/multimedia/limpiar/:id", requerirAuth, eliminarMultimediaController);
 
 // ============================================================================
 // HISTORIAS INFO, VISTAS Y CATEGORÍAS
 // ============================================================================
-router.post("/api/historias-info/crear", crearHistoriaInfoController);
+router.post("/api/historias-info/crear", requerirAuth, crearHistoriaInfoController);
 router.get("/api/historia-info/:id", getHistoriaById);
 router.get("/api/historias-info/autor", getCardsPorAutor);
 router.get("/api/historias-info/mostrar", getCardHistoriasController);
@@ -208,7 +209,7 @@ router.get("/api/categoriashistorias/:categoriaId", getHistoriasPorCategoria);
 // AUDIOS Y TRADUCTOR
 // ============================================================================
 router.post("/api/traductor", traducirTexto);
-router.post("/api/historia/audio/guardar", guardarAudio);
+router.post("/api/historia/audio/guardar", requerirAuth, guardarAudio);
 router.post("/api/historia/audio/obtener", obtenerAudios);
 
 // ============================================================================
@@ -217,8 +218,8 @@ router.post("/api/historia/audio/obtener", obtenerAudios);
 router.get("/api/likes/status", checkLikeStatus);
 router.get("/api/likeuser/likes/:id", getLikesCount);
 router.get("/api/likeuser/mostrar/:uid", getHistoriasLiked);
-router.post("/api/like-user/like", toggleLike);
-router.post("/api/historias/like", darLikeHistoriaController);
+router.post("/api/like-user/like", requerirAuth, toggleLike);
+router.post("/api/historias/like", requerirAuth, darLikeHistoriaController);
 router.post("/api/vistas-user/registrar", registrarVistaUsuario);
 router.get("/api/vistasuser/mostrar/:uid", getHistoriasVistas);
 router.get("/api/vistasuser/verificar/:idUsuario/:idHistoria", checkStoryViewed);
@@ -226,10 +227,10 @@ router.get("/api/vistasuser/verificar/:idUsuario/:idHistoria", checkStoryViewed)
 // ============================================================================
 // SEGUIDORES Y SEGUIDOS
 // ============================================================================
-router.post("/api/seguiruser/seguir", seguirUsuario);
-router.post("/api/seguir/seguir", seguirUsuario);
-router.post("/api/seguiruser/dejar-seguir", dejarDeSeguir);
-router.post("/api/seguir/dejar-seguir", dejarDeSeguir);
+router.post("/api/seguiruser/seguir", requerirAuth, seguirUsuario);
+router.post("/api/seguir/seguir", requerirAuth, seguirUsuario);
+router.post("/api/seguiruser/dejar-seguir", requerirAuth, dejarDeSeguir);
+router.post("/api/seguir/dejar-seguir", requerirAuth, dejarDeSeguir);
 router.get("/api/seguiruser/seguidores/:uid", getGenteQueMeSigue);
 router.get("/api/seguir/seguidores/:uid", getGenteQueMeSigue);
 router.get("/api/seguiruser/siguiendo/:uid", getGenteQueYoSigo);
@@ -238,9 +239,9 @@ router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);
 // ============================================================================
 // COMENTARIOS (REST)
 // ============================================================================
-router.post("/api/comentarios/guardar", guardarComentario);
+router.post("/api/comentarios/guardar", requerirAuth, guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
-router.delete("/api/comentarios/:id", eliminarComentario);
+router.delete("/api/comentarios/:id", requerirAuth, eliminarComentario);
 
 // ============================================================================
 // WEBSOCKET DE USUARIOS EN TIEMPO REAL (SALDO, PERFIL, MONEDAS)
@@ -257,32 +258,32 @@ router.get("/api/users/mostrar", getUsuarios);
 router.get("/api/users/perfil/:uid", getUsuarioPerfil);
 router.get("/api/users/verificar-email/:email", verificarUsuarioEmail);
 router.post("/api/users/crear", crearUsuario);
-router.put("/api/users/actualizar-nombre", actualizarNombreUsuario);
-router.put("/api/users/actualizar-foto", actualizarFotoUsuario);
-router.put("/api/users/actualizar-descripcion", actualizarDescripcionUsuario);
-router.put("/api/users/actualizar-marco", actualizarMarcoUsuarioController);
-router.put("/api/users/actualizar-marco/:uid", actualizarMarcoUsuarioController);
-router.post("/api/users/guardar-token", guardarFcmToken);
+router.put("/api/users/actualizar-nombre", requerirAuth, actualizarNombreUsuario);
+router.put("/api/users/actualizar-foto", requerirAuth, actualizarFotoUsuario);
+router.put("/api/users/actualizar-descripcion", requerirAuth, actualizarDescripcionUsuario);
+router.put("/api/users/actualizar-marco", requerirAuth, actualizarMarcoUsuarioController);
+router.put("/api/users/actualizar-marco/:uid", requerirAuth, actualizarMarcoUsuarioController);
+router.post("/api/users/guardar-token", requerirAuth, guardarFcmToken);
 
 // ============================================================================
 // SUSCRIPCIONES DE USUARIO (CRUD COMPLETO: lector_vip, creador_estelar, etc.)
 // ============================================================================
 router.get("/api/users/suscripciones/:uid", obtenerSuscripcionesUsuarioController);
-router.post("/api/users/suscripciones", agregarSuscripcionUsuarioController);
-router.put("/api/users/suscripciones", editarSuscripcionUsuarioController);
-router.delete("/api/users/suscripciones/:uid/:entitlementId", eliminarSuscripcionUsuarioController);
-router.delete("/api/users/suscripciones", eliminarSuscripcionUsuarioController);
-router.put("/api/users/actualizar-suscripcion", actualizarSuscripcionUsuario);
+router.post("/api/users/suscripciones", requerirAdmin, agregarSuscripcionUsuarioController);
+router.put("/api/users/suscripciones", requerirAdmin, editarSuscripcionUsuarioController);
+router.delete("/api/users/suscripciones/:uid/:entitlementId", requerirAdmin, eliminarSuscripcionUsuarioController);
+router.delete("/api/users/suscripciones", requerirAdmin, eliminarSuscripcionUsuarioController);
+router.put("/api/users/actualizar-suscripcion", requerirAdmin, actualizarSuscripcionUsuario);
 
 // ============================================================================
 // PRIVILEGIOS, RACHA, ELEVENLABS Y MIGRACIÓN
 // ============================================================================
-router.put("/api/users/asignar-privilegios", asignarPrivilegiosUsuarioController);
-router.put("/api/users/asignar-privilegios/:uid", asignarPrivilegiosUsuarioController);
-router.post("/api/users/dia-racha", actualizarDiaRachaUsuarioController);
+router.put("/api/users/asignar-privilegios", requerirAdmin, asignarPrivilegiosUsuarioController);
+router.put("/api/users/asignar-privilegios/:uid", requerirAdmin, asignarPrivilegiosUsuarioController);
+router.post("/api/users/dia-racha", requerirAuth, actualizarDiaRachaUsuarioController);
 router.get("/api/users/dia-racha/:uid", obtenerDiaRachaUsuarioController);
-router.post("/api/users/descontar-elevenslab", descontarUsoElevenLabsController);
-router.post("/api/users/migrar-estructura", migrarEstructuraUsuariosController);
+router.post("/api/users/descontar-elevenslab", requerirAuth, descontarUsoElevenLabsController);
+router.post("/api/users/migrar-estructura", requerirAdmin, migrarEstructuraUsuariosController);
 
 // ============================================================================
 // REVENUECAT WEBHOOK
@@ -294,10 +295,10 @@ router.post("/api/webhook/revenuecat", revenueCatWebhookController);
 // ============================================================================
 // SONIDOS
 // ============================================================================
-router.post("/api/sonido/crear", crearSonido);
+router.post("/api/sonido/crear", requerirAdmin, crearSonido);
 router.get("/api/sonido/obtener", obtenerSonidos);
 router.get("/api/sonido/obtener/:id", obtenerSonidoPorId);
-router.put("/api/sonido/modificar/:id", modificarSonido);
+router.put("/api/sonido/modificar/:id", requerirAdmin, modificarSonido);
 
 // ============================================================================
 // INTELIGENCIA ARTIFICIAL (IA)
@@ -318,29 +319,29 @@ router.post("/api/ia/generar-descripcion", generarDescripcionController);
 // ============================================================================
 router.get("/api/notificaciones/:uid", obtenerNotificacionesUsuario);
 router.get("/api/notificaciones/no-leidas/:uid", obtenerConteoNoLeidas);
-router.put("/api/notificaciones/marcar-leida/:id", marcarNotificacionLeida);
-router.put("/api/notificaciones/marcar-todas-leidas/:uid", marcarTodasNotificacionesLeidas);
-router.delete("/api/notificaciones/eliminar/:id", eliminarNotificacion);
+router.put("/api/notificaciones/marcar-leida/:id", requerirAuth, marcarNotificacionLeida);
+router.put("/api/notificaciones/marcar-todas-leidas/:uid", requerirAuth, marcarTodasNotificacionesLeidas);
+router.delete("/api/notificaciones/eliminar/:id", requerirAuth, eliminarNotificacion);
 
 // ============================================================================
 // SOPORTE Y REPORTES DE ERROR
 // ============================================================================
-router.post("/api/soporte/reporte", crearReporteController);
+router.post("/api/soporte/reporte", requerirAuth, crearReporteController);
 router.get("/api/soporte/reportes", obtenerReportesController);
 router.get("/api/soporte/reportes/usuario/:uid", obtenerReportesUsuarioController);
 router.get("/api/soporte/reporte/:id", obtenerReportePorIdController);
-router.post("/api/soporte/reporte/:id/responder", responderReporteController);
-router.put("/api/soporte/reporte/:id/estado", actualizarEstadoReporteController);
+router.post("/api/soporte/reporte/:id/responder", requerirAuth, responderReporteController);
+router.put("/api/soporte/reporte/:id/estado", requerirAdmin, actualizarEstadoReporteController);
 
 // ============================================================================
 // PROPINAS, PAGOS / RETIROS, HISTORIAL Y RANKING
 // ============================================================================
-router.post("/api/enviar-propina", enviarPropinaController);
-router.post("/api/pagos/solicitar-retiro", solicitarRetiroController);
+router.post("/api/enviar-propina", requerirAuth, enviarPropinaController);
+router.post("/api/pagos/solicitar-retiro", requerirAuth, solicitarRetiroController);
 router.get("/api/pagos", obtenerTodosPagosController);
 router.get("/api/pagos/usuario/:uid", obtenerPagosUsuarioController);
 router.get("/api/pagos/:id", obtenerPagoPorIdController);
-router.put("/api/pagos/:id/estado", actualizarEstadoPagoController);
+router.put("/api/pagos/:id/estado", requerirAdmin, actualizarEstadoPagoController);
 router.get("/api/historial/:uid", obtenerHistorialController);
 router.get("/api/ranking", obtenerRankingController);
 
@@ -353,24 +354,24 @@ router.get("/api/compras-app/:id", obtenerCompraPorIdController);
 router.post("/api/compras-app/pendiente", registrarCompraPendienteController);
 router.post("/api/compras-app/iniciar", registrarCompraPendienteController);
 router.post("/api/compras-app/:id/reintentar", reintentarCompraController);
-router.post("/api/compras-app/:id/reembolsar", reembolsarCompraController);
-router.post("/api/compras-app/reembolsar", reembolsarCompraController);
-router.put("/api/compras-app/:id/estado", actualizarEstadoCompraController);
-router.post("/api/compras-app/manual", registrarCompraManualController);
+router.post("/api/compras-app/:id/reembolsar", requerirAdmin, reembolsarCompraController);
+router.post("/api/compras-app/reembolsar", requerirAdmin, reembolsarCompraController);
+router.put("/api/compras-app/:id/estado", requerirAdmin, actualizarEstadoCompraController);
+router.post("/api/compras-app/manual", requerirAdmin, registrarCompraManualController);
 
 // ============================================================================
 // RECOMPENSAS DE ANUNCIOS Y CONTROL DE DISPOSITIVOS FÍSICOS
 // ============================================================================
 router.post("/api/anuncios/recompensar", reclamarRecompensaAnuncioController);
-router.post("/api/anuncios/reset-limite/:uid", resetearLimiteAnunciosController);
+router.post("/api/anuncios/reset-limite/:uid", requerirAdmin, resetearLimiteAnunciosController);
 router.post("/api/device-ad-limits/recompensar", validarYRecompensarDispositivoController);
 router.get("/api/device-ad-limits/:deviceId", consultarEstadoDispositivoController);
-router.post("/api/device-ad-limits/:deviceId/reset", resetearLimiteDispositivoController);
+router.post("/api/device-ad-limits/:deviceId/reset", requerirAdmin, resetearLimiteDispositivoController);
 
 // ============================================================================
 // BÓVEDA / PIN DE SEGURIDAD
 // ============================================================================
 router.get("/api/boveda/pin/:uid", obtenerPinBovedaController);
-router.post("/api/boveda/guardar-pin", guardarPinBovedaController);
+router.post("/api/boveda/guardar-pin", requerirAuth, guardarPinBovedaController);
 
 export default router;

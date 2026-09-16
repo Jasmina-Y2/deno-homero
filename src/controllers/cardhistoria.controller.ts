@@ -14,6 +14,13 @@ export const crearCardHistoriaController = async (
 ) => {
   try {
     const body = await ctx.request.body.json();
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
+    // Si el usuario está autenticado y no es admin, forzar que idAutor sea su propio UID
+    if (user?.uid && !isAdmin) {
+      body.idAutor = user.uid;
+    }
 
     const idNuevaCard = await guardarCardHistoriaEnFirestoreService(
       body as CardHistoria,
@@ -64,6 +71,8 @@ export const obtenerCardHistoriaController = async (
 export const eliminarCardController = async (ctx: RouterContext<string>) => {
   try {
     const idCard = ctx.params.id;
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
 
     if (!idCard) {
       ctx.response.status = 400;
@@ -71,13 +80,19 @@ export const eliminarCardController = async (ctx: RouterContext<string>) => {
       return;
     }
 
-    const eliminado = await eliminarCardPorIdService(idCard);
+    const resultado = await eliminarCardPorIdService(idCard, user?.uid, isAdmin);
 
-    if (eliminado) {
+    if (resultado.success) {
       ctx.response.status = 200;
       ctx.response.body = {
         success: true,
         message: "Historia eliminada correctamente",
+      };
+    } else if (resultado.motivo === "FORBIDDEN") {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: Solo el autor o un Administrador pueden eliminar esta historia.",
       };
     } else {
       ctx.response.status = 404;
@@ -101,6 +116,9 @@ export const eliminarMultimediaController = async (
 ) => {
   try {
     const id = ctx.params.id;
+    const user = (ctx.state as any)?.user;
+    const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+
     if (!id) {
       ctx.response.status = 400;
       ctx.response.body = {
@@ -109,14 +127,30 @@ export const eliminarMultimediaController = async (
       };
       return;
     }
-    await eliminarImagenesDeHistoria(id);
+    await eliminarImagenesDeHistoria(id, user?.uid, isAdmin);
 
     ctx.response.status = 200;
     ctx.response.body = {
       success: true,
       message: "Proceso de eliminación de multimedia finalizado",
     };
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "FORBIDDEN") {
+      ctx.response.status = 403;
+      ctx.response.body = {
+        success: false,
+        message: "Acceso denegado: Solo el autor o un Administrador pueden limpiar la multimedia de esta historia.",
+      };
+      return;
+    }
+    if (error?.message === "NOT_FOUND") {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "Historia no encontrada.",
+      };
+      return;
+    }
     console.error("❌ Error en controlador multimedia:", error);
     ctx.response.status = 500;
     ctx.response.body = {

@@ -1798,7 +1798,7 @@ export const getSimplifyBilleteraController = async (
 
     ctx.response.headers.set(
       "Cache-Control",
-      "no-cache, no-store, must-revalidate",
+      "private, max-age=60",
     );
     ctx.response.status = 200;
     ctx.response.body = {
