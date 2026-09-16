@@ -697,7 +697,84 @@ export const getSimplifyUserInfoController = async (
       return;
     }
 
-    // 2. Formatear y preparar usuario con saldos y listas
+    // 2. Enriquecer seguidores y siguiendo con los datos de perfil de cada usuario
+    const [seguidoresPerfiles, siguiendoPerfiles] = await Promise.all([
+      Promise.all(
+        (Array.isArray(seguidoresRaw) ? seguidoresRaw : []).map(async (item: any) => {
+          const sUid = typeof item === "string" ? item.trim() : (item.uid || item.id || "").trim();
+          if (!sUid) return null;
+          try {
+            const uDoc = (await getUsuarioByUidService(sUid)) as any;
+            if (uDoc) {
+              return {
+                uid: uDoc.uid || sUid,
+                ...(uDoc.perfil || {
+                  name: uDoc.name || uDoc.displayName || "Usuario",
+                  email: uDoc.email || "",
+                  photoURL: uDoc.photoURL || uDoc.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  descripcion: uDoc.descripcion || "",
+                  rol: uDoc.rol || "usuario",
+                  verificado: Boolean(uDoc.verificado ?? false),
+                  marco_perfil_id: uDoc.marco_perfil_id ?? null,
+                }),
+              };
+            }
+          } catch (err) {
+            console.warn(`⚠️ [user-info] Aviso al cargar perfil de seguidor ${sUid}:`, err);
+          }
+          return {
+            uid: sUid,
+            name: "Usuario",
+            email: "",
+            photoURL: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+            descripcion: "",
+            rol: "usuario",
+            verificado: false,
+            marco_perfil_id: null,
+          };
+        }),
+      ),
+      Promise.all(
+        (Array.isArray(siguiendoRaw) ? siguiendoRaw : []).map(async (item: any) => {
+          const sUid = typeof item === "string" ? item.trim() : (item.uid || item.id || "").trim();
+          if (!sUid) return null;
+          try {
+            const uDoc = (await getUsuarioByUidService(sUid)) as any;
+            if (uDoc) {
+              return {
+                uid: uDoc.uid || sUid,
+                ...(uDoc.perfil || {
+                  name: uDoc.name || uDoc.displayName || "Usuario",
+                  email: uDoc.email || "",
+                  photoURL: uDoc.photoURL || uDoc.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  descripcion: uDoc.descripcion || "",
+                  rol: uDoc.rol || "usuario",
+                  verificado: Boolean(uDoc.verificado ?? false),
+                  marco_perfil_id: uDoc.marco_perfil_id ?? null,
+                }),
+              };
+            }
+          } catch (err) {
+            console.warn(`⚠️ [user-info] Aviso al cargar perfil de seguido ${sUid}:`, err);
+          }
+          return {
+            uid: sUid,
+            name: "Usuario",
+            email: "",
+            photoURL: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+            descripcion: "",
+            rol: "usuario",
+            verificado: false,
+            marco_perfil_id: null,
+          };
+        }),
+      ),
+    ]);
+
+    const seguidoresLista = seguidoresPerfiles.filter(Boolean);
+    const siguiendoLista = siguiendoPerfiles.filter(Boolean);
+
+    // 3. Formatear y preparar usuario con saldos y listas
     const rawUser = { ...(userDoc as any) };
     delete rawUser.idDoc;
     const finalUid = rawUser.uid || cleanUid;
@@ -709,8 +786,6 @@ export const getSimplifyUserInfoController = async (
       0,
     );
 
-    const seguidoresLista = Array.isArray(seguidoresRaw) ? seguidoresRaw : [];
-    const siguiendoLista = Array.isArray(siguiendoRaw) ? siguiendoRaw : [];
     const listaColecciones = Array.isArray(coleccionesRaw) ? coleccionesRaw : [];
     const listaHistorias = Array.isArray(historiasCardRaw) ? historiasCardRaw : [];
 
@@ -730,7 +805,6 @@ export const getSimplifyUserInfoController = async (
       totalSiguiendo: siguiendoLista.length,
       conteoSiguiendo: siguiendoLista.length,
       totalGastado: totalGastos,
-      totalGastos: totalGastos,
       totalGanancias: totalGanancias,
       totalRecompensas: totalRecompensas,
       totalMovimientos: historialResult?.totalMovimientos || 0,
@@ -741,7 +815,7 @@ export const getSimplifyUserInfoController = async (
       },
     };
 
-    // 3. Calcular Top Donadores en el servidor de forma consolidada
+    // 4. Calcular Top Donadores en el servidor de forma consolidada
     const mapaDonadores = new Map<string, {
       uid: string;
       nombre: string;
