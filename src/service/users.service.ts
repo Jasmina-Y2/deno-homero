@@ -424,6 +424,8 @@ export const getUsuarioByUidService = async (uid: string) => {
     const cleanUid = (uid || "").trim();
     if (!cleanUid) return null;
 
+    console.log("🔍 [getUsuarioByUidService] Buscando usuario con UID:", cleanUid);
+
     // 1. Priorizar búsqueda por campo 'uid' (Auth UID) en Firestore
     const snapshot = await db.collection("users").where("uid", "==", cleanUid).limit(1).get();
     if (!snapshot.empty) {
@@ -431,6 +433,7 @@ export const getUsuarioByUidService = async (uid: string) => {
       const rawData = userDoc.data() || {};
       const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
       const authUid = rawData.uid || data.uid || cleanUid;
+      console.log(`✅ [getUsuarioByUidService] Encontrado por where('uid'): Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
       return {
         ...data,
         uid: authUid,
@@ -443,6 +446,7 @@ export const getUsuarioByUidService = async (uid: string) => {
       const rawData = directDoc.data() || {};
       const data = await verificarExpiracionSuscripcion(directDoc.ref, rawData);
       const authUid = rawData.uid || data.uid || cleanUid;
+      console.log(`✅ [getUsuarioByUidService] Encontrado por doc(cleanUid): Doc ID = ${directDoc.id}, campo uid = ${authUid}`);
       return {
         ...data,
         uid: authUid,
@@ -456,6 +460,7 @@ export const getUsuarioByUidService = async (uid: string) => {
       const rawData = userDoc.data() || {};
       const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
       const authUid = rawData.uid || data.uid || cleanUid;
+      console.log(`✅ [getUsuarioByUidService] Encontrado por where('id'): Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
       return {
         ...data,
         uid: authUid,
@@ -470,6 +475,7 @@ export const getUsuarioByUidService = async (uid: string) => {
         const rawData = userDoc.data() || {};
         const data = await verificarExpiracionSuscripcion(userDoc.ref, rawData);
         const authUid = rawData.uid || data.uid || cleanUid;
+        console.log(`✅ [getUsuarioByUidService] Encontrado por email: Doc ID = ${userDoc.id}, campo uid = ${authUid}`);
         return {
           ...data,
           uid: authUid,
