@@ -4,18 +4,23 @@ import {
   getSimplifyNotificacionesNoLeidasController,
   getSimplifyTab1CardsController,
   getSimplifyTab2DataController,
+  getSimplifyTab3DataController,
   getSimplifyUserDataController,
+  getSimplifyVocesController,
 } from "../controllers/simplify.controller.ts";
 
 const router = new Router();
 
 // ============================================================================
-// RUTAS SIMPLIFICADAS (TAB1, TAB2, USERS, NOTIFICACIONES - CARGA OPTIMIZADA)
+// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, VOCES, NOTIFICACIONES)
 // ============================================================================
 router.get("/api/simplify/tab1", getSimplifyTab1CardsController);
 router.get("/api/simplify/tab2", getSimplifyTab2DataController);
-router.get("/api/simplify/users/:uid", getSimplifyUserDataController);
+router.get("/api/simplify/tab3", getSimplifyTab3DataController);
 router.get("/api/simplify/users", getSimplifyUserDataController);
+
+// Catálogo unificado de todas las voces IA (Azure, Gemini, ElevenLabs)
+router.get("/api/simplify/voces", getSimplifyVocesController);
 
 router.get(
   "/api/simplify/notificaciones/no-leidas",
@@ -31,6 +36,8 @@ export {
   getSimplifyNotificacionesNoLeidasController,
   getSimplifyTab1CardsController,
   getSimplifyTab2DataController,
+  getSimplifyTab3DataController,
   getSimplifyUserDataController,
+  getSimplifyVocesController,
 };
 export default router;

@@ -1,5 +1,8 @@
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
-import { obtenerCardHistoriaService } from "../service/cardhistoria.service.ts";
+import {
+  obtenerCardHistoriaService,
+  getHistoriaCardByCustomId2Service,
+} from "../service/cardhistoria.service.ts";
 import { getUsuarioByUidService } from "../service/users.service.ts";
 import {
   getHistoriaByIdService,
@@ -9,7 +12,10 @@ import {
 import { checkIfLikedService, obtenerTotalLikesService } from "../service/likeuser.service.ts";
 import { obtenerComentariosService } from "../service/comentarios.service.ts";
 import { getColeccionPorNombreService } from "../service/coleccionids.service.ts";
-import { getTodasLasColeccionesService } from "../service/coleccion.service.ts";
+import {
+  getTodasLasColeccionesService,
+  mostrarColeccionesPorAutorService,
+} from "../service/coleccion.service.ts";
 import { verificarHistoriaVistaService } from "../service/vistasuser.service.ts";
 import {
   obtenerHistorialUsuarioService,
@@ -19,6 +25,11 @@ import {
   obtenerNotificacionesNoLeidasCountService,
   obtenerNotificacionesPorUsuarioService,
 } from "../service/notification.service.ts";
+import {
+  CATALOGO_VOCES_AZURE,
+  LISTA_VOCES_GEMINI,
+} from "./ia.controller.ts";
+import { ElevenLabsService } from "../service/elevenlabs.service.ts";
 import { db } from "../config/firebase.ts";
 
 // ============================================================================
@@ -721,5 +732,173 @@ export const getSimplifyNotificacionesDetalleController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO TAB3: HISTORIAS CARD DEL AUTOR Y COLECCIONES DEL AUTOR
+// ============================================================================
+export const getSimplifyTab3DataController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const idAutor = ctx.params?.idAutor ||
+      ctx.params?.uid ||
+      ctx.params?.id ||
+      url.searchParams.get("idAutor") ||
+      url.searchParams.get("uid") ||
+      url.searchParams.get("id") ||
+      "";
+
+    if (!idAutor || idAutor.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El parámetro idAutor (o uid) es requerido en la URL (/api/simplify/tab3/:idAutor) o como query param (?idAutor=...)",
+        data: {
+          historiasCard: [],
+          historias: [],
+          colecciones: [],
+        },
+      };
+      return;
+    }
+
+    const cleanIdAutor = idAutor.trim();
+
+    // 1. Ejecución concurrente con Promise.all llamando a los servicios de CardHistoria y Colección por autor
+    const [historiasCardRaw, coleccionesRaw] = await Promise.all([
+      (async () => {
+        try {
+          return await getHistoriaCardByCustomId2Service(cleanIdAutor);
+        } catch (err) {
+          console.warn(`⚠️ Aviso al cargar historias-card del autor ${cleanIdAutor}:`, err);
+          return [];
+        }
+      })(),
+      (async () => {
+        try {
+          return await mostrarColeccionesPorAutorService(cleanIdAutor);
+        } catch (err) {
+          console.warn(`⚠️ Aviso al cargar colecciones del autor ${cleanIdAutor}:`, err);
+          return [];
+        }
+      })(),
+    ]);
+
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos de Tab3 (historias-card y colecciones) obtenidos correctamente",
+      data: {
+        historiasCard: historiasCardRaw || [],
+        historias: historiasCardRaw || [],
+        colecciones: coleccionesRaw || [],
+      },
+      countHistorias: (historiasCardRaw || []).length,
+      countColecciones: (coleccionesRaw || []).length,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyTab3DataController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener datos de Tab3",
+      error: error?.message || "Error interno del servidor",
+      data: {
+        historiasCard: [],
+        historias: [],
+        colecciones: [],
+      },
+    };
+  }
+};
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO VOCES: AZURE, GEMINI Y ELEVENLABS (TODO EN 1)
+// ============================================================================
+const elevenLabsServiceInstance = new ElevenLabsService();
+
+export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
+  try {
+    // 1. Voces Azure
+    const espanolAzure = (CATALOGO_VOCES_AZURE || []).filter((v: any) =>
+      v.codigoIdioma?.startsWith("es-")
+    );
+    const inglesAzure = (CATALOGO_VOCES_AZURE || []).filter((v: any) =>
+      v.codigoIdioma?.startsWith("en-")
+    );
+    const azureData = {
+      success: true,
+      total: CATALOGO_VOCES_AZURE.length,
+      proveedor: "Microsoft Azure Cognitive Services Speech (Neural)",
+      region: Deno.env.get("AZURE_SPEECH_REGION") || "canadacentral",
+      idiomas: {
+        espanol: {
+          total: espanolAzure.length,
+          voces: espanolAzure,
+        },
+        ingles: {
+          total: inglesAzure.length,
+          voces: inglesAzure,
+        },
+      },
+      todas: CATALOGO_VOCES_AZURE,
+      voces: CATALOGO_VOCES_AZURE,
+    };
+
+    // 2. Voces Google Gemini
+    const geminiData = {
+      success: true,
+      total: LISTA_VOCES_GEMINI.length,
+      proveedor: "Google Gemini API (AI Studio)",
+      gratis: true,
+      soporteMultilingue:
+        "Todas las voces detectan automáticamente el idioma del texto (Español, Inglés, Portugués, Francés, Alemán, Italiano, Japonés, etc.) sin necesidad de configuración adicional.",
+      voces: LISTA_VOCES_GEMINI,
+    };
+
+    // 3. Voces ElevenLabs
+    const elevenVoices = elevenLabsServiceInstance.getVoices();
+    const elevenlabsData = {
+      success: true,
+      ...elevenVoices,
+      voces: elevenVoices.all || [],
+    };
+
+    ctx.response.headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Catálogo completo de voces de IA (Azure, Gemini y ElevenLabs) obtenido correctamente",
+      data: {
+        azure: azureData,
+        gemini: geminiData,
+        elevenlabs: elevenlabsData,
+      },
+      totales: {
+        azure: CATALOGO_VOCES_AZURE.length,
+        gemini: LISTA_VOCES_GEMINI.length,
+        elevenlabs: elevenVoices.total || 0,
+        total: CATALOGO_VOCES_AZURE.length + LISTA_VOCES_GEMINI.length + (elevenVoices.total || 0),
+      },
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyVocesController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener catálogo unificado de voces",
+      error: error?.message || "Error interno del servidor",
+      data: {
+        azure: { total: 0, voces: [] },
+        gemini: { total: 0, voces: [] },
+        elevenlabs: { total: 0, voces: [] },
+      },
+    };
+  }
+};
+
+
 
 
