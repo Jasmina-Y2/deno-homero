@@ -15,6 +15,11 @@ import {
   obtenerHistorialUsuarioService,
   obtenerRankingCreadoresService,
 } from "../service/propina.service.ts";
+import {
+  obtenerNotificacionesNoLeidasCountService,
+  obtenerNotificacionesPorUsuarioService,
+} from "../service/notification.service.ts";
+import { db } from "../config/firebase.ts";
 
 // ============================================================================
 // CONTROLADOR SIMPLIFICADO: TRAE 10 CARDS Y LLAMA A LOS SERVICES CON PROMISE.ALL
@@ -477,4 +482,244 @@ export const getSimplifyUserDataController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO: VERIFICA SI HAY NOTIFICACIONES NO LEÍDAS (TRUE/FALSE)
+// ============================================================================
+export const getSimplifyNotificacionesNoLeidasController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const uid = ctx.params?.uid || url.searchParams.get("uid") || url.searchParams.get("idUsuario") || "";
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El parámetro UID es requerido",
+        tieneNoLeidas: false,
+        noLeidas: false,
+        conteo: 0,
+      };
+      return;
+    }
+
+    const cleanUid = uid.trim();
+    const count = await obtenerNotificacionesNoLeidasCountService(cleanUid);
+    const tieneNoLeidas = count > 0;
+
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      tieneNoLeidas,
+      noLeidas: tieneNoLeidas,
+      conteo: count,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyNotificacionesNoLeidasController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al consultar notificaciones no leídas",
+      tieneNoLeidas: false,
+      noLeidas: false,
+      conteo: 0,
+      error: error?.message || "Error interno del servidor",
+    };
+  }
+};
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO: NOTIFICACIONES ENRIQUECIDAS CON USERS E HISTORIAINFO
+// ============================================================================
+export const getSimplifyNotificacionesDetalleController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const uid = ctx.params?.uid || ctx.params?.id || url.searchParams.get("uid") || url.searchParams.get("idUsuario") || "";
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El parámetro UID es requerido en la URL (/api/simplify/notificaciones/:uid) o como query param (?uid=...)",
+        data: [],
+      };
+      return;
+    }
+
+    const cleanUid = uid.trim();
+
+    // 1. Obtener todas las notificaciones del usuario
+    const notificacionesRaw = await obtenerNotificacionesPorUsuarioService(cleanUid);
+
+    if (!notificacionesRaw || notificacionesRaw.length === 0) {
+      ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      ctx.response.status = 200;
+      ctx.response.body = {
+        success: true,
+        message: "No hay notificaciones para este usuario",
+        data: [],
+        count: 0,
+        noLeidas: 0,
+        tieneNoLeidas: false,
+      };
+      return;
+    }
+
+    // 2. Mapear y enriquecer en paralelo cada notificación con User e HistoriaInfo
+    const notificacionesEnriquecidas = await Promise.all(
+      notificacionesRaw.map(async (notif: any) => {
+        const notifData = notif.data || {};
+
+        // Identificar ID del usuario emisor
+        const idEmisor = String(
+          notif.uidUsuario ||
+          notif.idUsuario ||
+          notifData.idUsuario ||
+          notifData.uidUsuario ||
+          notifData.uidEmisor ||
+          notifData.idSeguidor ||
+          notifData.uidSeguidor ||
+          notifData.idRemitente ||
+          notifData.idOyente ||
+          "",
+        ).trim();
+
+        // Identificar ID de la historia (si aplica)
+        const idHistoria = String(
+          notif.idHistoria ||
+          notif.historiaId ||
+          notif.publicacionId ||
+          notifData.idHistoria ||
+          notifData.historiaId ||
+          notifData.publicacionId ||
+          notifData.idPublicacion ||
+          "",
+        ).trim();
+
+        // Ejecutar consultas concurrentes de Usuario e Historia
+        const [userDoc, historiaDoc] = await Promise.all([
+          // Consulta de usuario emisor
+          (async () => {
+            if (!idEmisor || idEmisor === cleanUid) return null;
+            try {
+              const u = (await getUsuarioByUidService(idEmisor)) as any;
+              if (!u) return null;
+              return {
+                uid: u.uid || idEmisor,
+                name: u.perfil?.name || u.name || notif.nombreUsuario || notifData.nombreUsuario || "Usuario",
+                displayName: u.perfil?.name || u.name || notif.nombreUsuario || notifData.nombreUsuario || "Usuario",
+                photoURL: u.perfil?.photoURL || u.photoURL || notif.fotoUsuario || notifData.fotoUsuario || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                foto: u.perfil?.photoURL || u.photoURL || notif.fotoUsuario || notifData.fotoUsuario || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                descripcion: u.perfil?.descripcion || u.descripcion || "",
+                verificado: Boolean(u.perfil?.verificado ?? u.verificado ?? false),
+                marco_perfil_id: u.perfil?.marco_perfil_id ?? u.marco_perfil_id ?? null,
+                rol: u.perfil?.rol || u.rol || "usuario",
+              };
+            } catch (err) {
+              console.warn(`⚠️ Aviso al cargar usuario emisor ${idEmisor} en notificación:`, err);
+              return null;
+            }
+          })(),
+
+          // Consulta de historia info
+          (async () => {
+            if (!idHistoria) return null;
+            try {
+              const hList = await getHistoriaByIdService(idHistoria);
+              if (Array.isArray(hList) && hList.length > 0) {
+                const h: any = hList[0];
+                return {
+                  id: h.id || idHistoria,
+                  idDoc: h.idDoc || h.id || idHistoria,
+                  titulo: h.titulo || h.nombre || notifData.tituloHistoria || "",
+                  descripcion: h.descripcion || "",
+                  imagen: h.imagen || h.portada || h.img || "",
+                  generos: h.generos || [],
+                  autor: h.autor || "",
+                  idAutor: h.idAutor || "",
+                  paginas: h.paginas || 0,
+                  vistas: h.vistas || 0,
+                  likes: h.likes || 0,
+                };
+              }
+
+              // Fallback directo a Firestore si idHistoria es un docId directo
+              const docSnap = await db.collection("HistoriaInfo").doc(idHistoria).get();
+              if (docSnap.exists) {
+                const hData: any = docSnap.data();
+                return {
+                  id: hData?.id || docSnap.id,
+                  idDoc: docSnap.id,
+                  titulo: hData?.titulo || hData?.nombre || notifData.tituloHistoria || "",
+                  descripcion: hData?.descripcion || "",
+                  imagen: hData?.imagen || hData?.portada || hData?.img || "",
+                  generos: hData?.generos || [],
+                  autor: hData?.autor || "",
+                  idAutor: hData?.idAutor || "",
+                  paginas: hData?.paginas || 0,
+                  vistas: hData?.vistas || 0,
+                  likes: hData?.likes || 0,
+                };
+              }
+
+              return null;
+            } catch (err) {
+              console.warn(`⚠️ Aviso al cargar historia ${idHistoria} en notificación:`, err);
+              return null;
+            }
+          })(),
+        ]);
+
+        const usuarioFinal = userDoc || (notif.nombreUsuario ? {
+          uid: idEmisor,
+          name: notif.nombreUsuario || notifData.nombreUsuario || "Usuario",
+          displayName: notif.nombreUsuario || notifData.nombreUsuario || "Usuario",
+          photoURL: notif.fotoUsuario || notifData.fotoUsuario || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+          verificado: false,
+          marco_perfil_id: null,
+        } : null);
+
+        return {
+          ...notif,
+          id: notif.id || notif.idDoc,
+          idDoc: notif.idDoc || notif.id,
+          usuario: usuarioFinal,
+          user: usuarioFinal,
+          usuarioEmisor: usuarioFinal,
+          historia: historiaDoc,
+          historiaInfo: historiaDoc,
+          esDeHistoria: Boolean(historiaDoc),
+        };
+      })
+    );
+
+    const conteoNoLeidas = notificacionesEnriquecidas.filter((n: any) => !n.leido).length;
+
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Notificaciones enriquecidas obtenidas correctamente",
+      data: notificacionesEnriquecidas,
+      count: notificacionesEnriquecidas.length,
+      noLeidas: conteoNoLeidas,
+      tieneNoLeidas: conteoNoLeidas > 0,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyNotificacionesDetalleController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener notificaciones enriquecidas",
+      error: error?.message || "Error interno del servidor",
+      data: [],
+    };
+  }
+};
+
 
