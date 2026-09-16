@@ -1886,6 +1886,23 @@ export const getSimplifyHistoriaDetalleController = async (
     const historiaData = Array.isArray(historiaDocs) ? historiaDocs : [];
     const itemPrincipal = historiaData.length > 0 ? historiaData[0] : null;
 
+    const dataLimpia = itemPrincipal
+      ? {
+        ...itemPrincipal,
+        totalLikes: totalLikes,
+        likes: totalLikes,
+        liked: Boolean(isLiked),
+        isLiked: Boolean(isLiked),
+      }
+      : {
+        id: cleanId,
+        historia: [],
+        totalLikes: totalLikes,
+        likes: totalLikes,
+        liked: Boolean(isLiked),
+        isLiked: Boolean(isLiked),
+      };
+
     ctx.response.headers.set(
       "Cache-Control",
       "private, max-age=30",
@@ -1893,29 +1910,8 @@ export const getSimplifyHistoriaDetalleController = async (
     ctx.response.status = 200;
     ctx.response.body = {
       success: true,
-      message: "Historia, conteo de likes y estado obtenidos correctamente",
-      data: {
-        id: cleanId,
-        idHistoria: cleanId,
-        idPublicacion: cleanId,
-        historia: historiaData,
-        item: itemPrincipal,
-        totalLikes: totalLikes,
-        likes: totalLikes,
-        isLiked: Boolean(isLiked),
-        liked: Boolean(isLiked),
-        hasLiked: Boolean(isLiked),
-        uid: cleanUid || null,
-        idUsuario: cleanUid || null,
-      },
-      // Campos directos para máxima compatibilidad con el frontend
-      historia: historiaData,
-      item: itemPrincipal,
-      totalLikes: totalLikes,
-      likes: totalLikes,
-      isLiked: Boolean(isLiked),
-      liked: Boolean(isLiked),
-      hasLiked: Boolean(isLiked),
+      message: "Historia obtenida correctamente",
+      data: dataLimpia,
     };
   } catch (error: any) {
     console.error("❌ Error en getSimplifyHistoriaDetalleController:", error);
