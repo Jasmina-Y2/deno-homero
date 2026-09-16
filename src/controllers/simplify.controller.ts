@@ -532,10 +532,84 @@ export const getSimplifyUserDataController = async (
       0,
     );
 
-    const seguidoresLista = Array.isArray(seguidores) ? seguidores : [];
-    const siguiendoLista = Array.isArray(siguiendo) ? siguiendo : [];
+    // 3. Enriquecer seguidores y siguiendo con los datos de perfil de cada usuario
+    const [seguidoresPerfiles, siguiendoPerfiles] = await Promise.all([
+      Promise.all(
+        (Array.isArray(seguidores) ? seguidores : []).map(async (item: any) => {
+          const sUid = typeof item === "string" ? item.trim() : (item.uid || item.id || "").trim();
+          if (!sUid) return null;
+          try {
+            const uDoc = (await getUsuarioByUidService(sUid)) as any;
+            if (uDoc) {
+              return {
+                uid: uDoc.uid || sUid,
+                ...(uDoc.perfil || {
+                  name: uDoc.name || uDoc.displayName || "Usuario",
+                  email: uDoc.email || "",
+                  photoURL: uDoc.photoURL || uDoc.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  descripcion: uDoc.descripcion || "",
+                  rol: uDoc.rol || "usuario",
+                  verificado: Boolean(uDoc.verificado ?? false),
+                  marco_perfil_id: uDoc.marco_perfil_id ?? null,
+                }),
+              };
+            }
+          } catch (err) {
+            console.warn(`⚠️ [users] Aviso al cargar perfil de seguidor ${sUid}:`, err);
+          }
+          return {
+            uid: sUid,
+            name: "Usuario",
+            email: "",
+            photoURL: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+            descripcion: "",
+            rol: "usuario",
+            verificado: false,
+            marco_perfil_id: null,
+          };
+        }),
+      ),
+      Promise.all(
+        (Array.isArray(siguiendo) ? siguiendo : []).map(async (item: any) => {
+          const sUid = typeof item === "string" ? item.trim() : (item.uid || item.id || "").trim();
+          if (!sUid) return null;
+          try {
+            const uDoc = (await getUsuarioByUidService(sUid)) as any;
+            if (uDoc) {
+              return {
+                uid: uDoc.uid || sUid,
+                ...(uDoc.perfil || {
+                  name: uDoc.name || uDoc.displayName || "Usuario",
+                  email: uDoc.email || "",
+                  photoURL: uDoc.photoURL || uDoc.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  descripcion: uDoc.descripcion || "",
+                  rol: uDoc.rol || "usuario",
+                  verificado: Boolean(uDoc.verificado ?? false),
+                  marco_perfil_id: uDoc.marco_perfil_id ?? null,
+                }),
+              };
+            }
+          } catch (err) {
+            console.warn(`⚠️ [users] Aviso al cargar perfil de seguido ${sUid}:`, err);
+          }
+          return {
+            uid: sUid,
+            name: "Usuario",
+            email: "",
+            photoURL: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+            descripcion: "",
+            rol: "usuario",
+            verificado: false,
+            marco_perfil_id: null,
+          };
+        }),
+      ),
+    ]);
 
-    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas + seguidores (sin historial)
+    const seguidoresLista = seguidoresPerfiles.filter(Boolean);
+    const siguiendoLista = siguiendoPerfiles.filter(Boolean);
+
+    // 4. Devolver el objeto con todos los datos del usuario + apartado de monedas + seguidores enriquecidos
     const usuarioConMonedas = {
       ...rawUser,
       uid: finalUid,
