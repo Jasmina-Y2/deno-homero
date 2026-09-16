@@ -17,6 +17,7 @@ const router = new Router();
 router.get("/api/simplify/tab1", getSimplifyTab1CardsController);
 router.get("/api/simplify/tab2", getSimplifyTab2DataController);
 router.get("/api/simplify/tab3", getSimplifyTab3DataController);
+router.get("/api/simplify/users/:uid", getSimplifyUserDataController);
 router.get("/api/simplify/users", getSimplifyUserDataController);
 
 // Catálogo unificado de todas las voces IA (Azure, Gemini, ElevenLabs)
