@@ -28,6 +28,8 @@ import {
   obtenerNotificacionesNoLeidasCountService,
   obtenerNotificacionesPorUsuarioService,
 } from "../service/notification.service.ts";
+import { getGenteQueMeSigueService } from "../service/seguir.service.ts";
+import { getGenteQueYoSigoService } from "../service/seguiruser.service.ts";
 import { CATALOGO_VOCES_AZURE, LISTA_VOCES_GEMINI } from "./ia.controller.ts";
 import { ElevenLabsService } from "../service/elevenlabs.service.ts";
 import { db } from "../config/firebase.ts";
@@ -476,8 +478,8 @@ export const getSimplifyUserDataController = async (
     const cleanUid = uid.trim();
     console.log("📥 [API /api/simplify/users] Petición recibida para UID:", cleanUid);
 
-    // 1. Ejecución paralela: consultar usuario y consultar historial de transacciones
-    const [userDoc, historial] = await Promise.all([
+    // 1. Ejecución paralela: consultar usuario, seguidores y siguiendo (sin historial)
+    const [userDoc, seguidores, siguiendo] = await Promise.all([
       (async () => {
         try {
           return await getUsuarioByUidService(cleanUid);
@@ -488,13 +490,18 @@ export const getSimplifyUserDataController = async (
       })(),
       (async () => {
         try {
-          return await obtenerHistorialUsuarioService(cleanUid);
+          return await getGenteQueMeSigueService(cleanUid);
         } catch (err) {
-          console.warn(
-            `⚠️ Aviso al cargar historial de transacciones de ${cleanUid}:`,
-            err,
-          );
-          return null;
+          console.warn(`⚠️ Aviso al cargar seguidores de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+      (async () => {
+        try {
+          return await getGenteQueYoSigoService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ Aviso al cargar siguiendo de ${cleanUid}:`, err);
+          return [];
         }
       })(),
     ]);
@@ -510,28 +517,36 @@ export const getSimplifyUserDataController = async (
       return;
     }
 
-    // 2. Calcular las monedas desde el historial de transacciones
-    let saldoMonedas = 0;
-    if (historial) {
-      const ganancias = Number(historial.totalGanancias || 0);
-      const recompensas = Number(historial.totalRecompensas || 0);
-      const gastos = Number(historial.totalGastos || 0);
-      saldoMonedas = Math.max(0, (ganancias + recompensas) - gastos);
-    }
-
-    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas (sin idDoc)
+    // 2. Obtener saldo de monedas directo del usuario
     const rawUser = { ...(userDoc as any) };
     delete rawUser.idDoc;
 
     const finalUid = rawUser.uid || cleanUid;
+    const saldoMonedas = Number(
+      rawUser.billetera?.walletBalance ??
+      rawUser.walletBalance ??
+      rawUser.monedas ??
+      0,
+    );
 
+    const seguidoresLista = Array.isArray(seguidores) ? seguidores : [];
+    const siguiendoLista = Array.isArray(siguiendo) ? siguiendo : [];
+
+    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas + seguidores (sin historial)
     const usuarioConMonedas = {
       ...rawUser,
       uid: finalUid,
       monedas: saldoMonedas,
       saldoMonedas: saldoMonedas,
+      seguidores: seguidoresLista,
+      totalSeguidores: seguidoresLista.length,
+      conteoSeguidores: seguidoresLista.length,
+      siguiendo: siguiendoLista,
+      totalSiguiendo: siguiendoLista.length,
+      conteoSiguiendo: siguiendoLista.length,
       billetera: {
         ...(rawUser.billetera || {}),
+        walletBalance: saldoMonedas,
         monedas: saldoMonedas,
       },
     };
@@ -541,6 +556,8 @@ export const getSimplifyUserDataController = async (
       nombre: usuarioConMonedas.perfil?.name,
       email: usuarioConMonedas.perfil?.email,
       monedas: usuarioConMonedas.monedas,
+      seguidores: usuarioConMonedas.totalSeguidores,
+      siguiendo: usuarioConMonedas.totalSiguiendo,
     });
 
     ctx.response.headers.set(
@@ -560,6 +577,367 @@ export const getSimplifyUserDataController = async (
     ctx.response.body = {
       success: false,
       message: "Error al obtener usuario y transacciones simplificadas",
+      error: error?.message || "Error interno del servidor",
+    };
+  }
+};
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO USER-INFO: TRAE TODO EL PERFIL EN 1 SOLA RUTA
+// (USER, HISTORIAL, COLECCIONES, POSTS/HISTORIAS, SEGUIDORES, TOP DONADORES)
+// ============================================================================
+export const getSimplifyUserInfoController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const uid = ctx.params?.uid || ctx.params?.id ||
+      url.searchParams.get("uid") || url.searchParams.get("id") ||
+      url.searchParams.get("idUsuario") || "";
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message:
+          "El parámetro UID es requerido en la URL (/api/simplify/user-info/:uid) o como query parameter (?uid=...)",
+        data: null,
+      };
+      return;
+    }
+
+    const cleanUid = uid.trim();
+    console.log("📥 [API /api/simplify/user-info] Petición unificada recibida para UID:", cleanUid);
+
+    // 1. Ejecución paralela con Promise.all de todos los servicios requeridos
+    const [
+      userDoc,
+      historialResult,
+      coleccionesRaw,
+      historiasCardRaw,
+      seguidoresRaw,
+      siguiendoRaw,
+    ] = await Promise.all([
+      // A) Perfil de Usuario
+      (async () => {
+        try {
+          return await getUsuarioByUidService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar usuario ${cleanUid}:`, err);
+          return null;
+        }
+      })(),
+
+      // B) Historial de Transacciones / Movimientos / Gastos
+      (async () => {
+        try {
+          return await obtenerHistorialUsuarioService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar historial de ${cleanUid}:`, err);
+          return {
+            uid: cleanUid,
+            totalMovimientos: 0,
+            totalGastos: 0,
+            totalGanancias: 0,
+            totalRecompensas: 0,
+            transacciones: [],
+          };
+        }
+      })(),
+
+      // C) Colecciones del Autor
+      (async () => {
+        try {
+          return await mostrarColeccionesPorAutorService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar colecciones de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+
+      // D) Historias / Posts del Autor
+      (async () => {
+        try {
+          return await getHistoriaCardByCustomId2Service(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar historias/posts de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+
+      // E) Seguidores (gente que me sigue)
+      (async () => {
+        try {
+          return await getGenteQueMeSigueService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar seguidores de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+
+      // F) Siguiendo (gente que yo sigo)
+      (async () => {
+        try {
+          return await getGenteQueYoSigoService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ [user-info] Aviso al cargar siguiendo de ${cleanUid}:`, err);
+          return [];
+        }
+      })(),
+    ]);
+
+    if (!userDoc) {
+      console.warn("❌ [API /api/simplify/user-info] No se encontró usuario para UID:", cleanUid);
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: `No se encontró ningún usuario con UID: ${cleanUid}`,
+        data: null,
+      };
+      return;
+    }
+
+    // 2. Formatear y preparar usuario con saldos y listas
+    const rawUser = { ...(userDoc as any) };
+    delete rawUser.idDoc;
+    const finalUid = rawUser.uid || cleanUid;
+
+    const saldoMonedas = Number(
+      rawUser.billetera?.walletBalance ??
+      rawUser.walletBalance ??
+      rawUser.monedas ??
+      0,
+    );
+
+    const seguidoresLista = Array.isArray(seguidoresRaw) ? seguidoresRaw : [];
+    const siguiendoLista = Array.isArray(siguiendoRaw) ? siguiendoRaw : [];
+    const listaColecciones = Array.isArray(coleccionesRaw) ? coleccionesRaw : [];
+    const listaHistorias = Array.isArray(historiasCardRaw) ? historiasCardRaw : [];
+
+    const totalGastos = Number(historialResult?.totalGastos || 0);
+    const totalGanancias = Number(historialResult?.totalGanancias || 0);
+    const totalRecompensas = Number(historialResult?.totalRecompensas || 0);
+
+    const usuarioConMonedas = {
+      ...rawUser,
+      uid: finalUid,
+      monedas: saldoMonedas,
+      saldoMonedas: saldoMonedas,
+      seguidores: seguidoresLista,
+      totalSeguidores: seguidoresLista.length,
+      conteoSeguidores: seguidoresLista.length,
+      siguiendo: siguiendoLista,
+      totalSiguiendo: siguiendoLista.length,
+      conteoSiguiendo: siguiendoLista.length,
+      totalGastado: totalGastos,
+      totalGastos: totalGastos,
+      totalGanancias: totalGanancias,
+      totalRecompensas: totalRecompensas,
+      totalMovimientos: historialResult?.totalMovimientos || 0,
+      billetera: {
+        ...(rawUser.billetera || {}),
+        walletBalance: saldoMonedas,
+        monedas: saldoMonedas,
+      },
+    };
+
+    // 3. Calcular Top Donadores en el servidor de forma consolidada
+    const mapaDonadores = new Map<string, {
+      uid: string;
+      nombre: string;
+      photoURL: string;
+      totalMonedas: number;
+      numDonaciones: number;
+      marco?: string | null;
+      is_pro?: boolean;
+      isPro?: boolean;
+      verificado?: boolean;
+    }>();
+
+    // A partir de las transacciones del historial
+    const transacciones: any[] = (historialResult?.transacciones || []) as any[];
+    for (const t of transacciones) {
+      const tipo = String(t.tipo || "").toLowerCase();
+      const tipoMov = String(t.tipoMovimiento || "").toLowerCase();
+
+      const esDonacionRecibida =
+        tipoMov === "ganancia" ||
+        tipoMov === "ingreso" ||
+        tipo.includes("recibida") ||
+        tipo.includes("ganancia") ||
+        tipo === "propina" ||
+        t.idCreador === cleanUid;
+
+      if (esDonacionRecibida) {
+        const donorId = String(
+          t.idOyente ||
+          t.uidOyente ||
+          t.idDonador ||
+          t.uidDonador ||
+          t.contraparte?.uid ||
+          t.contraparte?.id ||
+          t.idRemitente ||
+          t.idAutor ||
+          "",
+        ).trim();
+
+        if (!donorId || donorId === cleanUid) continue;
+
+        const donorName = t.nombreOyente || t.nombreDonador || t.contraparte?.nombre || t.nombre || "Donador";
+        const donorPhoto = t.fotoOyente || t.photoURL || t.contraparte?.photoURL || t.avatar || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
+        const monto = Number(t.cantidadMonedas || t.monedas || t.monto || t.cantidadOtorgada || 0);
+
+        if (monto > 0) {
+          if (!mapaDonadores.has(donorId)) {
+            mapaDonadores.set(donorId, {
+              uid: donorId,
+              nombre: donorName,
+              photoURL: donorPhoto,
+              totalMonedas: monto,
+              numDonaciones: 1,
+              marco: t.contraparte?.marco || t.marco || null,
+              is_pro: Boolean(t.contraparte?.is_pro || t.is_pro),
+              isPro: Boolean(t.contraparte?.is_pro || t.is_pro),
+              verificado: Boolean(t.contraparte?.verificado || t.verificado),
+            });
+          } else {
+            const d = mapaDonadores.get(donorId)!;
+            d.totalMonedas += monto;
+            d.numDonaciones += 1;
+            if (donorName && donorName !== "Donador") d.nombre = donorName;
+            if (donorPhoto && !donorPhoto.includes("DEFAULT.png")) d.photoURL = donorPhoto;
+          }
+        }
+      }
+    }
+
+    // A partir de comentarios con propina en las historias
+    for (const hist of (listaHistorias as any[])) {
+      const comments = Array.isArray(hist.comentarios) ? hist.comentarios : [];
+      for (const c of (comments as any[])) {
+        const esPropina =
+          c.esPropina === true ||
+          c.tipo === "sticker" ||
+          Boolean(c.tipoSticker) ||
+          Number(c.cantidadMonedas) > 0;
+
+        if (esPropina) {
+          const donorId = String(c.idAutor || c.uid || c.userId || "").trim();
+          if (!donorId || donorId === cleanUid) continue;
+
+          const donorName = c.nombre || c.autorNombre || c.name || "Donador";
+          const donorPhoto = c.photoURL || c.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
+          const monto = Number(c.cantidadMonedas || c.monedas || 0);
+
+          if (monto > 0) {
+            if (!mapaDonadores.has(donorId)) {
+              mapaDonadores.set(donorId, {
+                uid: donorId,
+                nombre: donorName,
+                photoURL: donorPhoto,
+                totalMonedas: monto,
+                numDonaciones: 1,
+                marco: c.marco_perfil_id || c.marco_perfil || c.selectedFrame || null,
+                is_pro: Boolean(c.is_pro || c.suscription),
+                isPro: Boolean(c.is_pro || c.suscription),
+                verificado: Boolean(c.verificado),
+              });
+            } else {
+              const d = mapaDonadores.get(donorId)!;
+              if (donorName && donorName !== "Donador") d.nombre = donorName;
+              if (donorPhoto && !donorPhoto.includes("DEFAULT.png")) d.photoURL = donorPhoto;
+            }
+          }
+        }
+      }
+    }
+
+    // Ordenar de mayor a menor y tomar el top 10
+    const donadoresOrdenados = Array.from(mapaDonadores.values()).sort(
+      (a, b) => b.totalMonedas - a.totalMonedas,
+    );
+    const top10 = donadoresOrdenados.slice(0, 10);
+
+    // Enriquecer en paralelo con el perfil actual de cada donador
+    const topDonadoresEnriquecidos = await Promise.all(
+      top10.map(async (d, index) => {
+        try {
+          const perfilDoc = (await getUsuarioByUidService(d.uid)) as any;
+          if (perfilDoc) {
+            const nombrePerfil = perfilDoc.perfil?.name || perfilDoc.name || perfilDoc.displayName || d.nombre;
+            const fotoPerfil = perfilDoc.perfil?.photoURL || perfilDoc.photoURL || perfilDoc.foto || d.photoURL;
+            const marcoPerfil = perfilDoc.perfil?.marco_perfil_id ?? perfilDoc.marco_perfil_id ?? d.marco ?? null;
+            const verificadoPerfil = Boolean(perfilDoc.perfil?.verificado ?? perfilDoc.verificado ?? d.verificado);
+            const isProPerfil = Boolean(perfilDoc.is_pro ?? perfilDoc.perfil?.is_pro ?? d.is_pro);
+
+            return {
+              ...d,
+              nombre: nombrePerfil,
+              photoURL: fotoPerfil,
+              marco: marcoPerfil,
+              marco_perfil_id: marcoPerfil,
+              verificado: verificadoPerfil,
+              is_pro: isProPerfil,
+              isPro: isProPerfil,
+              posicion: index + 1,
+              esTopUno: index === 0,
+            };
+          }
+        } catch (_err) {}
+
+        return {
+          ...d,
+          posicion: index + 1,
+          esTopUno: index === 0,
+        };
+      }),
+    );
+
+    const respuestaCompleta = {
+      user: usuarioConMonedas,
+      historial: historialResult,
+      colecciones: listaColecciones,
+      historias: listaHistorias,
+      posts: listaHistorias,
+      seguidores: seguidoresLista,
+      siguiendo: siguiendoLista,
+      topDonadores: topDonadoresEnriquecidos,
+      totalGastado: totalGastos,
+      totalGastos: totalGastos,
+      totalGanancias: totalGanancias,
+      totalRecompensas: totalRecompensas,
+      totalMonedas: saldoMonedas,
+      conteoSeguidores: seguidoresLista.length,
+      conteoSiguiendo: siguiendoLista.length,
+      conteoPosts: listaHistorias.length,
+      conteoColecciones: listaColecciones.length,
+    };
+
+    console.log("📤 [API /api/simplify/user-info] Enviando datos unificados para UID:", finalUid, {
+      nombre: usuarioConMonedas.perfil?.name,
+      colecciones: listaColecciones.length,
+      historias: listaHistorias.length,
+      seguidores: seguidoresLista.length,
+      topDonadores: topDonadoresEnriquecidos.length,
+    });
+
+    ctx.response.headers.set(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate",
+    );
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos completos de usuario (perfil, historial, colecciones, posts, seguidores y top donadores) obtenidos correctamente",
+      data: respuestaCompleta,
+      ...respuestaCompleta,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyUserInfoController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener datos completos de user-info",
       error: error?.message || "Error interno del servidor",
     };
   }

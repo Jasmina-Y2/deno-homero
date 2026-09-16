@@ -162,6 +162,8 @@ export const enviarPropinaController = async (ctx: Context) => {
     ctx.response.body = {
       success: true,
       message: "Propina enviada exitosamente",
+      nuevoSaldo: resultado.nuevoSaldoOyente,
+      nuevoSaldoOyente: resultado.nuevoSaldoOyente,
       data: {
         transactionId: resultado.recibo.id,
         idOyente,
