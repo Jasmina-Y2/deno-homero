@@ -11,7 +11,10 @@ import { obtenerComentariosService } from "../service/comentarios.service.ts";
 import { getColeccionPorNombreService } from "../service/coleccionids.service.ts";
 import { getTodasLasColeccionesService } from "../service/coleccion.service.ts";
 import { verificarHistoriaVistaService } from "../service/vistasuser.service.ts";
-import { obtenerRankingCreadoresService } from "../service/propina.service.ts";
+import {
+  obtenerHistorialUsuarioService,
+  obtenerRankingCreadoresService,
+} from "../service/propina.service.ts";
 
 // ============================================================================
 // CONTROLADOR SIMPLIFICADO: TRAE 10 CARDS Y LLAMA A LOS SERVICES CON PROMISE.ALL
@@ -384,3 +387,94 @@ export const getSimplifyTab2DataController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO USER: TRAE DATOS DE USUARIO Y AUDITA SALDO DE MONEDAS
+// ============================================================================
+export const getSimplifyUserDataController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const uid = ctx.params?.uid || url.searchParams.get("uid") || url.searchParams.get("idUsuario") || "";
+
+    if (!uid || uid.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El parámetro UID es requerido en la URL (/api/simplify/users/:uid) o como query parameter (?uid=...)",
+      };
+      return;
+    }
+
+    const cleanUid = uid.trim();
+
+    // 1. Ejecución paralela: consultar usuario y consultar historial de transacciones
+    const [userDoc, historial] = await Promise.all([
+      (async () => {
+        try {
+          return await getUsuarioByUidService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ Aviso al cargar usuario ${cleanUid}:`, err);
+          return null;
+        }
+      })(),
+      (async () => {
+        try {
+          return await obtenerHistorialUsuarioService(cleanUid);
+        } catch (err) {
+          console.warn(`⚠️ Aviso al cargar historial de transacciones de ${cleanUid}:`, err);
+          return null;
+        }
+      })(),
+    ]);
+
+    if (!userDoc) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: `No se encontró ningún usuario con UID: ${cleanUid}`,
+        data: null,
+      };
+      return;
+    }
+
+    // 2. Calcular las monedas desde el historial de transacciones
+    let saldoMonedas = 0;
+    if (historial) {
+      const ganancias = Number(historial.totalGanancias || 0);
+      const recompensas = Number(historial.totalRecompensas || 0);
+      const gastos = Number(historial.totalGastos || 0);
+      saldoMonedas = Math.max(0, (ganancias + recompensas) - gastos);
+    }
+
+    // 3. Devolver el objeto con todos los datos del usuario + apartado de monedas
+    const usuarioConMonedas = {
+      ...(userDoc as any),
+      monedas: saldoMonedas,
+      saldoMonedas: saldoMonedas,
+      billetera: {
+        ...((userDoc as any).billetera || {}),
+        monedas: saldoMonedas,
+      },
+    };
+
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos de usuario y balance de monedas obtenidos correctamente",
+      data: usuarioConMonedas,
+      monedas: saldoMonedas,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyUserDataController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener usuario y transacciones simplificadas",
+      error: error?.message || "Error interno del servidor",
+    };
+  }
+};
+

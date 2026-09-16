@@ -43,6 +43,10 @@ import {
   toggleLike,
 } from "../controllers/likeuser.controller.ts";
 import {
+  getWebSocketStatsController,
+  userWebSocketController,
+} from "../controllers/userSocket.controller.ts";
+import {
   guardarAudio,
   obtenerAudios,
 } from "../controllers/audiohistoria.controller.ts";
@@ -237,6 +241,13 @@ router.get("/api/seguir/siguiendo/:uid", getGenteQueYoSigo);
 router.post("/api/comentarios/guardar", guardarComentario);
 router.get("/api/comentarios/obtener/:publicacionId", obtenerComentarios);
 router.delete("/api/comentarios/:id", eliminarComentario);
+
+// ============================================================================
+// WEBSOCKET DE USUARIOS EN TIEMPO REAL (SALDO, PERFIL, MONEDAS)
+// ============================================================================
+router.get("/ws/user", userWebSocketController);
+router.get("/ws/user/:uid", userWebSocketController);
+router.get("/api/ws/stats", getWebSocketStatsController);
 
 // ============================================================================
 // AUTENTICACIÓN Y USUARIOS
