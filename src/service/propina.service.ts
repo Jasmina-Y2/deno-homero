@@ -7,6 +7,7 @@ import {
   RecompensaAnuncioDto,
 } from "../models/propina.model.ts";
 import { enviarPush, enviarPushAUsuario, obtenerInfoUsuarioEmisor } from "./notification.service.ts";
+import { enviarActualizacion } from "./userSocket.service.ts";
 
 /**
  * Obtiene la referencia directa del documento de un usuario en Firestore.
@@ -72,6 +73,18 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
   const oyenteRef = await obtenerDocRefUsuario(idOyente);
   const creadorRef = await obtenerDocRefUsuario(idCreador);
 
+  // 1.1 Calcular saldo auditado desde transacciones históricas si el documento tiene balance desfasado
+  let saldoAuditadoOyente = 0;
+  try {
+    const historialOyente = await obtenerHistorialUsuarioService(idOyente);
+    if (historialOyente) {
+      const ganancias = Number(historialOyente.totalGanancias || 0);
+      const recompensas = Number(historialOyente.totalRecompensas || 0);
+      const gastos = Number(historialOyente.totalGastos || 0);
+      saldoAuditadoOyente = Math.max(0, (ganancias + recompensas) - gastos);
+    }
+  } catch (_e) {}
+
   // 2. Ejecutar transacción atómica en Firestore
   const resultado = await db.runTransaction(async (transaction: any) => {
     // --- FASE DE LECTURA (Todas las lecturas antes de escrituras) ---
@@ -89,7 +102,7 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     }
 
     const rawSaldoOyente = oyenteData.billetera?.walletBalance ?? oyenteData.walletBalance ?? 0;
-    const saldoActualOyente = Number(rawSaldoOyente);
+    const saldoActualOyente = Math.max(Number(rawSaldoOyente) || 0, saldoAuditadoOyente);
 
     // Validación de fondos suficientes
     if (isNaN(saldoActualOyente) || saldoActualOyente < cantidadMonedas) {
@@ -219,6 +232,20 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
   } catch (err) {
     console.warn("⚠️ Error al enviar notificación de propina al creador:", err);
   }
+
+  // 3. Emitir actualización de saldo en tiempo real por WebSocket
+  try {
+    enviarActualizacion(idOyente, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldoOyente,
+      saldoMonedas: resultado.nuevoSaldoOyente,
+      walletBalance: resultado.nuevoSaldoOyente,
+    });
+    enviarActualizacion(idCreador, "saldo_actualizado", {
+      monedas: resultado.nuevoSaldoCreador,
+      saldoMonedas: resultado.nuevoSaldoCreador,
+      walletBalance: resultado.nuevoSaldoCreador,
+    });
+  } catch (_wsErr) {}
 
   return resultado;
 };

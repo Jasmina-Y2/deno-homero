@@ -1030,3 +1030,108 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO: CONTEO DE LIKES Y ESTADO ME GUSTA (IS_LIKED)
+// ============================================================================
+export const getSimplifyLikesStatusController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const idPublicacion = ctx.params?.idPublicacion ||
+      ctx.params?.id ||
+      url.searchParams.get("idPublicacion") ||
+      url.searchParams.get("idHistoria") ||
+      url.searchParams.get("id") ||
+      "";
+
+    const uid = url.searchParams.get("uid") ||
+      url.searchParams.get("idUsuario") ||
+      url.searchParams.get("idUser") ||
+      "";
+
+    const cleanIdPublicacion = idPublicacion.trim();
+    const cleanUid = uid.trim();
+
+    if (!cleanIdPublicacion) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message:
+          "El ID de la publicación es requerido en la URL (/api/simplify/likes/:idPublicacion) o como query parameter (?idPublicacion=...)",
+        data: null,
+      };
+      return;
+    }
+
+    // 1. Ejecutar en paralelo: obtener total de likes y verificar estado si hay UID
+    const [totalLikes, isLiked] = await Promise.all([
+      (async () => {
+        try {
+          return await obtenerTotalLikesService(cleanIdPublicacion);
+        } catch (err) {
+          console.warn(
+            `⚠️ Aviso al obtener total de likes para ${cleanIdPublicacion}:`,
+            err,
+          );
+          return 0;
+        }
+      })(),
+      (async () => {
+        if (!cleanUid) return false;
+        try {
+          return await checkIfLikedService(cleanIdPublicacion, cleanUid);
+        } catch (err) {
+          console.warn(
+            `⚠️ Aviso al verificar like del usuario ${cleanUid} para ${cleanIdPublicacion}:`,
+            err,
+          );
+          return false;
+        }
+      })(),
+    ]);
+
+    ctx.response.headers.set(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate",
+    );
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Estado de likes obtenido correctamente",
+      data: {
+        idPublicacion: cleanIdPublicacion,
+        idHistoria: cleanIdPublicacion,
+        totalLikes: totalLikes,
+        total: totalLikes,
+        likes: totalLikes,
+        isLiked: Boolean(isLiked),
+        liked: Boolean(isLiked),
+        hasLiked: Boolean(isLiked),
+        uid: cleanUid || null,
+        idUsuario: cleanUid || null,
+      },
+      totalLikes: totalLikes,
+      total: totalLikes,
+      isLiked: Boolean(isLiked),
+      liked: Boolean(isLiked),
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyLikesStatusController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener estado de likes de la publicación",
+      error: error?.message || "Error interno del servidor",
+      data: {
+        idPublicacion: "",
+        totalLikes: 0,
+        total: 0,
+        isLiked: false,
+        liked: false,
+      },
+    };
+  }
+};
+
