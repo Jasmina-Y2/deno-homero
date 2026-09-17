@@ -263,7 +263,7 @@ router.put("/api/users/actualizar-foto", requerirAuth, actualizarFotoUsuario);
 router.put("/api/users/actualizar-descripcion", requerirAuth, actualizarDescripcionUsuario);
 router.put("/api/users/actualizar-marco", requerirAuth, actualizarMarcoUsuarioController);
 router.put("/api/users/actualizar-marco/:uid", requerirAuth, actualizarMarcoUsuarioController);
-router.post("/api/users/guardar-token", requerirAuth, guardarFcmToken);
+router.post("/api/users/guardar-token", guardarFcmToken);
 
 // ============================================================================
 // SUSCRIPCIONES DE USUARIO (CRUD COMPLETO: lector_vip, creador_estelar, etc.)

@@ -516,7 +516,7 @@ export const crearUsuarioService = async (datos: DatosUsuario) => {
     };
 
     const sistema: SistemaUsuario = {
-      fcmToken: datos.sistema?.fcmToken || datos.fcmToken || datos.fcm_token || "",
+      fcmToken: datos.sistema?.fcmToken || datos.fcmToken || datos.fcm_token || (datos as any).token || (datos.perfil as any)?.fcmToken || "",
       ultimoDeviceId: datos.sistema?.ultimoDeviceId || datos.ultimoDeviceId || "",
       bovedaPin: datos.sistema?.bovedaPin || datos.bovedaPin || "",
       metodo: datos.sistema?.metodo || datos.metodo || "email",

@@ -4,11 +4,18 @@ import { crearUsuarioService, normalizarUsuarioDoc } from "./users.service.ts";
 
 export const syncUserWithGoogleService = async (userData: any) => {
     try {
+        const fcmToken = userData.fcmToken || userData.fcm_token || userData.sistema?.fcmToken || "";
         const { uid, email, name, photoURL } = userData;
         const userRef = db.collection("users").doc(uid);
         const docSnap = await userRef.get();
 
         if (docSnap.exists) {
+            if (fcmToken && fcmToken.trim().length > 0) {
+                await userRef.update({
+                    "sistema.fcmToken": fcmToken,
+                    "sistema.fechaActualizacion": new Date().toISOString(),
+                });
+            }
             return normalizarUsuarioDoc(docSnap.data());
         }
 
@@ -35,10 +42,14 @@ export const syncUserWithGoogleService = async (userData: any) => {
             name,
             photoURL: finalPhotoUrl,
             metodo: "google",
+            fcmToken,
             perfil: {
                 name,
                 email,
                 photoURL: finalPhotoUrl,
+            },
+            sistema: {
+                fcmToken,
             },
         });
 
