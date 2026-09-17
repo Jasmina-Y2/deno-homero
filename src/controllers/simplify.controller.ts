@@ -1896,7 +1896,6 @@ export const getSimplifyHistoriaDetalleController = async (
             }
           }
 
-          let autorDoc: any = null;
           let autorPerfil: any = null;
 
           if (idAutor) {
@@ -1905,34 +1904,15 @@ export const getSimplifyHistoriaDetalleController = async (
               if (userDoc) {
                 const p = userDoc.perfil || {};
                 autorPerfil = {
-                  name: p.name || userDoc.name || userDoc.displayName || rawItem.autor || "Usuario",
-                  displayName: p.name || userDoc.name || userDoc.displayName || rawItem.autor || "Usuario",
+                  uid: userDoc.uid || idAutor,
+                  name: p.name || userDoc.name || rawItem.autor || "Usuario",
                   email: p.email || userDoc.email || "",
-                  photoURL: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
-                    "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
-                  foto: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
-                    "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
-                  avatar: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
+                  photoURL: p.photoURL || userDoc.photoURL || rawItem.photoURL ||
                     "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
                   descripcion: p.descripcion || userDoc.descripcion || "",
-                  bio: p.descripcion || userDoc.descripcion || "",
                   rol: p.rol || userDoc.rol || "usuario",
                   verificado: Boolean(p.verificado ?? userDoc.verificado ?? false),
                   marco_perfil_id: p.marco_perfil_id ?? userDoc.marco_perfil_id ?? null,
-                };
-
-                autorDoc = {
-                  ...userDoc,
-                  uid: userDoc.uid || idAutor,
-                  name: autorPerfil.name,
-                  displayName: autorPerfil.name,
-                  photoURL: autorPerfil.photoURL,
-                  foto: autorPerfil.photoURL,
-                  avatar: autorPerfil.photoURL,
-                  descripcion: autorPerfil.descripcion,
-                  verificado: autorPerfil.verificado,
-                  marco_perfil_id: autorPerfil.marco_perfil_id,
-                  perfil: autorPerfil,
                 };
               }
             } catch (errUser) {
@@ -1940,29 +1920,20 @@ export const getSimplifyHistoriaDetalleController = async (
             }
           }
 
-          if (!autorDoc) {
+          if (!autorPerfil) {
             const fallbackNombre = typeof rawItem.autor === "string" ? rawItem.autor : (rawItem.autor?.name || "Usuario");
             const fallbackFoto = rawItem.photoURL || rawItem.fotoAutor || (typeof rawItem.autor === "object" ? rawItem.autor?.photoURL : "") ||
               "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
 
             autorPerfil = {
+              uid: idAutor || "",
               name: fallbackNombre,
-              displayName: fallbackNombre,
               email: "",
               photoURL: fallbackFoto,
-              foto: fallbackFoto,
-              avatar: fallbackFoto,
               descripcion: "",
-              bio: "",
               rol: "usuario",
               verificado: false,
               marco_perfil_id: null,
-            };
-
-            autorDoc = {
-              uid: idAutor || "",
-              ...autorPerfil,
-              perfil: autorPerfil,
             };
           }
 
@@ -1970,11 +1941,7 @@ export const getSimplifyHistoriaDetalleController = async (
             ...rawItem,
             id: String(rawItem.id || cleanId),
             idAutor: idAutor || rawItem.idAutor || "",
-            autor: autorDoc,
-            autorPerfil: autorPerfil,
-            perfil: autorPerfil,
-            autorNombre: autorPerfil.name,
-            autorFoto: autorPerfil.photoURL,
+            autor: autorPerfil,
           };
         } catch (err) {
           console.warn(`⚠️ [simplify/historia] Error al obtener contenido de historia ${cleanId}:`, err);
@@ -2026,8 +1993,6 @@ export const getSimplifyHistoriaDetalleController = async (
         historia: [],
         idAutor: "",
         autor: null,
-        autorPerfil: null,
-        perfil: null,
         totalLikes: totalLikes,
         likes: totalLikes,
         liked: Boolean(isLiked),

@@ -182,27 +182,53 @@ export const enviarPropinaService = async (datos: EnviarPropinaDto) => {
     `✅ [Propina] Transacción completada. Oyente: ${idOyente} (-${cantidadMonedas}), Creador: ${idCreador} (+${cantidadMonedas})`,
   );
 
-  // 1. Guardar automáticamente el sticker/propina en la colección 'comentarios'
+  // 1. Guardar automáticamente el sticker/propina en la colección 'Comentarios' como único registro visual
   try {
     const publicacionId = datos.idHistoria || datos.publicacionId || "";
-    const infoOyente = await obtenerInfoUsuario(idOyente);
-    const fechaAhora = new Date().toISOString();
+    if (publicacionId) {
+      const infoOyente = await obtenerInfoUsuario(idOyente);
+      const fechaAhora = new Date().toISOString();
 
-    await db.collection("Comentarios").add({
-      publicacionId: publicacionId,
-      idAutor: idOyente,
-      idCreador: idCreador,
-      nombre: infoOyente.nombre || "Usuario",
-      photoURL: infoOyente.photoURL || "",
-      texto: datos.texto || `Envió un sticker (${tipoSticker}) de ${cantidadMonedas} monedas 🪙`,
-      tipoSticker: tipoSticker,
-      cantidadMonedas: cantidadMonedas,
-      esPropina: true,
-      tipo: "sticker",
-      fecha: fechaAhora,
-      createdAt: fechaAhora,
-    });
-    console.log(`💬 [Comentario Propina] Registrado en colección 'comentarios' para publicación: ${publicacionId || 'general'}`);
+      const S3_STICKERS_URL = "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/STIKERS_GIF";
+      const stickerMetaMap: Record<string, { nombre: string; icono: string; imagen: string }> = {
+        aplauso: { nombre: "Aplauso", icono: "👏", imagen: `${S3_STICKERS_URL}/sticker_aplauso_anim.webp` },
+        estrella: { nombre: "Estrella", icono: "⭐", imagen: `${S3_STICKERS_URL}/sticker_estrella.webp` },
+        fuego: { nombre: "Fuego", icono: "🔥", imagen: `${S3_STICKERS_URL}/sticker_fuego.webp` },
+        espiritu: { nombre: "Espíritu", icono: "👻", imagen: `${S3_STICKERS_URL}/sticker_espiritu.webp` },
+        diamante: { nombre: "Diamante", icono: "💎", imagen: `${S3_STICKERS_URL}/sticker_diamante.webp` },
+        corona: { nombre: "Corona Real", icono: "👑", imagen: `${S3_STICKERS_URL}/sticker_corona.webp` },
+      };
+
+      const sKey = String(tipoSticker || "").toLowerCase();
+      const sMeta = stickerMetaMap[sKey] || {
+        nombre: tipoSticker,
+        icono: "🎁",
+        imagen: (datos as any).imagenSticker || `${S3_STICKERS_URL}/sticker_${tipoSticker}.webp`,
+      };
+
+      const mensajeLimpio = String((datos as any).mensaje || "").trim();
+      const textoCompleto = mensajeLimpio
+        ? `🎁 [${sMeta.icono} ${sMeta.nombre}]: ${mensajeLimpio}`
+        : `🎁 [${sMeta.icono} ${sMeta.nombre}]`;
+
+      await db.collection("Comentarios").add({
+        publicacionId: publicacionId,
+        idAutor: idOyente,
+        idCreador: idCreador,
+        nombre: (datos as any).nombreOyente || infoOyente.nombre || "Usuario",
+        photoURL: (datos as any).fotoOyente || infoOyente.photoURL || "",
+        texto: textoCompleto,
+        mensaje: mensajeLimpio,
+        tipoSticker: tipoSticker,
+        cantidadMonedas: cantidadMonedas,
+        imagenSticker: (datos as any).imagenSticker || sMeta.imagen,
+        esPropina: true,
+        tipo: "sticker",
+        fecha: fechaAhora,
+        createdAt: fechaAhora,
+      });
+      console.log(`💬 [Comentario Propina Único] Registrado en 'Comentarios' para publicación: ${publicacionId}`);
+    }
   } catch (errComentario) {
     console.warn("⚠️ Error al guardar comentario de propina:", errComentario);
   }
