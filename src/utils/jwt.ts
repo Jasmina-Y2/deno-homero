@@ -1,7 +1,7 @@
 import jwt from "npm:jsonwebtoken@^9.0.2";
 
-const JWT_SECRET = Deno.env.get("JWT_SECRET") || "homero_app_super_secret_jwt_key_2026_secure_auth_deno_homero";
-const JWT_EXPIRES_IN = Deno.env.get("JWT_EXPIRES_IN") || "30d";
+const JWT_SECRET = Deno.env.get("JWT_SECRET");
+const JWT_EXPIRES_IN = Deno.env.get("JWT_EXPIRES_IN");
 
 export interface JwtUserPayload {
   uid: string;
@@ -27,7 +27,7 @@ export const generarToken = (payload: JwtUserPayload): string => {
       verificado: Boolean(payload.verificado),
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { expiresIn: JWT_EXPIRES_IN },
   );
 };
 
@@ -42,7 +42,8 @@ export const verificarToken = (token: string): JwtUserPayload => {
  * Extrae el token JWT desde el encabezado Authorization (Bearer <token>)
  */
 export const extraerTokenHeader = (ctx: any): string | null => {
-  const authHeader = ctx.request.headers.get("Authorization") || ctx.request.headers.get("authorization");
+  const authHeader = ctx.request.headers.get("Authorization") ||
+    ctx.request.headers.get("authorization");
   if (!authHeader) return null;
 
   const parts = authHeader.trim().split(" ");
