@@ -1858,14 +1858,127 @@ export const getSimplifyHistoriaDetalleController = async (
       return;
     }
 
-    // 1. Ejecutar en paralelo con Promise.all: Historia, Total Likes, Estado Liked y Comentarios
-    const [historiaDocs, totalLikes, isLiked, comentariosRaw] = await Promise.all([
+    // 1. Ejecutar en paralelo con Promise.all: Historia + Perfil del Autor, Total Likes, Estado Liked y Comentarios
+    const [historiaConAutor, totalLikes, isLiked, comentariosRaw] = await Promise.all([
       (async () => {
         try {
-          return await getHistoriaByCustomIdService(cleanId);
+          const historiaDocs = await getHistoriaByCustomIdService(cleanId);
+          const historiaData = Array.isArray(historiaDocs) ? historiaDocs : [];
+          const rawItem: any = historiaData.length > 0 ? historiaData[0] : null;
+          if (!rawItem) return null;
+
+          let idAutor = String(
+            rawItem.idAutor ||
+              rawItem.id_autor ||
+              rawItem.uidAutor ||
+              rawItem.autorId ||
+              rawItem.idUsuario ||
+              (typeof rawItem.autor === "object" ? rawItem.autor?.uid || rawItem.autor?.id : "") ||
+              "",
+          ).trim();
+
+          // Fallback buscando idAutor en HistoriaInfo o CardHistoria si no vino en Historia
+          if (!idAutor) {
+            try {
+              const hInfoSnap = await db.collection("HistoriaInfo").where("id", "==", cleanId).get();
+              if (!hInfoSnap.empty) {
+                const hData = hInfoSnap.docs[0].data();
+                idAutor = String(hData.idAutor || hData.uidAutor || hData.autorId || "").trim();
+              } else {
+                const cardSnap = await db.collection("CardHistoria").where("id", "==", cleanId).get();
+                if (!cardSnap.empty) {
+                  const cData = cardSnap.docs[0].data();
+                  idAutor = String(cData.idAutor || cData.uidAutor || cData.autorId || "").trim();
+                }
+              }
+            } catch (errFallback) {
+              console.warn("⚠️ [simplify/historia] Fallback buscando idAutor:", errFallback);
+            }
+          }
+
+          let autorDoc: any = null;
+          let autorPerfil: any = null;
+
+          if (idAutor) {
+            try {
+              const userDoc = (await getUsuarioByUidService(idAutor)) as any;
+              if (userDoc) {
+                const p = userDoc.perfil || {};
+                autorPerfil = {
+                  name: p.name || userDoc.name || userDoc.displayName || rawItem.autor || "Usuario",
+                  displayName: p.name || userDoc.name || userDoc.displayName || rawItem.autor || "Usuario",
+                  email: p.email || userDoc.email || "",
+                  photoURL: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
+                    "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  foto: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
+                    "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  avatar: p.photoURL || userDoc.photoURL || userDoc.foto || rawItem.photoURL ||
+                    "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+                  descripcion: p.descripcion || userDoc.descripcion || "",
+                  bio: p.descripcion || userDoc.descripcion || "",
+                  rol: p.rol || userDoc.rol || "usuario",
+                  verificado: Boolean(p.verificado ?? userDoc.verificado ?? false),
+                  marco_perfil_id: p.marco_perfil_id ?? userDoc.marco_perfil_id ?? null,
+                };
+
+                autorDoc = {
+                  ...userDoc,
+                  uid: userDoc.uid || idAutor,
+                  name: autorPerfil.name,
+                  displayName: autorPerfil.name,
+                  photoURL: autorPerfil.photoURL,
+                  foto: autorPerfil.photoURL,
+                  avatar: autorPerfil.photoURL,
+                  descripcion: autorPerfil.descripcion,
+                  verificado: autorPerfil.verificado,
+                  marco_perfil_id: autorPerfil.marco_perfil_id,
+                  perfil: autorPerfil,
+                };
+              }
+            } catch (errUser) {
+              console.warn(`⚠️ [simplify/historia] Error al consultar autor ${idAutor}:`, errUser);
+            }
+          }
+
+          if (!autorDoc) {
+            const fallbackNombre = typeof rawItem.autor === "string" ? rawItem.autor : (rawItem.autor?.name || "Usuario");
+            const fallbackFoto = rawItem.photoURL || rawItem.fotoAutor || (typeof rawItem.autor === "object" ? rawItem.autor?.photoURL : "") ||
+              "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
+
+            autorPerfil = {
+              name: fallbackNombre,
+              displayName: fallbackNombre,
+              email: "",
+              photoURL: fallbackFoto,
+              foto: fallbackFoto,
+              avatar: fallbackFoto,
+              descripcion: "",
+              bio: "",
+              rol: "usuario",
+              verificado: false,
+              marco_perfil_id: null,
+            };
+
+            autorDoc = {
+              uid: idAutor || "",
+              ...autorPerfil,
+              perfil: autorPerfil,
+            };
+          }
+
+          return {
+            ...rawItem,
+            id: String(rawItem.id || cleanId),
+            idAutor: idAutor || rawItem.idAutor || "",
+            autor: autorDoc,
+            autorPerfil: autorPerfil,
+            perfil: autorPerfil,
+            autorNombre: autorPerfil.name,
+            autorFoto: autorPerfil.photoURL,
+          };
         } catch (err) {
           console.warn(`⚠️ [simplify/historia] Error al obtener contenido de historia ${cleanId}:`, err);
-          return [];
+          return null;
         }
       })(),
       (async () => {
@@ -1895,8 +2008,7 @@ export const getSimplifyHistoriaDetalleController = async (
       })(),
     ]);
 
-    const historiaData = Array.isArray(historiaDocs) ? historiaDocs : [];
-    const itemPrincipal = historiaData.length > 0 ? historiaData[0] : null;
+    const itemPrincipal = historiaConAutor;
     const comentariosData = Array.isArray(comentariosRaw) ? comentariosRaw : [];
 
     const dataLimpia = itemPrincipal
@@ -1912,6 +2024,10 @@ export const getSimplifyHistoriaDetalleController = async (
       : {
         id: cleanId,
         historia: [],
+        idAutor: "",
+        autor: null,
+        autorPerfil: null,
+        perfil: null,
         totalLikes: totalLikes,
         likes: totalLikes,
         liked: Boolean(isLiked),

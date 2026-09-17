@@ -31,6 +31,17 @@ export const getHistoriaByCustomIdService = async (
             });
         });
 
+        if (result.length === 0) {
+            const docSnap = await db.collection("Historia").doc(customId).get();
+            if (docSnap.exists) {
+                result.push({
+                    ...(docSnap.data() as HistoriaDocument),
+                    idDoc: docSnap.id,
+                    id: (docSnap.data() as any)?.id || docSnap.id,
+                });
+            }
+        }
+
         return result;
     } catch (error) {
         console.error("❌ Error al obtener documento de Historia:", error);
