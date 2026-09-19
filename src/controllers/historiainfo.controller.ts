@@ -28,7 +28,7 @@ export const crearHistoriaInfoController = async (ctx: RouterContext<string>) =>
         }
 
         // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp
-        const mediaToProcess = body.poster || body.video || body.imagen;
+        const mediaToProcess = body.poster || body.portada || body.video || body.imagen;
         if (mediaToProcess) {
             try {
                 const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
@@ -36,9 +36,7 @@ export const crearHistoriaInfoController = async (ctx: RouterContext<string>) =>
                     captureSecond: body.captureSecond ?? 2,
                 });
                 if (ogThumbnail) {
-                    if (!body.poster || esUrlVideo(body.poster)) {
-                        body.poster = ogThumbnail;
-                    }
+                    body.poster = body.poster || ogThumbnail;
                     body.thumbnail = ogThumbnail;
                     body.ogImage = ogThumbnail;
                 }

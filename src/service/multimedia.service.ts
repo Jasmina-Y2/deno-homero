@@ -172,12 +172,37 @@ export async function subirThumbnailS3(
   return `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${key}`;
 }
 
+export interface GenerarThumbnailOptions {
+  folder?: string;
+  captureSecond?: number;
+  width?: number;
+  height?: number;
+  quality?: number;
+  customFileName?: string;
+  fallbackImageUrl?: string;
+  titulo?: string;
+}
+
+/**
+ * Crea una imagen de respaldo 1200x630 elegante cuando no hay fotogramas ni imágenes disponibles
+ */
+export async function crearCardOGFallback(
+  width = 1200,
+  height = 630,
+  quality = 70,
+): Promise<Uint8Array> {
+  const img = new Image(width, height);
+  // Fondo oscuro elegante (Dark indigo / slate)
+  img.fill(0x181824ff);
+  return await img.encodeJPEG(quality as any);
+}
+
 /**
  * Función principal para generar thumbnails ultralivianos aptos para WhatsApp y Open Graph (1200x630):
  * 1. Descarga/analiza la URL pública.
  * 2. Determina si es video o imagen.
  * 3. Si es imagen -> Redimensiona y comprime con ImageScript a 1200x630.
- * 4. Si es video -> Extrae fotograma con FFmpeg y comprime a 1200x630.
+ * 4. Si es video -> Extrae fotograma con FFmpeg y comprime a 1200x630 (o usa fallback si FFmpeg no está en el servidor).
  * 5. Sube el thumbnail comprimido a AWS S3 con Cache-Control agresivo.
  * 6. Retorna la nueva URL pública de S3.
  */
@@ -195,36 +220,11 @@ export async function generarThumbnailOGService(
   const height = options?.height ?? 630;
   const quality = options?.quality ?? 70; // Calidad 70: compresión ideal, ultraligera (~30-60KB) y excelente nitidez
 
-  // 1. Verificar primero si por extensión es video
   let isVideo = esUrlVideo(mediaUrl);
-  let rawFrameBuffer: Uint8Array;
+  let rawFrameBuffer: Uint8Array | null = null;
 
   if (isVideo) {
-    // Si es video, extraer frame con FFmpeg y luego pasarlo por redimensionarImagenOG para compresión uniforme
-    rawFrameBuffer = await extraerFrameVideoFFmpeg(
-      mediaUrl,
-      captureSecond,
-      width,
-      height,
-    );
     try {
-      rawFrameBuffer = await redimensionarImagenOG(rawFrameBuffer, width, height, quality);
-    } catch {
-      // Si ya viene procesado por FFmpeg, mantener rawFrameBuffer
-    }
-  } else {
-    // Si no tiene extensión clara de video, hacer fetch para obtener contentType y buffer
-    const res = await fetch(mediaUrl);
-    if (!res.ok) {
-      throw new Error(
-        `Error al descargar archivo desde URL (${res.status} ${res.statusText}): ${mediaUrl}`,
-      );
-    }
-
-    const contentType = res.headers.get("content-type");
-    isVideo = esUrlVideo(mediaUrl, contentType);
-
-    if (isVideo) {
       rawFrameBuffer = await extraerFrameVideoFFmpeg(
         mediaUrl,
         captureSecond,
@@ -234,14 +234,52 @@ export async function generarThumbnailOGService(
       try {
         rawFrameBuffer = await redimensionarImagenOG(rawFrameBuffer, width, height, quality);
       } catch {}
-    } else {
-      const arrayBuf = await res.arrayBuffer();
-      const imageBytes = new Uint8Array(arrayBuf);
-      rawFrameBuffer = await redimensionarImagenOG(imageBytes, width, height, quality);
+    } catch (ffmpegErr) {
+      console.warn("⚠️ FFmpeg no pudo procesar el video en este entorno:", ffmpegErr);
+      // Intentar fallback si se proporcionó una imagen alternativa
+      if (options?.fallbackImageUrl && esUrlImagen(options.fallbackImageUrl)) {
+        try {
+          const res = await fetch(options.fallbackImageUrl);
+          if (res.ok) {
+            const arrayBuf = await res.arrayBuffer();
+            rawFrameBuffer = await redimensionarImagenOG(new Uint8Array(arrayBuf), width, height, quality);
+          }
+        } catch {}
+      }
+      // Si aún no hay buffer, generar canvas 1200x630 Open Graph
+      if (!rawFrameBuffer) {
+        rawFrameBuffer = await crearCardOGFallback(width, height, quality);
+      }
+    }
+  } else {
+    try {
+      const res = await fetch(mediaUrl);
+      if (res.ok) {
+        const contentType = res.headers.get("content-type");
+        isVideo = esUrlVideo(mediaUrl, contentType);
+
+        if (isVideo) {
+          try {
+            rawFrameBuffer = await extraerFrameVideoFFmpeg(mediaUrl, captureSecond, width, height);
+            rawFrameBuffer = await redimensionarImagenOG(rawFrameBuffer, width, height, quality);
+          } catch {
+            rawFrameBuffer = await crearCardOGFallback(width, height, quality);
+          }
+        } else {
+          const arrayBuf = await res.arrayBuffer();
+          rawFrameBuffer = await redimensionarImagenOG(new Uint8Array(arrayBuf), width, height, quality);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn("⚠️ Error al descargar imagen para OG:", fetchErr);
+    }
+
+    if (!rawFrameBuffer) {
+      rawFrameBuffer = await crearCardOGFallback(width, height, quality);
     }
   }
 
-  // 2. Subir el thumbnail optimizado a S3
+  // Subir el thumbnail optimizado a S3
   const publicUrl = await subirThumbnailS3(
     rawFrameBuffer,
     folder,

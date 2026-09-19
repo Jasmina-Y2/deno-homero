@@ -21,21 +21,25 @@ export const crearHistoriaController = async (ctx: RouterContext<string>) => {
         }
 
         // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp
-        const firstImageInHistoria = Array.isArray(body.historia) && body.historia.length > 0
-            ? body.historia[0]?.imagen
+        const escenaConImagen = Array.isArray(body.historia)
+            ? body.historia.find((h: any) => (h?.imagen && esUrlImagen(h?.imagen)) || (h?.media && esUrlImagen(h?.media)))
             : undefined;
-        const mediaToProcess = body.poster || body.video || body.imagen || firstImageInHistoria;
+        const escenaFallback = Array.isArray(body.historia) && body.historia.length > 0
+            ? (body.historia[0]?.imagen || body.historia[0]?.media)
+            : undefined;
+        const fallbackImage = escenaConImagen?.imagen || escenaConImagen?.media || (escenaFallback && esUrlImagen(escenaFallback) ? escenaFallback : undefined);
+
+        const mediaToProcess = body.poster || body.portada || body.video || body.imagen || fallbackImage || escenaFallback;
 
         if (mediaToProcess) {
             try {
                 const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
                     folder: "posters",
                     captureSecond: body.captureSecond ?? 2,
+                    fallbackImageUrl: fallbackImage,
                 });
                 if (ogThumbnail) {
-                    if (!body.poster || esUrlVideo(body.poster)) {
-                        body.poster = ogThumbnail;
-                    }
+                    body.poster = body.poster || ogThumbnail;
                     body.thumbnail = ogThumbnail;
                     body.ogImage = ogThumbnail;
                 }

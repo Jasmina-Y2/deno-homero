@@ -136,7 +136,7 @@ export const extraerUidDirecto = (ctx: any): string | null => {
     if (uidHeader && uidHeader.trim()) return uidHeader.trim();
 
     if (ctx.params) {
-      const pUid = ctx.params.uid || ctx.params.idAutor || ctx.params.idUsuario || ctx.params.userId;
+      const pUid = ctx.params.uid || ctx.params.idAutor || ctx.params.idUsuario || ctx.params.userId || ctx.params.id || ctx.params.idNotificacion || ctx.params.docId;
       if (pUid && typeof pUid === "string" && pUid.trim()) return pUid.trim();
     }
 
