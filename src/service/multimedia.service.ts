@@ -92,7 +92,7 @@ export async function redimensionarImagenOG(
  */
 export async function extraerFrameVideoFFmpeg(
   videoUrl: string,
-  captureSecond = 2,
+  captureSecond = 1,
   width = 1200,
   height = 630,
 ): Promise<Uint8Array> {
@@ -102,14 +102,16 @@ export async function extraerFrameVideoFFmpeg(
   const executeFFmpeg = async (ssTime: string) => {
     const cmd = new Deno.Command(ffmpegBin, {
       args: [
-        "-ss",
-        ssTime,
         "-i",
         videoUrl,
+        "-ss",
+        ssTime,
         "-vframes",
         "1",
         "-vf",
         vfFilter,
+        "-q:v",
+        "2",
         "-f",
         "image2",
         "-vcodec",
@@ -125,11 +127,11 @@ export async function extraerFrameVideoFFmpeg(
   try {
     let result = await executeFFmpeg(captureSecond.toString());
 
-    // Si falló o stdout está vacío (por ej. si el video dura menos que captureSecond), reintentar al inicio
+    // Si falló o stdout está vacío, reintentar en 0.5s y luego al inicio
     if (!result.success || result.stdout.length === 0) {
       result = await executeFFmpeg("00:00:00.5");
       if (!result.success || result.stdout.length === 0) {
-        result = await executeFFmpeg("00:00:00");
+        result = await executeFFmpeg("00:00:00.1");
       }
     }
 

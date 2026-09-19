@@ -33,17 +33,19 @@ export const crearHistoriaInfoController = async (ctx: RouterContext<string>) =>
             try {
                 const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
                     folder: "posters",
-                    captureSecond: body.captureSecond ?? 2,
+                    captureSecond: body.captureSecond ?? 1,
                 });
                 if (ogThumbnail) {
-                    body.poster = body.poster || ogThumbnail;
-                    body.thumbnail = ogThumbnail;
-                    body.ogImage = ogThumbnail;
+                    body.poster = ogThumbnail;
                 }
             } catch (mediaError) {
-                console.warn("⚠️ No se pudo auto-generar thumbnail para HistoriaInfo:", mediaError);
+                console.warn("⚠️ No se pudo auto-generar poster para HistoriaInfo:", mediaError);
             }
         }
+
+        // Limpiar campos redundantes: dejar únicamente 'poster'
+        delete body.thumbnail;
+        delete body.ogImage;
 
         const infoId = await guardarHistoriaInfoEnFirestoreService(body);
         ctx.response.status = 201;
