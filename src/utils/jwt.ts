@@ -136,7 +136,7 @@ export const extraerUidDirecto = (ctx: any): string | null => {
     if (uidHeader && uidHeader.trim()) return uidHeader.trim();
 
     if (ctx.params) {
-      const pUid = ctx.params.uid || ctx.params.idAutor || ctx.params.idUsuario || ctx.params.userId || ctx.params.id || ctx.params.idNotificacion || ctx.params.docId;
+      const pUid = ctx.params.uid || ctx.params.idAutor || ctx.params.idUsuario || ctx.params.userId || ctx.params.uidAutor || ctx.params.autorId;
       if (pUid && typeof pUid === "string" && pUid.trim()) return pUid.trim();
     }
 
@@ -144,7 +144,8 @@ export const extraerUidDirecto = (ctx: any): string | null => {
       const uidQuery = ctx.request.url.searchParams.get("uid") ||
         ctx.request.url.searchParams.get("idAutor") ||
         ctx.request.url.searchParams.get("idUsuario") ||
-        ctx.request.url.searchParams.get("userId");
+        ctx.request.url.searchParams.get("userId") ||
+        ctx.request.url.searchParams.get("uidAutor");
       if (uidQuery && uidQuery.trim()) return uidQuery.trim();
     }
   } catch {}

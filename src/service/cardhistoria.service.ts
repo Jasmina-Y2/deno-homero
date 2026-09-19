@@ -155,13 +155,21 @@ export const ejecutarEliminacionCompletaHistoria = async (
       db.collection("AudioHistoria").where("id", "==", idHistoria).get(),
     ]);
 
-  const directAudioDoc = await db.collection("AudioHistoria").doc(idHistoria).get();
+  const [directAudioDoc, directHistoriaDoc, directCardDoc, directInfoDoc] = await Promise.all([
+    db.collection("AudioHistoria").doc(idHistoria).get().catch(() => null),
+    db.collection("Historia").doc(idHistoria).get().catch(() => null),
+    db.collection("CardHistoria").doc(idHistoria).get().catch(() => null),
+    db.collection("HistoriaInfo").doc(idHistoria).get().catch(() => null),
+  ]);
 
   const todosVacio = historiaSnap.empty &&
     cardSnap.empty &&
     historiaInfoSnap.empty &&
     audioSnap.empty &&
-    !directAudioDoc.exists;
+    (!directAudioDoc || !directAudioDoc.exists) &&
+    (!directHistoriaDoc || !directHistoriaDoc.exists) &&
+    (!directCardDoc || !directCardDoc.exists) &&
+    (!directInfoDoc || !directInfoDoc.exists);
 
   if (todosVacio) {
     console.error(`❌ Error: El ID ${idHistoria} no existe en la base de datos.`);
@@ -170,19 +178,26 @@ export const ejecutarEliminacionCompletaHistoria = async (
 
   // Verificación de pertenencia si se pasa userUid y no es admin
   if (userUid && !isAdmin) {
-    const cardData = !cardSnap.empty ? cardSnap.docs[0].data() : null;
-    const historiaData = !historiaSnap.empty ? historiaSnap.docs[0].data() : null;
-    const infoData = !historiaInfoSnap.empty ? historiaInfoSnap.docs[0].data() : null;
+    const allDocs = [
+      ...historiaSnap.docs.map((d) => d.data()),
+      ...cardSnap.docs.map((d) => d.data()),
+      ...historiaInfoSnap.docs.map((d) => d.data()),
+      ...(directHistoriaDoc?.exists ? [directHistoriaDoc.data()] : []),
+      ...(directCardDoc?.exists ? [directCardDoc.data()] : []),
+      ...(directInfoDoc?.exists ? [directInfoDoc.data()] : []),
+    ];
 
-    const idAutor = cardData?.idAutor ||
-      cardData?.uid ||
-      cardData?.autorId ||
-      historiaData?.idAutor ||
-      historiaData?.uid ||
-      infoData?.idAutor ||
-      infoData?.uid;
+    const posiblesAutores = new Set<string>();
+    for (const doc of allDocs) {
+      if (doc?.idAutor && typeof doc.idAutor === "string") posiblesAutores.add(doc.idAutor.trim());
+      if (doc?.uidAutor && typeof doc.uidAutor === "string") posiblesAutores.add(doc.uidAutor.trim());
+      if (doc?.autorId && typeof doc.autorId === "string") posiblesAutores.add(doc.autorId.trim());
+      if (doc?.userId && typeof doc.userId === "string") posiblesAutores.add(doc.userId.trim());
+      if (doc?.idUsuario && typeof doc.idUsuario === "string") posiblesAutores.add(doc.idUsuario.trim());
+    }
 
-    if (idAutor && idAutor !== userUid) {
+    if (posiblesAutores.size > 0 && !posiblesAutores.has(userUid)) {
+      console.warn(`⛔ Acceso denegado: El usuario ${userUid} intentó eliminar historia ${idHistoria} perteneciente a:`, Array.from(posiblesAutores));
       return { success: false, motivo: "FORBIDDEN" };
     }
   }
@@ -197,10 +212,12 @@ export const ejecutarEliminacionCompletaHistoria = async (
     });
   });
 
-  if (directAudioDoc.exists) {
-    const urlsAudio = extraerUrlsS3DeObjeto(directAudioDoc.data());
-    urlsParaBorrar.push(...urlsAudio);
-  }
+  [directAudioDoc, directHistoriaDoc, directCardDoc, directInfoDoc].forEach((docSnap) => {
+    if (docSnap && docSnap.exists) {
+      const urlsDoc = extraerUrlsS3DeObjeto(docSnap.data());
+      urlsParaBorrar.push(...urlsDoc);
+    }
+  });
 
   const urlsUnicas = Array.from(new Set(urlsParaBorrar));
 
@@ -233,10 +250,12 @@ export const ejecutarEliminacionCompletaHistoria = async (
     });
   });
 
-  if (directAudioDoc.exists) {
-    batch.delete(directAudioDoc.ref);
-    docsCount++;
-  }
+  [directAudioDoc, directHistoriaDoc, directCardDoc, directInfoDoc].forEach((docSnap) => {
+    if (docSnap && docSnap.exists) {
+      batch.delete(docSnap.ref);
+      docsCount++;
+    }
+  });
 
   if (docsCount > 0) {
     await batch.commit();
