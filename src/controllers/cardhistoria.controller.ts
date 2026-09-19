@@ -7,7 +7,7 @@ import {
   guardarCardHistoriaEnFirestoreService,
   obtenerCardHistoriaService,
 } from "../service/cardhistoria.service.ts";
-import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.service.ts";
+import { generarThumbnailOGService, esUrlVideo, esUrlImagen } from "../service/multimedia.service.ts";
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 
 export const crearCardHistoriaController = async (

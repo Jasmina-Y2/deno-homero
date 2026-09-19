@@ -1,7 +1,7 @@
 import { HistoriaData } from "../models/historia.model.ts";
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { guardarHistoriaEnFirestoreService, getHistoriaByCustomIdService } from "../service/historia.service.ts";
-import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.service.ts";
+import { generarThumbnailOGService, esUrlVideo, esUrlImagen } from "../service/multimedia.service.ts";
 
 export const crearHistoriaController = async (ctx: RouterContext<string>) => {
     try {

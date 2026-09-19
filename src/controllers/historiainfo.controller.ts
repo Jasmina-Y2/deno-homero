@@ -8,7 +8,7 @@ import {
     getHistoriaByIdService,
     getHistoriasPorVistas
 } from "../service/historiaInfo.service.ts";
-import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.service.ts";
+import { generarThumbnailOGService, esUrlVideo, esUrlImagen } from "../service/multimedia.service.ts";
 
 export const crearHistoriaInfoController = async (ctx: RouterContext<string>) => {
     try {
