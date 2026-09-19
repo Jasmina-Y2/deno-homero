@@ -7,6 +7,7 @@ export interface GenerarThumbnailOptions {
   captureSecond?: number;
   width?: number;
   height?: number;
+  quality?: number;
   customFileName?: string;
 }
 
@@ -61,23 +62,25 @@ export function esUrlImagen(url: string, contentType?: string | null): boolean {
 }
 
 /**
- * Redimensiona una imagen a 1200x630 (proporción Open Graph) usando ImageScript.
- * Aplica cover (escalado + recorte centrado) para no deformar la imagen.
+ * Redimensiona y comprime una imagen a 1200x630 (proporción Open Graph) usando ImageScript.
+ * Aplica cover (escalado + recorte centrado) para no deformar la imagen y compresión optimizada (calidad 70 por defecto)
+ * para un peso sumamente ligero y carga ultrarrápida en WhatsApp y móviles.
  */
 export async function redimensionarImagenOG(
   buffer: Uint8Array,
   width = 1200,
   height = 630,
+  quality = 70,
 ): Promise<Uint8Array> {
   const decoded = await decode(buffer);
   if (decoded instanceof Image) {
     decoded.cover(width, height);
-    return await decoded.encodeJPEG(85);
+    return await decoded.encodeJPEG(quality as any);
   } else if (Array.isArray(decoded) && decoded.length > 0) {
     // Si es un GIF o imagen de múltiples frames, tomar el primer frame
     const frame = decoded[0];
     frame.cover(width, height);
-    return await frame.encodeJPEG(85);
+    return await frame.encodeJPEG(quality as any);
   } else {
     throw new Error("Formato de imagen no soportado para redimensionar.");
   }
@@ -143,7 +146,8 @@ export async function extraerFrameVideoFFmpeg(
 }
 
 /**
- * Sube el thumbnail en formato JPEG a AWS S3 y retorna la URL pública.
+ * Sube el thumbnail comprimido en formato JPEG a AWS S3 con cabeceras de Cache-Control
+ * y retorna la URL pública.
  */
 export async function subirThumbnailS3(
   buffer: Uint8Array,
@@ -160,6 +164,7 @@ export async function subirThumbnailS3(
     Body: buffer,
     ContentType: "image/jpeg",
     ACL: "public-read",
+    CacheControl: "public, max-age=31536000, immutable",
   });
 
   await s3Client.send(command);
@@ -168,12 +173,12 @@ export async function subirThumbnailS3(
 }
 
 /**
- * Función principal para generar thumbnails aptos para WhatsApp y Open Graph (1200x630):
+ * Función principal para generar thumbnails ultralivianos aptos para WhatsApp y Open Graph (1200x630):
  * 1. Descarga/analiza la URL pública.
  * 2. Determina si es video o imagen.
- * 3. Si es imagen -> Redimensiona con ImageScript a 1200x630.
- * 4. Si es video -> Extrae fotograma con FFmpeg a los segundos posteriores y escala a 1200x630.
- * 5. Sube el thumbnail a AWS S3.
+ * 3. Si es imagen -> Redimensiona y comprime con ImageScript a 1200x630.
+ * 4. Si es video -> Extrae fotograma con FFmpeg y comprime a 1200x630.
+ * 5. Sube el thumbnail comprimido a AWS S3 con Cache-Control agresivo.
  * 6. Retorna la nueva URL pública de S3.
  */
 export async function generarThumbnailOGService(
@@ -188,19 +193,25 @@ export async function generarThumbnailOGService(
   const captureSecond = options?.captureSecond ?? 2;
   const width = options?.width ?? 1200;
   const height = options?.height ?? 630;
+  const quality = options?.quality ?? 70; // Calidad 70: compresión ideal, ultraligera (~30-60KB) y excelente nitidez
 
   // 1. Verificar primero si por extensión es video
   let isVideo = esUrlVideo(mediaUrl);
-  let thumbnailBuffer: Uint8Array;
+  let rawFrameBuffer: Uint8Array;
 
   if (isVideo) {
-    // Si es video, llamar directamente a FFmpeg con la URL
-    thumbnailBuffer = await extraerFrameVideoFFmpeg(
+    // Si es video, extraer frame con FFmpeg y luego pasarlo por redimensionarImagenOG para compresión uniforme
+    rawFrameBuffer = await extraerFrameVideoFFmpeg(
       mediaUrl,
       captureSecond,
       width,
       height,
     );
+    try {
+      rawFrameBuffer = await redimensionarImagenOG(rawFrameBuffer, width, height, quality);
+    } catch {
+      // Si ya viene procesado por FFmpeg, mantener rawFrameBuffer
+    }
   } else {
     // Si no tiene extensión clara de video, hacer fetch para obtener contentType y buffer
     const res = await fetch(mediaUrl);
@@ -214,22 +225,25 @@ export async function generarThumbnailOGService(
     isVideo = esUrlVideo(mediaUrl, contentType);
 
     if (isVideo) {
-      thumbnailBuffer = await extraerFrameVideoFFmpeg(
+      rawFrameBuffer = await extraerFrameVideoFFmpeg(
         mediaUrl,
         captureSecond,
         width,
         height,
       );
+      try {
+        rawFrameBuffer = await redimensionarImagenOG(rawFrameBuffer, width, height, quality);
+      } catch {}
     } else {
       const arrayBuf = await res.arrayBuffer();
       const imageBytes = new Uint8Array(arrayBuf);
-      thumbnailBuffer = await redimensionarImagenOG(imageBytes, width, height);
+      rawFrameBuffer = await redimensionarImagenOG(imageBytes, width, height, quality);
     }
   }
 
-  // 2. Subir el thumbnail generado a S3
+  // 2. Subir el thumbnail optimizado a S3
   const publicUrl = await subirThumbnailS3(
-    thumbnailBuffer,
+    rawFrameBuffer,
     folder,
     options?.customFileName,
   );

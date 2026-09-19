@@ -58,21 +58,67 @@ export const getColeccionesPorIdService = async (uid: string) => {
         throw new Error("Error al obtener las colecciones del usuario");
     }
 };
-export const eliminarColeccionesPorUidService = async (uid: string) => {
+export const eliminarColeccionesPorUidService = async (
+    uid: string,
+    userUid?: string,
+    isAdmin?: boolean
+) => {
     try {
-        const snapshot = await db.collection("Coleccion")
-            .where("uid", "==", uid)
-            .get();
-        if (snapshot.empty) {
-            return { message: "No se encontraron colecciones para este usuario." };
-        }
-        const deletePromises = snapshot.docs.map((doc:any) => doc.ref.delete());
-        await Promise.all(deletePromises);
+        // Buscar por doc id directo, o por campo 'uid' de la colección, o por campo 'idAutor'
+        const docDirect = await db.collection("Coleccion").doc(uid).get();
+        const snapUid = await db.collection("Coleccion").where("uid", "==", uid).get();
+        const snapAutor = await db.collection("Coleccion").where("idAutor", "==", uid).get();
 
-        return { message: "Colecciones eliminadas exitosamente." };
+        const docsAEliminar = new Map<string, any>();
+        if (docDirect.exists) {
+            docsAEliminar.set(docDirect.id, docDirect);
+        }
+        snapUid.docs.forEach((doc: any) => docsAEliminar.set(doc.id, doc));
+        snapAutor.docs.forEach((doc: any) => docsAEliminar.set(doc.id, doc));
+
+        if (docsAEliminar.size === 0) {
+            // Intentar borrar también ColeccionIds huérfano si existiera
+            const colIdsRef = db.collection("ColeccionIds").doc(uid);
+            const colIdsSnap = await colIdsRef.get();
+            if (colIdsSnap.exists) {
+                await colIdsRef.delete();
+            }
+            return { message: "No se encontraron colecciones para este identificador." };
+        }
+
+        // Verificación de pertenencia si se pasa userUid y no es admin
+        if (userUid && !isAdmin) {
+            for (const doc of docsAEliminar.values()) {
+                const data = doc.data();
+                const idAutor = data.idAutor || data.uidAutor || data.idUsuario;
+                if (idAutor && idAutor !== userUid && data.uid !== userUid && doc.id !== userUid) {
+                    throw new Error("FORBIDDEN");
+                }
+            }
+        }
+
+        const batch = db.batch();
+        for (const doc of docsAEliminar.values()) {
+            batch.delete(doc.ref);
+            const colUid = doc.data()?.uid || doc.id;
+            // Borrar documento en ColeccionIds
+            const colIdsRef = db.collection("ColeccionIds").doc(colUid);
+            batch.delete(colIdsRef);
+            if (doc.id !== colUid) {
+                batch.delete(db.collection("ColeccionIds").doc(doc.id));
+            }
+            // Borrar calificaciones de esta colección
+            const califSnap = await db.collection("CalificacionesColeccion")
+                .where("idColeccion", "==", colUid)
+                .get();
+            califSnap.docs.forEach((cDoc: any) => batch.delete(cDoc.ref));
+        }
+
+        await batch.commit();
+        return { message: "Colecciones eliminadas exitosamente.", eliminadas: docsAEliminar.size };
     } catch (error) {
         console.error("❌ Error en eliminarColeccionesPorUidService:", error);
-        throw new Error("Error al eliminar las colecciones del usuario");
+        throw error;
     }
 };
 

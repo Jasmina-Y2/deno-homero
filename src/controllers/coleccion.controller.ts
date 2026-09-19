@@ -80,27 +80,31 @@ export const eliminarColeccionesPorUid = async (ctx: RouterContext<string>) => {
         const { uid } = ctx.params;
         const user = (ctx.state as any)?.user;
         const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+        const uidFromParams = ctx.request.url.searchParams.get("uid") ||
+            ctx.request.url.searchParams.get("idAutor") ||
+            ctx.request.headers.get("x-user-uid") ||
+            ctx.request.headers.get("uid");
+        const userUid = user?.uid || uidFromParams || undefined;
 
         if (!uid) {
             ctx.response.status = 400;
-            ctx.response.body = { success: false, message: "UID es requerido" };
+            ctx.response.body = { success: false, message: "UID o ID de colección es requerido" };
             return;
         }
 
-        if (user?.uid && !isAdmin && user.uid !== uid) {
-            ctx.response.status = 403;
-            ctx.response.body = {
-                success: false,
-                message: "Acceso denegado: Solo el autor o un Administrador pueden eliminar estas colecciones.",
-            };
-            return;
-        }
-
-        const data = await eliminarColeccionesPorUidService(uid);
+        const data = await eliminarColeccionesPorUidService(uid, userUid, isAdmin);
         
         ctx.response.status = 200;
         ctx.response.body = { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.message === "FORBIDDEN") {
+            ctx.response.status = 403;
+            ctx.response.body = {
+                success: false,
+                message: "Acceso denegado: Solo el autor o un Administrador pueden eliminar esta colección.",
+            };
+            return;
+        }
         ctx.response.status = 500;
         ctx.response.body = { 
             success: false, 

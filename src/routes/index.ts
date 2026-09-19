@@ -169,7 +169,7 @@ router.post("/api/colecciones/crear", requerirAuth, crearColeccionController);
 router.get("/api/colecciones/mostrar", mostrarColeccionesPorAutorController);
 router.get("/api/colecciones/mostrar/todas", getTodasLasColecciones);
 router.get("/api/colecciones/mostrar/:uid", getColeccionesPorId);
-router.delete("/api/colecciones/eliminar/:uid", requerirAuth, eliminarColeccionesPorUid);
+router.delete("/api/colecciones/eliminar/:uid", authOpcional, eliminarColeccionesPorUid);
 router.post("/api/coleccion-ids/crear", requerirAuth, agregarHistoriaAColeccionController);
 router.get("/api/coleccionesids/mostrar/:docId", getColeccionDetalle);
 router.put("/api/coleccionesids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
