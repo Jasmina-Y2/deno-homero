@@ -90,3 +90,25 @@ Deno.test("Multimedia: Extraer URLs de audios (audioES, audioEN, .mp3, .wav) y e
   assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/profile/1789603214765-3s4quf-profile_7cBW5g7xYGbh7Fh2zTCHvNBdGHx1.jpg"), false);
 });
 
+Deno.test("Multimedia: Concatenación binaria nativa de fragmentos MP3 (mergeMp3BuffersPureTS)", async () => {
+  const { mergeMp3BuffersPureTS, mergeAudioBuffersWithFFmpeg } = await import("../utils/audio.utils.ts");
+
+  // Crear fragmentos simulados de MP3 con cabecera ID3 y frames
+  const fakeId3Header = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, ...new Uint8Array(10)]);
+  const fakeFrame1 = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 0x01, 0x02, 0x03, 0x04]);
+  const fakeFrame2 = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 0x05, 0x06, 0x07, 0x08]);
+
+  const part1 = new Uint8Array([...fakeId3Header, ...fakeFrame1]);
+  const part2 = new Uint8Array([...fakeId3Header, ...fakeFrame2]);
+
+  // Test concatenación pura en TS
+  const mergedPure = mergeMp3BuffersPureTS([part1, part2]);
+  assertExists(mergedPure);
+  assertEquals(mergedPure.length > 0, true);
+
+  // Test función principal con fallback
+  const mergedMain = await mergeAudioBuffersWithFFmpeg([part1, part2]);
+  assertExists(mergedMain);
+  assertEquals(mergedMain.length > 0, true);
+});
+
