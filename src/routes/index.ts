@@ -321,9 +321,9 @@ router.post("/api/ia/generar-descripcion", generarDescripcionController);
 // ============================================================================
 router.get("/api/notificaciones/:uid", authOpcional, obtenerNotificacionesUsuario);
 router.get("/api/notificaciones/no-leidas/:uid", authOpcional, obtenerConteoNoLeidas);
-router.put("/api/notificaciones/marcar-leida/:id", requerirAuth, marcarNotificacionLeida);
-router.put("/api/notificaciones/marcar-todas-leidas/:uid", requerirAuth, marcarTodasNotificacionesLeidas);
-router.delete("/api/notificaciones/eliminar/:id", requerirAuth, eliminarNotificacion);
+router.put("/api/notificaciones/marcar-leida/:id", authOpcional, marcarNotificacionLeida);
+router.put("/api/notificaciones/marcar-todas-leidas/:uid", authOpcional, marcarTodasNotificacionesLeidas);
+router.delete("/api/notificaciones/eliminar/:id", authOpcional, eliminarNotificacion);
 
 // ============================================================================
 // SOPORTE Y REPORTES DE ERROR

@@ -147,19 +147,34 @@ export const ejecutarEliminacionCompletaHistoria = async (
   userUid?: string,
   isAdmin?: boolean,
 ): Promise<{ success: boolean; motivo?: string }> => {
-  const [historiaSnap, cardSnap, historiaInfoSnap, audioSnap] =
-    await Promise.all([
-      db.collection("Historia").where("id", "==", idHistoria).get(),
-      db.collection("CardHistoria").where("id", "==", idHistoria).get(),
-      db.collection("HistoriaInfo").where("id", "==", idHistoria).get(),
-      db.collection("AudioHistoria").where("id", "==", idHistoria).get(),
-    ]);
+  const [
+    historiaSnap,
+    cardSnap,
+    historiaInfoSnap,
+    audioSnap,
+    likesPorIdDocSnap,
+    likesPorIdSnap,
+  ] = await Promise.all([
+    db.collection("Historia").where("id", "==", idHistoria).get(),
+    db.collection("CardHistoria").where("id", "==", idHistoria).get(),
+    db.collection("HistoriaInfo").where("id", "==", idHistoria).get(),
+    db.collection("AudioHistoria").where("id", "==", idHistoria).get(),
+    db.collection("likesUsuarios").where("idDoc", "==", idHistoria).get().catch(() => ({ docs: [], empty: true })),
+    db.collection("likesUsuarios").where("id", "==", idHistoria).get().catch(() => ({ docs: [], empty: true })),
+  ]);
 
-  const [directAudioDoc, directHistoriaDoc, directCardDoc, directInfoDoc] = await Promise.all([
+  const [
+    directAudioDoc,
+    directHistoriaDoc,
+    directCardDoc,
+    directInfoDoc,
+    directLikesUsuariosDoc,
+  ] = await Promise.all([
     db.collection("AudioHistoria").doc(idHistoria).get().catch(() => null),
     db.collection("Historia").doc(idHistoria).get().catch(() => null),
     db.collection("CardHistoria").doc(idHistoria).get().catch(() => null),
     db.collection("HistoriaInfo").doc(idHistoria).get().catch(() => null),
+    db.collection("likesUsuarios").doc(idHistoria).get().catch(() => null),
   ]);
 
   const todosVacio = historiaSnap.empty &&
@@ -239,28 +254,50 @@ export const ejecutarEliminacionCompletaHistoria = async (
     }
   }
 
-  // 3. Eliminar documentos de Firestore en lote (batch)
+  // 3. Eliminar documentos de Firestore en lote (batch), incluyendo likesUsuarios
   const batch = db.batch();
   let docsCount = 0;
+  const refsBorradas = new Set<string>();
 
-  [historiaSnap, cardSnap, historiaInfoSnap, audioSnap].forEach((snap) => {
-    snap.docs.forEach((doc) => {
-      batch.delete(doc.ref);
+  const agregarABatch = (ref: any) => {
+    if (ref && ref.path && !refsBorradas.has(ref.path)) {
+      refsBorradas.add(ref.path);
+      batch.delete(ref);
       docsCount++;
-    });
+    }
+  };
+
+  [
+    historiaSnap,
+    cardSnap,
+    historiaInfoSnap,
+    audioSnap,
+    likesPorIdDocSnap,
+    likesPorIdSnap,
+  ].forEach((snap: any) => {
+    if (snap?.docs) {
+      snap.docs.forEach((doc: any) => {
+        agregarABatch(doc.ref);
+      });
+    }
   });
 
-  [directAudioDoc, directHistoriaDoc, directCardDoc, directInfoDoc].forEach((docSnap) => {
+  [
+    directAudioDoc,
+    directHistoriaDoc,
+    directCardDoc,
+    directInfoDoc,
+    directLikesUsuariosDoc,
+  ].forEach((docSnap) => {
     if (docSnap && docSnap.exists) {
-      batch.delete(docSnap.ref);
-      docsCount++;
+      agregarABatch(docSnap.ref);
     }
   });
 
   if (docsCount > 0) {
     await batch.commit();
     console.log(
-      `✅ Eliminados ${docsCount} documentos de Firestore para la historia ${idHistoria}`,
+      `✅ Eliminados ${docsCount} documentos de Firestore (incluyendo likesUsuarios) para la historia ${idHistoria}`,
     );
   }
 

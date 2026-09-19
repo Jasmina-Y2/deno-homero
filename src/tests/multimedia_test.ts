@@ -51,6 +51,7 @@ Deno.test("Multimedia: Extraer URLs de audios (audioES, audioEN, .mp3, .wav) y e
     id: "971112780393356",
     idAutor: "7cBW5g7xYGbh7Fh2zTCHvNBdGHx1",
     portada: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/portada/1788940591691-3hpj5v-homero_1788940591652_ra9m2g2.mp4",
+    poster: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/poster/1788940591691-poster_test.webp",
     historia: [
       {
         idEscena: 1,
@@ -79,7 +80,8 @@ Deno.test("Multimedia: Extraer URLs de audios (audioES, audioEN, .mp3, .wav) y e
 
   const urls = extraerUrlsS3DeObjeto(testPayload);
 
-  // Deben estar los audios wav/mp3, videos y portadas
+  // Deben estar el poster (.webp), audios wav/mp3, videos y portadas
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/poster/1788940591691-poster_test.webp"), true);
   assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/1788940644613-bj82ds-historia_gemini_1788940644613.wav"), true);
   assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/audio_en_123.mp3"), true);
   assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/portada/1788940591691-3hpj5v-homero_1788940591652_ra9m2g2.mp4"), true);
