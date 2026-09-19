@@ -29,8 +29,16 @@ export const crearHistoriaController = async (ctx: RouterContext<string>) => {
             : undefined;
         const fallbackImage = escenaConImagen?.imagen || escenaConImagen?.media || (escenaFallback && esUrlImagen(escenaFallback) ? escenaFallback : undefined);
 
-        // Asegurar que poster siempre se guarde (usando poster enviado, portada, imagen o fallback)
-        body.poster = body.poster || body.portada || body.imagen || fallbackImage || body.video || "";
+        // El campo poster debe ser SIEMPRE una imagen (.webp, .jpg, .png), NUNCA un video
+        if (body.poster && esUrlVideo(body.poster)) {
+            body.poster = "";
+        }
+        if (!body.poster) {
+            const imgValida = [body.imagen, fallbackImage, body.portada].find(
+                (url) => url && typeof url === "string" && !esUrlVideo(url)
+            );
+            body.poster = imgValida || "";
+        }
 
         // Limpiar campos redundantes: dejar únicamente 'poster'
         delete body.thumbnail;

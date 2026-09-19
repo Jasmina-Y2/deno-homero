@@ -29,8 +29,16 @@ export const crearCardHistoriaController = async (
       body.idAutor = authorUid;
     }
 
-    // Asegurar que poster siempre se guarde (usando poster enviado, portada, imagen o fallback)
-    body.poster = body.poster || body.portada || body.imagen || body.video || "";
+    // El campo poster debe ser SIEMPRE una imagen (.webp, .jpg, .png), NUNCA un video
+    if (body.poster && esUrlVideo(body.poster)) {
+      body.poster = "";
+    }
+    if (!body.poster) {
+      const imgValida = [body.imagen, body.portada].find(
+        (url) => url && typeof url === "string" && !esUrlVideo(url)
+      );
+      body.poster = imgValida || "";
+    }
 
     // Limpiar campos redundantes: dejar únicamente 'poster'
     delete body.thumbnail;
