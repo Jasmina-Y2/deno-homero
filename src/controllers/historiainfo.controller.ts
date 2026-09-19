@@ -12,7 +12,12 @@ import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.ser
 
 export const crearHistoriaInfoController = async (ctx: RouterContext<string>) => {
     try {
-        const body = await ctx.request.body.json();
+        let body = (ctx.state as any)?.parsedBody;
+        if (!body) {
+            body = typeof (ctx.request.body as any)?.json === "function"
+                ? await (ctx.request.body as any).json()
+                : await ctx.request.body.json();
+        }
         const user = (ctx.state as any)?.user;
         const isAdmin = Boolean((ctx.state as any)?.isAdmin);
         const uidFromHeader = ctx.request.headers.get("x-user-uid") || ctx.request.headers.get("uid");

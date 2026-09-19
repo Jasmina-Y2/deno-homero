@@ -31,7 +31,7 @@ export const requerirAuth = async (
       }
     }
 
-    // Fallback: verificar si se envió el UID en headers o query params
+    // Fallback 1: verificar si se envió el UID en headers, route params o query params
     const uidDirecto = extraerUidDirecto(ctx);
     if (uidDirecto) {
       ctx.state.user = {
@@ -42,6 +42,36 @@ export const requerirAuth = async (
       ctx.state.isAdmin = false;
       await next();
       return;
+    }
+
+    // Fallback 2: si es una petición POST/PUT con body, extraer el autor/usuario del body
+    if (ctx.request.hasBody) {
+      try {
+        let body: any = null;
+        if (typeof (ctx.request.body as any)?.json === "function") {
+          body = await (ctx.request.body as any).json();
+        } else if (typeof ctx.request.body === "function") {
+          const res = (ctx.request.body as any)({ type: "json" });
+          body = res?.value ? await res.value : res;
+        }
+
+        if (body) {
+          (ctx.state as any).parsedBody = body;
+          const bodyUid = body.idAutor || body.uidAutor || body.uid || body.idUsuario || body.userId || body.autorId;
+          if (bodyUid && typeof bodyUid === "string" && bodyUid.trim()) {
+            ctx.state.user = {
+              uid: bodyUid.trim(),
+              rol: "usuario",
+              isAdmin: false,
+            };
+            ctx.state.isAdmin = false;
+            await next();
+            return;
+          }
+        }
+      } catch (_bodyErr) {
+        // Ignorar error al leer body
+      }
     }
 
     ctx.response.status = 401;
