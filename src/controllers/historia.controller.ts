@@ -29,20 +29,11 @@ export const crearHistoriaController = async (ctx: RouterContext<string>) => {
             : undefined;
         const fallbackImage = escenaConImagen?.imagen || escenaConImagen?.media || (escenaFallback && esUrlImagen(escenaFallback) ? escenaFallback : undefined);
 
-        const mediaToProcess = body.poster || body.portada || body.video || body.imagen || fallbackImage || escenaFallback;
-
-        if (mediaToProcess) {
-            try {
-                const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
-                    folder: "posters",
-                    captureSecond: body.captureSecond ?? 1,
-                    fallbackImageUrl: fallbackImage,
-                });
-                if (ogThumbnail) {
-                    body.poster = ogThumbnail;
-                }
-            } catch (mediaError) {
-                console.warn("⚠️ No se pudo auto-generar poster para Historia:", mediaError);
+        // Si el frontend ya envía el poster capturado directamente del video/imagen, se preserva íntegramente
+        if (!body.poster) {
+            const fallbackMedia = body.portada || body.imagen || fallbackImage;
+            if (fallbackMedia && esUrlImagen(fallbackMedia)) {
+                body.poster = fallbackMedia;
             }
         }
 

@@ -27,19 +27,11 @@ export const crearHistoriaInfoController = async (ctx: RouterContext<string>) =>
             body.idAutor = authorUid;
         }
 
-        // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp
-        const mediaToProcess = body.poster || body.portada || body.video || body.imagen;
-        if (mediaToProcess) {
-            try {
-                const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
-                    folder: "posters",
-                    captureSecond: body.captureSecond ?? 1,
-                });
-                if (ogThumbnail) {
-                    body.poster = ogThumbnail;
-                }
-            } catch (mediaError) {
-                console.warn("⚠️ No se pudo auto-generar poster para HistoriaInfo:", mediaError);
+        // Si el frontend ya envía el poster capturado directamente del video/imagen, se preserva íntegramente
+        if (!body.poster) {
+            const fallbackMedia = body.portada || body.imagen;
+            if (fallbackMedia && esUrlImagen(fallbackMedia)) {
+                body.poster = fallbackMedia;
             }
         }
 
