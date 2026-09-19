@@ -1,6 +1,7 @@
 import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
   getSimplifyBilleteraController,
+  getSimplifyColeccionDetalleController,
   getSimplifyHistoriaDetalleController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,
@@ -17,7 +18,7 @@ import { authOpcional } from "../middlewares/auth.middleware.ts";
 const router = new Router();
 
 // ============================================================================
-// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, BILLETERA, VOCES, NOTIFICACIONES, LIKES, HISTORIA)
+// RUTAS SIMPLIFICADAS (TAB1, TAB2, TAB3, USERS, USER-INFO, COLECCION, BILLETERA, VOCES, NOTIFICACIONES, LIKES, HISTORIA)
 // ============================================================================
 router.get("/api/simplify/tab1", getSimplifyTab1CardsController);
 router.get("/api/simplify/tab2", getSimplifyTab2DataController);
@@ -30,6 +31,38 @@ router.get("/api/simplify/user-info/:uid", getSimplifyUserInfoController);
 router.get("/api/simplify/user-info", getSimplifyUserInfoController);
 router.get("/api/simplify/userinfo/:uid", getSimplifyUserInfoController);
 router.get("/api/simplify/userinfo", getSimplifyUserInfoController);
+
+// Ruta unificada para Colección completa (Detalles + Autor + Episodios/Historias + Calificación/Voto)
+router.get(
+  "/api/simplify/coleccion/:idColeccion/:idUsuario",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
+router.get(
+  "/api/simplify/coleccion/:idColeccion",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
+router.get(
+  "/api/simplify/coleccion",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
+router.get(
+  "/api/simplify/colecciones/:idColeccion/:idUsuario",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
+router.get(
+  "/api/simplify/colecciones/:idColeccion",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
+router.get(
+  "/api/simplify/colecciones",
+  authOpcional,
+  getSimplifyColeccionDetalleController,
+);
 
 // Ruta unificada para Billetera (Pagos/Retiros + Compras de App + Límites de Anuncios por Dispositivo)
 router.get("/api/simplify/billetera/:uid", getSimplifyBilleteraController);
@@ -60,6 +93,7 @@ router.get(
 
 export {
   getSimplifyBilleteraController,
+  getSimplifyColeccionDetalleController,
   getSimplifyHistoriaDetalleController,
   getSimplifyLikesStatusController,
   getSimplifyNotificacionesDetalleController,

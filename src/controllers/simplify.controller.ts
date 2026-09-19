@@ -17,8 +17,10 @@ import {
 import { obtenerComentariosService } from "../service/comentarios.service.ts";
 import { getColeccionPorNombreService } from "../service/coleccionids.service.ts";
 import {
+  getColeccionesPorIdService,
   getTodasLasColeccionesService,
   mostrarColeccionesPorAutorService,
+  obtenerCalificacionColeccionService,
 } from "../service/coleccion.service.ts";
 import { verificarHistoriaVistaService } from "../service/vistasuser.service.ts";
 import {
@@ -871,25 +873,17 @@ export const getSimplifyUserInfoController = async (
     const totalGanancias = Number(historialResult?.totalGanancias || 0);
     const totalRecompensas = Number(historialResult?.totalRecompensas || 0);
 
-    const usuarioConMonedas = {
-      ...rawUser,
+    const perfilDoc = rawUser.perfil || {};
+    const usuarioLimpio = {
       uid: finalUid,
-      monedas: saldoMonedas,
-      saldoMonedas: saldoMonedas,
-      seguidores: seguidoresLista,
-      totalSeguidores: seguidoresLista.length,
-      conteoSeguidores: seguidoresLista.length,
-      siguiendo: siguiendoLista,
-      totalSiguiendo: siguiendoLista.length,
-      conteoSiguiendo: siguiendoLista.length,
-      totalGastado: totalGastos,
-      totalGanancias: totalGanancias,
-      totalRecompensas: totalRecompensas,
-      totalMovimientos: historialResult?.totalMovimientos || 0,
-      billetera: {
-        ...(rawUser.billetera || {}),
-        walletBalance: saldoMonedas,
-        monedas: saldoMonedas,
+      perfil: {
+        name: perfilDoc.name || rawUser.name || rawUser.displayName || "Usuario",
+        email: perfilDoc.email || rawUser.email || "",
+        photoURL: perfilDoc.photoURL || rawUser.photoURL || rawUser.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+        descripcion: perfilDoc.descripcion || rawUser.descripcion || "",
+        rol: perfilDoc.rol || rawUser.rol || "usuario",
+        verificado: Boolean(perfilDoc.verificado ?? rawUser.verificado ?? false),
+        marco_perfil_id: perfilDoc.marco_perfil_id ?? rawUser.marco_perfil_id ?? null,
       },
     };
 
@@ -900,9 +894,8 @@ export const getSimplifyUserInfoController = async (
       photoURL: string;
       totalMonedas: number;
       numDonaciones: number;
-      marco?: string | null;
+      marco_perfil_id?: string | null;
       is_pro?: boolean;
-      isPro?: boolean;
       verificado?: boolean;
     }>();
 
@@ -938,6 +931,9 @@ export const getSimplifyUserInfoController = async (
         const donorName = t.nombreOyente || t.nombreDonador || t.contraparte?.nombre || t.nombre || "Donador";
         const donorPhoto = t.fotoOyente || t.photoURL || t.contraparte?.photoURL || t.avatar || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
         const monto = Number(t.cantidadMonedas || t.monedas || t.monto || t.cantidadOtorgada || 0);
+        const marcoPerfilId = t.contraparte?.marco_perfil_id || t.contraparte?.marco || t.marco_perfil_id || t.marco || null;
+        const isPro = Boolean(t.contraparte?.is_pro ?? t.contraparte?.isPro ?? t.is_pro ?? t.isPro);
+        const verificado = Boolean(t.contraparte?.verificado ?? t.verificado);
 
         if (monto > 0) {
           if (!mapaDonadores.has(donorId)) {
@@ -947,10 +943,9 @@ export const getSimplifyUserInfoController = async (
               photoURL: donorPhoto,
               totalMonedas: monto,
               numDonaciones: 1,
-              marco: t.contraparte?.marco || t.marco || null,
-              is_pro: Boolean(t.contraparte?.is_pro || t.is_pro),
-              isPro: Boolean(t.contraparte?.is_pro || t.is_pro),
-              verificado: Boolean(t.contraparte?.verificado || t.verificado),
+              marco_perfil_id: marcoPerfilId,
+              is_pro: isPro,
+              verificado: verificado,
             });
           } else {
             const d = mapaDonadores.get(donorId)!;
@@ -980,8 +975,11 @@ export const getSimplifyUserInfoController = async (
           const donorName = c.nombre || c.autorNombre || c.name || "Donador";
           const donorPhoto = c.photoURL || c.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png";
           const monto = Number(c.cantidadMonedas || c.monedas || 0);
+          const marcoPerfilId = c.marco_perfil_id || c.marco_perfil || c.marco || c.selectedFrame || null;
+          const isPro = Boolean(c.is_pro ?? c.isPro ?? c.suscription);
+          const verificado = Boolean(c.verificado);
 
-          if (monto > 0) {
+        if (monto > 0) {
             if (!mapaDonadores.has(donorId)) {
               mapaDonadores.set(donorId, {
                 uid: donorId,
@@ -989,10 +987,9 @@ export const getSimplifyUserInfoController = async (
                 photoURL: donorPhoto,
                 totalMonedas: monto,
                 numDonaciones: 1,
-                marco: c.marco_perfil_id || c.marco_perfil || c.selectedFrame || null,
-                is_pro: Boolean(c.is_pro || c.suscription),
-                isPro: Boolean(c.is_pro || c.suscription),
-                verificado: Boolean(c.verificado),
+                marco_perfil_id: marcoPerfilId,
+                is_pro: isPro,
+                verificado: verificado,
               });
             } else {
               const d = mapaDonadores.get(donorId)!;
@@ -1018,19 +1015,19 @@ export const getSimplifyUserInfoController = async (
           if (perfilDoc) {
             const nombrePerfil = perfilDoc.perfil?.name || perfilDoc.name || perfilDoc.displayName || d.nombre;
             const fotoPerfil = perfilDoc.perfil?.photoURL || perfilDoc.photoURL || perfilDoc.foto || d.photoURL;
-            const marcoPerfil = perfilDoc.perfil?.marco_perfil_id ?? perfilDoc.marco_perfil_id ?? d.marco ?? null;
+            const marcoPerfil = perfilDoc.perfil?.marco_perfil_id ?? perfilDoc.marco_perfil_id ?? d.marco_perfil_id ?? null;
             const verificadoPerfil = Boolean(perfilDoc.perfil?.verificado ?? perfilDoc.verificado ?? d.verificado);
             const isProPerfil = Boolean(perfilDoc.is_pro ?? perfilDoc.perfil?.is_pro ?? d.is_pro);
 
             return {
-              ...d,
+              uid: d.uid,
               nombre: nombrePerfil,
               photoURL: fotoPerfil,
-              marco: marcoPerfil,
+              totalMonedas: d.totalMonedas,
+              numDonaciones: d.numDonaciones,
               marco_perfil_id: marcoPerfil,
               verificado: verificadoPerfil,
               is_pro: isProPerfil,
-              isPro: isProPerfil,
               posicion: index + 1,
               esTopUno: index === 0,
             };
@@ -1038,34 +1035,43 @@ export const getSimplifyUserInfoController = async (
         } catch (_err) {}
 
         return {
-          ...d,
+          uid: d.uid,
+          nombre: d.nombre,
+          photoURL: d.photoURL,
+          totalMonedas: d.totalMonedas,
+          numDonaciones: d.numDonaciones,
+          marco_perfil_id: d.marco_perfil_id ?? null,
+          verificado: Boolean(d.verificado),
+          is_pro: Boolean(d.is_pro),
           posicion: index + 1,
           esTopUno: index === 0,
         };
       }),
     );
 
-    const respuestaCompleta = {
-      user: usuarioConMonedas,
-      historial: historialResult,
+    const respuestaLimpia = {
+      user: usuarioLimpio,
       colecciones: listaColecciones,
       historias: listaHistorias,
-      posts: listaHistorias,
       seguidores: seguidoresLista,
       siguiendo: siguiendoLista,
       topDonadores: topDonadoresEnriquecidos,
-      totalGastado: totalGastos,
-      totalGanancias: totalGanancias,
-      totalRecompensas: totalRecompensas,
-      totalMonedas: saldoMonedas,
-      conteoSeguidores: seguidoresLista.length,
-      conteoSiguiendo: siguiendoLista.length,
-      conteoPosts: listaHistorias.length,
-      conteoColecciones: listaColecciones.length,
+      historial: historialResult,
+      estadisticas: {
+        totalMonedas: saldoMonedas,
+        totalSeguidores: seguidoresLista.length,
+        totalSiguiendo: siguiendoLista.length,
+        totalHistorias: listaHistorias.length,
+        totalColecciones: listaColecciones.length,
+        totalGastado: totalGastos,
+        totalGanancias: totalGanancias,
+        totalRecompensas: totalRecompensas,
+        totalMovimientos: historialResult?.totalMovimientos || 0,
+      },
     };
 
-    console.log("📤 [API /api/simplify/user-info] Enviando datos unificados para UID:", finalUid, {
-      nombre: usuarioConMonedas.perfil?.name,
+    console.log("📤 [API /api/simplify/user-info] Enviando datos limpios y optimizados para UID:", finalUid, {
+      nombre: usuarioLimpio.perfil?.name,
       colecciones: listaColecciones.length,
       historias: listaHistorias.length,
       seguidores: seguidoresLista.length,
@@ -1080,7 +1086,7 @@ export const getSimplifyUserInfoController = async (
     ctx.response.body = {
       success: true,
       message: "Datos de usuario obtenidos correctamente",
-      data: respuestaCompleta,
+      data: respuestaLimpia,
     };
   } catch (error: any) {
     console.error("❌ Error en getSimplifyUserInfoController:", error);
@@ -2022,6 +2028,179 @@ export const getSimplifyHistoriaDetalleController = async (
     };
   }
 };
+
+// ============================================================================
+// CONTROLADOR SIMPLIFICADO: DETALLE DE COLECCIÓN + EPISODIOS + CALIFICACIÓN
+// Combina: /api/colecciones/mostrar/:uid + /api/coleccionesids/mostrar/:uid + /api/colecciones/calificacion/:uid/:idUsuario
+// ============================================================================
+export const getSimplifyColeccionDetalleController = async (
+  ctx: RouterContext<string>,
+) => {
+  try {
+    const url = ctx.request.url;
+    const idColeccion = ctx.params?.idColeccion || ctx.params?.uid || ctx.params?.id ||
+      ctx.params?.docId || url.searchParams.get("idColeccion") ||
+      url.searchParams.get("uid") || url.searchParams.get("id") ||
+      url.searchParams.get("docId") || "";
+
+    const idUsuario = ctx.params?.idUsuario || ctx.params?.uidUsuario ||
+      url.searchParams.get("idUsuario") || url.searchParams.get("uidUsuario") ||
+      (ctx.state as any)?.user?.uid || "";
+
+    if (!idColeccion || idColeccion.trim() === "") {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "El ID o UID de la colección es requerido en la URL o parámetro",
+        data: null,
+      };
+      return;
+    }
+
+    const cleanId = idColeccion.trim();
+    const cleanUidUsuario = (idUsuario && idUsuario !== cleanId) ? idUsuario.trim() : "";
+
+    console.log(`📥 [API /api/simplify/coleccion] Consultando colección ${cleanId} (Usuario: ${cleanUidUsuario || "anónimo"})`);
+
+    // 1. Ejecutar en paralelo: datos de Colección, Historias/Episodios y Calificación
+    const [coleccionDataRaw, episodiosRaw, calificacionResult] = await Promise.all([
+      // A) Datos de la Colección
+      (async () => {
+        try {
+          const porUid = await getColeccionesPorIdService(cleanId);
+          if (Array.isArray(porUid) && porUid.length > 0) {
+            return porUid[0];
+          }
+
+          const docSnap = await db.collection("Coleccion").doc(cleanId).get();
+          if (docSnap.exists) {
+            return { id: docSnap.id, ...docSnap.data() };
+          }
+
+          return null;
+        } catch (err) {
+          console.warn(`⚠️ [simplify/coleccion] Error al obtener colección ${cleanId}:`, err);
+          return null;
+        }
+      })(),
+
+      // B) Episodios / Historias de la colección
+      (async () => {
+        try {
+          return await getColeccionPorNombreService(cleanId);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/coleccion] Error al obtener episodios de ${cleanId}:`, err);
+          return [];
+        }
+      })(),
+
+      // C) Calificación de la colección
+      (async () => {
+        try {
+          return await obtenerCalificacionColeccionService(cleanId, cleanUidUsuario || undefined);
+        } catch (err) {
+          console.warn(`⚠️ [simplify/coleccion] Error al obtener calificación de ${cleanId}:`, err);
+          return {
+            idColeccion: cleanId,
+            calificacion: 0,
+            totalCalificaciones: 0,
+            miCalificacion: null,
+            yaCalifico: false,
+          };
+        }
+      })(),
+    ]);
+
+    if (!coleccionDataRaw && (!episodiosRaw || episodiosRaw.length === 0)) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: `No se encontró la colección con ID: ${cleanId}`,
+        data: null,
+      };
+      return;
+    }
+
+    // 2. Obtener el perfil del autor si existe
+    const idAutor = String(
+      coleccionDataRaw?.idAutor ||
+      coleccionDataRaw?.autorId ||
+      coleccionDataRaw?.uidAutor ||
+      (episodiosRaw as any[])?.[0]?.idAutor ||
+      "",
+    ).trim();
+
+    let autorPerfil: any = null;
+    if (idAutor) {
+      try {
+        const userDoc = (await getUsuarioByUidService(idAutor)) as any;
+        if (userDoc) {
+          autorPerfil = {
+            uid: userDoc.uid || idAutor,
+            name: userDoc.perfil?.name || userDoc.name || userDoc.displayName || "Autor",
+            email: userDoc.perfil?.email || userDoc.email || "",
+            photoURL: userDoc.perfil?.photoURL || userDoc.photoURL || userDoc.foto || "https://mybuckethomero3.s3.us-east-1.amazonaws.com/homero_asset/DEFAULT.png",
+            descripcion: userDoc.perfil?.descripcion || userDoc.descripcion || "",
+            rol: userDoc.perfil?.rol || userDoc.rol || "usuario",
+            verificado: Boolean(userDoc.perfil?.verificado ?? userDoc.verificado ?? false),
+            marco_perfil_id: userDoc.perfil?.marco_perfil_id ?? userDoc.marco_perfil_id ?? null,
+          };
+        }
+      } catch (err) {
+        console.warn(`⚠️ [simplify/coleccion] Error al obtener autor ${idAutor}:`, err);
+      }
+    }
+
+    // 3. Normalizar lista de episodios
+    const listaEpisodios = Array.isArray(episodiosRaw) ? episodiosRaw : [];
+
+    // 4. Estructurar respuesta limpia sin redundancias
+    const coleccionFinal = {
+      ...(coleccionDataRaw || {}),
+      id: coleccionDataRaw?.id || cleanId,
+      uid: coleccionDataRaw?.uid || cleanId,
+      idAutor: idAutor || null,
+      calificacion: Number(calificacionResult?.calificacion ?? coleccionDataRaw?.calificacion ?? 0),
+      totalCalificaciones: Number(calificacionResult?.totalCalificaciones ?? coleccionDataRaw?.totalCalificaciones ?? 0),
+      autor: autorPerfil,
+    };
+
+    const respuestaCompleta = {
+      coleccion: coleccionFinal,
+      calificacion: {
+        calificacion: Number(calificacionResult?.calificacion ?? 0),
+        totalCalificaciones: Number(calificacionResult?.totalCalificaciones ?? 0),
+        miCalificacion: calificacionResult?.miCalificacion ?? null,
+        yaCalifico: Boolean(calificacionResult?.yaCalifico ?? false),
+      },
+      episodios: listaEpisodios,
+      totalEpisodios: listaEpisodios.length,
+    };
+
+    console.log(`📤 [API /api/simplify/coleccion] Enviando datos consolidados para colección ${cleanId}: ${listaEpisodios.length} episodios`);
+
+    ctx.response.headers.set(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate",
+    );
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Datos de colección obtenidos correctamente",
+      data: respuestaCompleta,
+    };
+  } catch (error: any) {
+    console.error("❌ Error en getSimplifyColeccionDetalleController:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener colección simplificada",
+      error: error?.message || "Error interno del servidor",
+      data: null,
+    };
+  }
+};
+
 
 
 
