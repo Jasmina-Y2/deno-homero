@@ -28,6 +28,7 @@ import {
   calificarColeccionController,
   obtenerCalificacionColeccionController,
   eliminarCalificacionColeccionController,
+  actualizarColeccionController,
 } from "../controllers/coleccion.controller.ts";
 import {
   agregarHistoriaAColeccionController,
@@ -166,6 +167,9 @@ const router = new Router();
 // COLECCIONES Y DETALLES
 // ============================================================================
 router.post("/api/colecciones/crear", requerirAuth, crearColeccionController);
+router.put("/api/colecciones/editar/:uid", authOpcional, actualizarColeccionController);
+router.put("/api/colecciones/:uid", authOpcional, actualizarColeccionController);
+router.post("/api/colecciones/editar/:uid", authOpcional, actualizarColeccionController);
 router.get("/api/colecciones/mostrar", authOpcional, mostrarColeccionesPorAutorController);
 router.get("/api/colecciones/mostrar/todas", authOpcional, getTodasLasColecciones);
 router.get("/api/colecciones/mostrar/:uid", authOpcional, getColeccionesPorId);

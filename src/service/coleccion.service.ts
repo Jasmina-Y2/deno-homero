@@ -379,3 +379,122 @@ export const eliminarCalificacionColeccionService = async (
         throw new Error("Error al eliminar la calificación");
     }
 };
+
+/**
+ * Actualiza el nombre, descripción, géneros o imagen de una colección en Firestore
+ * y sincroniza los cambios en cascada con las historias asociadas.
+ */
+export const actualizarColeccionService = async (
+    uid: string,
+    data: {
+        nombre?: string;
+        titulo?: string;
+        descripcion?: string;
+        generos?: string[];
+        img?: string;
+    },
+    userUid?: string,
+    isAdmin?: boolean
+) => {
+    if (!uid) throw new Error("Se requiere el UID o ID de la colección.");
+
+    try {
+        // 1. Localizar el documento en Firestore
+        let docRef = db.collection("Coleccion").doc(uid);
+        let docSnap = await docRef.get();
+        let colDocId = uid;
+        let colUid = uid;
+
+        if (!docSnap.exists) {
+            const querySnap = await db.collection("Coleccion").where("uid", "==", uid).get();
+            if (!querySnap.empty) {
+                docRef = querySnap.docs[0].ref;
+                docSnap = querySnap.docs[0];
+                colDocId = querySnap.docs[0].id;
+                colUid = querySnap.docs[0].data()?.uid || uid;
+            } else {
+                throw new Error("Colección no encontrada");
+            }
+        } else {
+            colUid = docSnap.data()?.uid || uid;
+        }
+
+        const currentData = docSnap.data() || {};
+
+        // 2. Verificación de permisos si se especifica userUid
+        if (userUid && !isAdmin) {
+            const idAutor = currentData.idAutor || currentData.uidAutor || currentData.idUsuario;
+            if (idAutor && idAutor !== userUid && currentData.uid !== userUid && docSnap.id !== userUid) {
+                throw new Error("FORBIDDEN");
+            }
+        }
+
+        // 3. Preparar actualizaciones
+        const updates: Record<string, any> = {
+            actualizadoEn: new Date().toISOString(),
+        };
+
+        const nuevoNombre = data.nombre || data.titulo;
+        if (nuevoNombre !== undefined && nuevoNombre.trim() !== "") {
+            updates.nombre = nuevoNombre.trim();
+            updates.titulo = nuevoNombre.trim();
+        }
+
+        if (data.descripcion !== undefined) {
+            updates.descripcion = data.descripcion.trim();
+        }
+
+        if (data.generos !== undefined && Array.isArray(data.generos)) {
+            updates.generos = data.generos;
+        }
+
+        if (data.img !== undefined && data.img.trim() !== "") {
+            updates.img = data.img.trim();
+        }
+
+        const batch = db.batch();
+        batch.update(docRef, updates);
+
+        // 4. Actualizar en cascada las historias de esta colección en CardHistoria, HistoriaInfo, Historia
+        const coleccionesACascadear = ["CardHistoria", "HistoriaInfo", "Historia"];
+        for (const colName of coleccionesACascadear) {
+            const [snap1, snap2] = await Promise.all([
+                db.collection(colName).where("Coleccion.uid", "==", colUid).get().catch(() => ({ docs: [] })),
+                db.collection(colName).where("Coleccion.id", "==", colUid).get().catch(() => ({ docs: [] })),
+            ]);
+
+            const docsToUpdate = new Map<string, any>();
+            snap1.docs.forEach((d: any) => docsToUpdate.set(d.id, d));
+            snap2.docs.forEach((d: any) => docsToUpdate.set(d.id, d));
+
+            for (const storyDoc of docsToUpdate.values()) {
+                const storyData = storyDoc.data();
+                const currentCol = storyData.Coleccion || {};
+                const updatedCol = {
+                    ...currentCol,
+                    ...(updates.nombre ? { nombre: updates.nombre, titulo: updates.nombre } : {}),
+                    ...(updates.descripcion !== undefined ? { descripcion: updates.descripcion } : {}),
+                    ...(updates.img ? { img: updates.img } : {}),
+                };
+
+                batch.update(storyDoc.ref, {
+                    Coleccion: updatedCol,
+                });
+            }
+        }
+
+        await batch.commit();
+        console.log(`✅ Colección ${colUid} actualizada con éxito:`, updates);
+
+        const updatedDoc = await docRef.get();
+        return {
+            id: colDocId,
+            uid: colUid,
+            ...updatedDoc.data(),
+        };
+    } catch (error) {
+        console.error("❌ Error en actualizarColeccionService:", error);
+        throw error;
+    }
+};
+

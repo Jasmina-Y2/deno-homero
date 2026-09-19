@@ -6,7 +6,8 @@ import {
     eliminarColeccionesPorUidService,
     calificarColeccionService,
     obtenerCalificacionColeccionService,
-    eliminarCalificacionColeccionService
+    eliminarCalificacionColeccionService,
+    actualizarColeccionService
 } from "../service/coleccion.service.ts";
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { ColeccionData } from "../models/coleccion.model.ts";
@@ -242,3 +243,62 @@ export const eliminarCalificacionColeccionController = async (ctx: RouterContext
         };
     }
 };
+
+export const actualizarColeccionController = async (ctx: RouterContext<string>) => {
+    try {
+        const uid = ctx.params.uid || ctx.params.id;
+        if (!uid) {
+            ctx.response.status = 400;
+            ctx.response.body = { success: false, message: "UID o ID de colección requerido" };
+            return;
+        }
+
+        let body: any = (ctx.state as any)?.parsedBody;
+        if (!body) {
+            if (typeof (ctx.request.body as any)?.json === "function") {
+                body = await (ctx.request.body as any).json();
+            } else if (typeof ctx.request.body === "function") {
+                const res = (ctx.request.body as any)({ type: "json" });
+                body = res?.value ? await res.value : res;
+            }
+        }
+
+        const user = (ctx.state as any)?.user;
+        const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+        const uidFromHeader = ctx.request.headers.get("x-user-uid") || ctx.request.headers.get("uid");
+        const userUid = user?.uid || uidFromHeader || undefined;
+
+        const resultado = await actualizarColeccionService(uid, body || {}, userUid, isAdmin);
+
+        ctx.response.status = 200;
+        ctx.response.body = {
+            success: true,
+            message: "Colección actualizada correctamente",
+            data: resultado,
+        };
+    } catch (error: any) {
+        if (error?.message === "FORBIDDEN") {
+            ctx.response.status = 403;
+            ctx.response.body = {
+                success: false,
+                message: "Acceso denegado: No tienes permisos para editar esta colección",
+            };
+            return;
+        }
+        if (error?.message === "Colección no encontrada") {
+            ctx.response.status = 404;
+            ctx.response.body = {
+                success: false,
+                message: "Colección no encontrada",
+            };
+            return;
+        }
+        console.error("❌ Error en actualizarColeccionController:", error);
+        ctx.response.status = 500;
+        ctx.response.body = {
+            success: false,
+            message: error instanceof Error ? error.message : "Error al actualizar la colección",
+        };
+    }
+};
+
