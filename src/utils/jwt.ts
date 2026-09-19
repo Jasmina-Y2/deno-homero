@@ -1,7 +1,8 @@
+import "jsr:@std/dotenv/load";
 import jwt from "npm:jsonwebtoken@^9.0.2";
 
-const JWT_SECRET = Deno.env.get("JWT_SECRET");
-const JWT_EXPIRES_IN = Deno.env.get("JWT_EXPIRES_IN");
+const JWT_SECRET = Deno.env.get("JWT_SECRET") || "homero_jwt_secret_key_default_2026";
+const JWT_EXPIRES_IN = Deno.env.get("JWT_EXPIRES_IN") || "30d";
 
 export interface JwtUserPayload {
   uid: string;
@@ -129,15 +130,21 @@ export const extraerTokenHeader = (ctx: any): string | null => {
  */
 export const extraerUidDirecto = (ctx: any): string | null => {
   try {
-    const uidHeader = ctx.request.headers.get("x-user-uid") ||
-      ctx.request.headers.get("x-uid") ||
-      ctx.request.headers.get("uid");
+    const uidHeader = ctx.request?.headers?.get("x-user-uid") ||
+      ctx.request?.headers?.get("x-uid") ||
+      ctx.request?.headers?.get("uid");
     if (uidHeader && uidHeader.trim()) return uidHeader.trim();
 
-    if (ctx.request.url?.searchParams) {
+    if (ctx.params) {
+      const pUid = ctx.params.uid || ctx.params.idAutor || ctx.params.idUsuario || ctx.params.userId;
+      if (pUid && typeof pUid === "string" && pUid.trim()) return pUid.trim();
+    }
+
+    if (ctx.request?.url?.searchParams) {
       const uidQuery = ctx.request.url.searchParams.get("uid") ||
         ctx.request.url.searchParams.get("idAutor") ||
-        ctx.request.url.searchParams.get("idUsuario");
+        ctx.request.url.searchParams.get("idUsuario") ||
+        ctx.request.url.searchParams.get("userId");
       if (uidQuery && uidQuery.trim()) return uidQuery.trim();
     }
   } catch {}

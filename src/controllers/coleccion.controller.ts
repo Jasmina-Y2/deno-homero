@@ -16,21 +16,27 @@ export const crearColeccionController = async (ctx: RouterContext<string>) => {
         const body = await ctx.request.body.json();
         const user = (ctx.state as any)?.user;
         const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+        const uidFromHeader = ctx.request.headers.get("x-user-uid") || ctx.request.headers.get("uid");
+        const authorUid = user?.uid || uidFromHeader || body.idAutor || body.uidAutor;
 
-        if (user?.uid && !isAdmin) {
-            body.idAutor = user.uid;
-            body.uid = user.uid;
+        if (authorUid && !isAdmin) {
+            body.idAutor = authorUid;
+        }
+
+        // Si la colección no tiene un UUID generado, asignar uno
+        if (!body.uid) {
+            body.uid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         }
 
         if (!body.idAutor) {
             ctx.response.status = 400;
-            ctx.response.body = { success: false, error: "Faltan idAutor" };
+            ctx.response.body = { success: false, error: "Falta idAutor" };
             return;
         }
 
         const coleccionId = await crearColeccionService(body as ColeccionData);
         ctx.response.status = 201;
-        ctx.response.body = { success: true, id: coleccionId };
+        ctx.response.body = { success: true, id: coleccionId, uid: body.uid };
 
     } catch (error) {
         ctx.response.status = 500;

@@ -17,10 +17,11 @@ export const crearCardHistoriaController = async (
     const body = await ctx.request.body.json();
     const user = (ctx.state as any)?.user;
     const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+    const uidFromHeader = ctx.request.headers.get("x-user-uid") || ctx.request.headers.get("uid");
+    const authorUid = user?.uid || uidFromHeader || body.idAutor || body.uidAutor;
 
-    // Si el usuario está autenticado y no es admin, forzar que idAutor sea su propio UID
-    if (user?.uid && !isAdmin) {
-      body.idAutor = user.uid;
+    if (authorUid && !isAdmin) {
+      body.idAutor = authorUid;
     }
 
     // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp / Redes Sociales

@@ -13,6 +13,14 @@ import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.ser
 export const crearHistoriaInfoController = async (ctx: RouterContext<string>) => {
     try {
         const body = await ctx.request.body.json();
+        const user = (ctx.state as any)?.user;
+        const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+        const uidFromHeader = ctx.request.headers.get("x-user-uid") || ctx.request.headers.get("uid");
+        const authorUid = user?.uid || uidFromHeader || body.idAutor || body.uidAutor;
+
+        if (authorUid && !isAdmin) {
+            body.idAutor = authorUid;
+        }
 
         // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp
         const mediaToProcess = body.poster || body.video || body.imagen;
