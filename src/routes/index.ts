@@ -192,8 +192,8 @@ router.post("/api/multimedia/generar-thumbnail", generarThumbnailController);
 router.get("/api/card-historias/mostrar", authOpcional, obtenerCardHistoriaController);
 router.get("/api/historias-card/mostrar/:idAutor", authOpcional, getHistoriaCardByAutor);
 router.get("/api/historias-card/mostrar-id/:id", authOpcional, getHistoriaCardById);
-router.delete("/api/card-historias/eliminar/:id", requerirAuth, eliminarCardController);
-router.delete("/api/multimedia/limpiar/:id", requerirAuth, eliminarMultimediaController);
+router.delete("/api/card-historias/eliminar/:id", authOpcional, eliminarCardController);
+router.delete("/api/multimedia/limpiar/:id", authOpcional, eliminarMultimediaController);
 
 // ============================================================================
 // HISTORIAS INFO, VISTAS Y CATEGORÍAS
