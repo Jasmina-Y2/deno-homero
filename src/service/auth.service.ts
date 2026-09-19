@@ -6,17 +6,28 @@ export const syncUserWithGoogleService = async (userData: any) => {
     try {
         const fcmToken = userData.fcmToken || userData.fcm_token || userData.sistema?.fcmToken || "";
         const { uid, email, name, photoURL } = userData;
-        const userRef = db.collection("users").doc(uid);
-        const docSnap = await userRef.get();
+
+        // 1. Buscar si el usuario ya existe por doc ID directo o por campo 'uid'
+        let userRef = db.collection("users").doc(uid);
+        let docSnap = await userRef.get();
+
+        if (!docSnap.exists) {
+            const querySnap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+            if (!querySnap.empty) {
+                docSnap = querySnap.docs[0];
+                userRef = querySnap.docs[0].ref;
+            }
+        }
 
         if (docSnap.exists) {
+            const existingData = docSnap.data();
             if (fcmToken && fcmToken.trim().length > 0) {
                 await userRef.update({
                     "sistema.fcmToken": fcmToken,
                     "sistema.fechaActualizacion": new Date().toISOString(),
                 });
             }
-            return normalizarUsuarioDoc(docSnap.data());
+            return normalizarUsuarioDoc({ ...existingData, idDoc: docSnap.id, uid: existingData?.uid || uid });
         }
 
         let finalPhotoUrl = "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg";

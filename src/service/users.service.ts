@@ -82,13 +82,23 @@ export const normalizarUsuarioDoc = (data: any): UsuarioDocumento => {
   const ahora = new Date().toISOString();
   const mesActual = ahora.slice(0, 7);
 
+  // Detectar si el usuario es Admin desde cualquier campo existente
+  const esAdminDetectado = Boolean(
+    data.sistema?.ADMIN === true ||
+      data.ADMIN === true ||
+      data.admin === true ||
+      data.isAdmin === true ||
+      data.perfil?.rol?.toLowerCase() === "admin" ||
+      data.rol?.toLowerCase() === "admin"
+  );
+
   // 1. Perfil
   const perfil: PerfilUsuario = {
     name: data.perfil?.name || data.name || data.nombre || data.displayName || `Usuario_${uid.slice(0, 6)}`,
     email: data.perfil?.email || data.email || data.correo || "",
     photoURL: data.perfil?.photoURL || data.photoURL || data.foto || "https://mybuckethomero2.s3.us-east-1.amazonaws.com/user/imagen.jpg",
     descripcion: data.perfil?.descripcion || data.descripcion || "Soy creador original de homero",
-    rol: data.perfil?.rol || data.rol || "usuario",
+    rol: esAdminDetectado ? "admin" : (data.perfil?.rol || data.rol || "usuario"),
     verificado: Boolean(data.perfil?.verificado ?? data.verificado ?? false),
     marco_perfil_id: data.perfil?.marco_perfil_id ?? data.marco_perfil_id ?? null,
   };
@@ -175,7 +185,7 @@ export const normalizarUsuarioDoc = (data: any): UsuarioDocumento => {
     ultimoDeviceId: data.sistema?.ultimoDeviceId || data.ultimoDeviceId || "",
     bovedaPin: data.sistema?.bovedaPin || data.bovedaPin || "",
     metodo: data.sistema?.metodo || data.metodo || "email",
-    ADMIN: Boolean(data.sistema?.ADMIN ?? data.ADMIN ?? (perfil.rol === "admin" || data.admin === true)),
+    ADMIN: esAdminDetectado,
     activo: activoFinal,
     baneado: baneadoFinal,
     dispositivoBloqueado: Boolean(data.sistema?.dispositivoBloqueado ?? false),
@@ -481,10 +491,25 @@ export const getUsuarioByEmailService = async (email: string) => {
  */
 export const crearUsuarioService = async (datos: DatosUsuario) => {
   try {
+    const uid = datos.uid;
+
+    // 1. Verificar si el usuario ya existe para NO sobreescribir su rol, ADMIN ni datos
+    const directDoc = await db.collection("users").doc(uid).get();
+    let existingSnap = directDoc.exists ? directDoc : null;
+    if (!existingSnap) {
+      const qSnap = await db.collection("users").where("uid", "==", uid).limit(1).get();
+      if (!qSnap.empty) existingSnap = qSnap.docs[0];
+    }
+
+    if (existingSnap && existingSnap.exists) {
+      console.log(`ℹ️ Usuario ${uid} ya existe. Preservando datos existentes (ADMIN, rol, billetera).`);
+      const existingData = existingSnap.data();
+      return normalizarUsuarioDoc({ ...existingData, idDoc: existingSnap.id, uid });
+    }
+
     const ahora = new Date();
     const mesActual = ahora.toISOString().slice(0, 7);
     const ahoraIso = ahora.toISOString();
-    const uid = datos.uid;
 
     const perfil: PerfilUsuario = {
       name: datos.perfil?.name || datos.name || `User_${uid.slice(0, 6)}`,
