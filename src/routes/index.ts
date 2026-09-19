@@ -18,6 +18,7 @@ import {
   getHistoriaCardById,
   obtenerCardHistoriaController,
 } from "../controllers/cardhistoria.controller.ts";
+import { generarThumbnailController } from "../controllers/multimedia.controller.ts";
 import {
   crearColeccionController,
   eliminarColeccionesPorUid,
@@ -187,6 +188,7 @@ router.delete("/api/colecciones/calificar", requerirAuth, eliminarCalificacionCo
 router.post("/api/historias/crear", requerirAuth, crearHistoriaController);
 router.get("/api/historia/:id", getHistoriaByCustomId);
 router.post("/api/card-historias/crear", requerirAuth, crearCardHistoriaController);
+router.post("/api/multimedia/generar-thumbnail", generarThumbnailController);
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 router.get("/api/historias-card/mostrar/:idAutor", getHistoriaCardByAutor);
 router.get("/api/historias-card/mostrar-id/:id", getHistoriaCardById);

@@ -7,6 +7,7 @@ import {
   guardarCardHistoriaEnFirestoreService,
   obtenerCardHistoriaService,
 } from "../service/cardhistoria.service.ts";
+import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.service.ts";
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 
 export const crearCardHistoriaController = async (
@@ -20,6 +21,26 @@ export const crearCardHistoriaController = async (
     // Si el usuario está autenticado y no es admin, forzar que idAutor sea su propio UID
     if (user?.uid && !isAdmin) {
       body.idAutor = user.uid;
+    }
+
+    // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp / Redes Sociales
+    const mediaToProcess = body.poster || body.video || body.imagen;
+    if (mediaToProcess) {
+      try {
+        const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
+          folder: "posters",
+          captureSecond: body.captureSecond ?? 2,
+        });
+        if (ogThumbnail) {
+          if (!body.poster || esUrlVideo(body.poster)) {
+            body.poster = ogThumbnail;
+          }
+          body.thumbnail = ogThumbnail;
+          body.ogImage = ogThumbnail;
+        }
+      } catch (mediaError) {
+        console.warn("⚠️ No se pudo auto-generar thumbnail para CardHistoria:", mediaError);
+      }
     }
 
     const idNuevaCard = await guardarCardHistoriaEnFirestoreService(

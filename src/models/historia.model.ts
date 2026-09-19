@@ -7,6 +7,11 @@ export interface HistoriaData {
     id: string;
     idAutor: string;
     colorDominante: string;
+    video?: string;
+    imagen?: string;
+    poster?: string;
+    thumbnail?: string;
+    ogImage?: string;
 }
 export interface ContenidoHistoria {
     textoES: string;

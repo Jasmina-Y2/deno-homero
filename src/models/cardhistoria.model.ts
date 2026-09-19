@@ -18,4 +18,7 @@ export interface CardHistoria {
     colorDominante: string;
     paginas: number | null;
     fecha: string;
+    poster?: string;
+    thumbnail?: string;
+    ogImage?: string;
 }

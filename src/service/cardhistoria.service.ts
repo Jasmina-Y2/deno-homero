@@ -135,6 +135,17 @@ export const eliminarImagenesDeHistoria = async (
       const data = cardSnap.docs[0].data();
       if (data.video) urlsParaBorrar.push(data.video);
       if (data.imagen) urlsParaBorrar.push(data.imagen);
+      if (data.poster) urlsParaBorrar.push(data.poster);
+      if (data.thumbnail) urlsParaBorrar.push(data.thumbnail);
+      if (data.ogImage) urlsParaBorrar.push(data.ogImage);
+    }
+    if (!historiaInfoSnap.empty) {
+      const data = historiaInfoSnap.docs[0].data();
+      if (data.video) urlsParaBorrar.push(data.video);
+      if (data.imagen) urlsParaBorrar.push(data.imagen);
+      if (data.poster) urlsParaBorrar.push(data.poster);
+      if (data.thumbnail) urlsParaBorrar.push(data.thumbnail);
+      if (data.ogImage) urlsParaBorrar.push(data.ogImage);
     }
     if (urlsParaBorrar.length > 0) {
       const results = await Promise.allSettled(

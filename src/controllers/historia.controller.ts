@@ -1,6 +1,7 @@
 import { HistoriaData } from "../models/historia.model.ts";
 import type { RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { guardarHistoriaEnFirestoreService, getHistoriaByCustomIdService } from "../service/historia.service.ts";
+import { generarThumbnailOGService, esUrlVideo } from "../service/multimedia.service.ts";
 
 export const crearHistoriaController = async (ctx: RouterContext<string>) => {
     try {
@@ -11,6 +12,30 @@ export const crearHistoriaController = async (ctx: RouterContext<string>) => {
         if (user?.uid && !isAdmin) {
             if (body.idAutor) body.idAutor = user.uid;
             if (body.uid) body.uid = user.uid;
+        }
+
+        // Auto-generación de Thumbnail / Poster Open Graph (1200x630) para WhatsApp
+        const firstImageInHistoria = Array.isArray(body.historia) && body.historia.length > 0
+            ? body.historia[0]?.imagen
+            : undefined;
+        const mediaToProcess = body.poster || body.video || body.imagen || firstImageInHistoria;
+
+        if (mediaToProcess) {
+            try {
+                const ogThumbnail = await generarThumbnailOGService(mediaToProcess, {
+                    folder: "posters",
+                    captureSecond: body.captureSecond ?? 2,
+                });
+                if (ogThumbnail) {
+                    if (!body.poster || esUrlVideo(body.poster)) {
+                        body.poster = ogThumbnail;
+                    }
+                    body.thumbnail = ogThumbnail;
+                    body.ogImage = ogThumbnail;
+                }
+            } catch (mediaError) {
+                console.warn("⚠️ No se pudo auto-generar thumbnail para Historia:", mediaError);
+            }
         }
 
         const historiaId = await guardarHistoriaEnFirestoreService(body as HistoriaData);

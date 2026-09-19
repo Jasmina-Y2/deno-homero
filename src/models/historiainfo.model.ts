@@ -10,5 +10,9 @@ export interface HistoriaInfo {
     idAutor: string;
     colorDominante: string;
     fecha: string;
+    poster?: string;
+    thumbnail?: string;
+    ogImage?: string;
+    imagen?: string;
 }
 
