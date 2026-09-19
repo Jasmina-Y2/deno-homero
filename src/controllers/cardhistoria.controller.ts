@@ -29,13 +29,8 @@ export const crearCardHistoriaController = async (
       body.idAutor = authorUid;
     }
 
-    // Si el frontend ya envía el poster capturado directamente del video/imagen, se preserva íntegramente
-    if (!body.poster) {
-      const fallbackMedia = body.portada || body.imagen;
-      if (fallbackMedia && esUrlImagen(fallbackMedia)) {
-        body.poster = fallbackMedia;
-      }
-    }
+    // Asegurar que poster siempre se guarde (usando poster enviado, portada, imagen o fallback)
+    body.poster = body.poster || body.portada || body.imagen || body.video || "";
 
     // Limpiar campos redundantes: dejar únicamente 'poster'
     delete body.thumbnail;
