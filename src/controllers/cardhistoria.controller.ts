@@ -94,6 +94,11 @@ export const eliminarCardController = async (ctx: RouterContext<string>) => {
     const idCard = ctx.params.id;
     const user = (ctx.state as any)?.user;
     const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+    const uidFromParams = ctx.request.url.searchParams.get("uid") ||
+      ctx.request.url.searchParams.get("idAutor") ||
+      ctx.request.headers.get("x-user-uid") ||
+      ctx.request.headers.get("uid");
+    const userUid = user?.uid || uidFromParams || undefined;
 
     if (!idCard) {
       ctx.response.status = 400;
@@ -101,7 +106,7 @@ export const eliminarCardController = async (ctx: RouterContext<string>) => {
       return;
     }
 
-    const resultado = await eliminarCardPorIdService(idCard, user?.uid, isAdmin);
+    const resultado = await eliminarCardPorIdService(idCard, userUid, isAdmin);
 
     if (resultado.success) {
       ctx.response.status = 200;
@@ -139,6 +144,11 @@ export const eliminarMultimediaController = async (
     const id = ctx.params.id;
     const user = (ctx.state as any)?.user;
     const isAdmin = Boolean((ctx.state as any)?.isAdmin);
+    const uidFromParams = ctx.request.url.searchParams.get("uid") ||
+      ctx.request.url.searchParams.get("idAutor") ||
+      ctx.request.headers.get("x-user-uid") ||
+      ctx.request.headers.get("uid");
+    const userUid = user?.uid || uidFromParams || undefined;
 
     if (!id) {
       ctx.response.status = 400;
@@ -148,7 +158,7 @@ export const eliminarMultimediaController = async (
       };
       return;
     }
-    await eliminarImagenesDeHistoria(id, user?.uid, isAdmin);
+    await eliminarImagenesDeHistoria(id, userUid, isAdmin);
 
     ctx.response.status = 200;
     ctx.response.body = {

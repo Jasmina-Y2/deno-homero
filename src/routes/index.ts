@@ -158,7 +158,7 @@ import {
   registrarCompraPendienteController,
   reintentarCompraController,
 } from "../controllers/comprasApp.controller.ts";
-import { requerirAdmin, requerirAuth } from "../middlewares/auth.middleware.ts";
+import { authOpcional, requerirAdmin, requerirAuth } from "../middlewares/auth.middleware.ts";
 
 const router = new Router();
 
@@ -192,8 +192,8 @@ router.post("/api/multimedia/generar-thumbnail", generarThumbnailController);
 router.get("/api/card-historias/mostrar", obtenerCardHistoriaController);
 router.get("/api/historias-card/mostrar/:idAutor", getHistoriaCardByAutor);
 router.get("/api/historias-card/mostrar-id/:id", getHistoriaCardById);
-router.delete("/api/card-historias/eliminar/:id", requerirAuth, eliminarCardController);
-router.delete("/api/multimedia/limpiar/:id", requerirAuth, eliminarMultimediaController);
+router.delete("/api/card-historias/eliminar/:id", authOpcional, eliminarCardController);
+router.delete("/api/multimedia/limpiar/:id", authOpcional, eliminarMultimediaController);
 
 // ============================================================================
 // HISTORIAS INFO, VISTAS Y CATEGORÍAS

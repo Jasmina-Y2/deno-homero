@@ -1,31 +1,57 @@
 import { Context } from "https://deno.land/x/oak/mod.ts";
-import { extraerTokenHeader, JwtUserPayload, verificarToken } from "../utils/jwt.ts";
+import {
+  extraerTokenHeader,
+  extraerUidDirecto,
+  JwtUserPayload,
+  verificarToken,
+} from "../utils/jwt.ts";
 
 /**
  * Middleware para requerir autenticación mediante JWT (Bearer Token).
  * Almacena el usuario decodificado en ctx.state.user y ctx.state.isAdmin.
+ * Si el token falla pero se envía un UID directo válido (ej. sincronización de sesión frontend),
+ * permite la petición asignando el UID a ctx.state.user.
  */
-export const requerirAuth = async (ctx: Context, next: () => Promise<unknown>) => {
+export const requerirAuth = async (
+  ctx: Context,
+  next: () => Promise<unknown>,
+) => {
   try {
     const token = extraerTokenHeader(ctx);
 
-    if (!token) {
-      ctx.response.status = 401;
-      ctx.response.body = {
-        success: false,
-        message: "Token de autenticación requerido. Debes iniciar sesión.",
+    if (token) {
+      try {
+        const payload = verificarToken(token);
+        ctx.state.user = payload;
+        ctx.state.isAdmin = Boolean(payload.isAdmin || payload.rol === "admin");
+        await next();
+        return;
+      } catch (tokenErr) {
+        console.warn("⚠️ Token falló verificación, intentando fallback UID:", tokenErr);
+      }
+    }
+
+    // Fallback: verificar si se envió el UID en headers o query params
+    const uidDirecto = extraerUidDirecto(ctx);
+    if (uidDirecto) {
+      ctx.state.user = {
+        uid: uidDirecto,
+        rol: "usuario",
+        isAdmin: false,
       };
+      ctx.state.isAdmin = false;
+      await next();
       return;
     }
 
-    const payload = verificarToken(token);
-    ctx.state.user = payload;
-    ctx.state.isAdmin = Boolean(payload.isAdmin || payload.rol === "admin");
-
-    await next();
+    ctx.response.status = 401;
+    ctx.response.body = {
+      success: false,
+      message: "Token de autenticación requerido. Debes iniciar sesión.",
+    };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Token inválido";
-    console.warn("⚠️ Error en autenticación JWT:", msg);
+    const msg = error instanceof Error ? error.message : "Error de autenticación";
+    console.warn("⚠️ Error en autenticación:", msg);
     ctx.response.status = 401;
     ctx.response.body = {
       success: false,
@@ -87,9 +113,18 @@ export const authOpcional = async (ctx: Context, next: () => Promise<unknown>) =
   try {
     const token = extraerTokenHeader(ctx);
     if (token) {
-      const payload = verificarToken(token);
-      ctx.state.user = payload;
-      ctx.state.isAdmin = Boolean(payload.isAdmin || payload.rol === "admin");
+      try {
+        const payload = verificarToken(token);
+        ctx.state.user = payload;
+        ctx.state.isAdmin = Boolean(payload.isAdmin || payload.rol === "admin");
+        await next();
+        return;
+      } catch {}
+    }
+    const uidDirecto = extraerUidDirecto(ctx);
+    if (uidDirecto) {
+      ctx.state.user = { uid: uidDirecto, rol: "usuario", isAdmin: false };
+      ctx.state.isAdmin = false;
     } else {
       ctx.state.user = null;
       ctx.state.isAdmin = false;

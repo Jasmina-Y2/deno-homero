@@ -42,3 +42,51 @@ Deno.test("Multimedia: Redimensionar imagen a 1200x630 Open Graph con ImageScrip
   assertEquals(decoded.width, 1200);
   assertEquals(decoded.height, 630);
 });
+
+Deno.test("Multimedia: Extraer URLs de audios (audioES, audioEN, .mp3, .wav) y escenas para eliminar de S3", async () => {
+  const { extraerUrlsS3DeObjeto } = await import("../service/cardhistoria.service.ts");
+
+  const testPayload = {
+    titulo: "prueba",
+    id: "971112780393356",
+    idAutor: "7cBW5g7xYGbh7Fh2zTCHvNBdGHx1",
+    portada: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/portada/1788940591691-3hpj5v-homero_1788940591652_ra9m2g2.mp4",
+    historia: [
+      {
+        idEscena: 1,
+        textoES: "Bajo una tormenta...",
+        media: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/historia/1788940602577-s2emuh-homero_1788940602579_ywy4gpo.mp4",
+      },
+      {
+        idEscena: 2,
+        textoES: "Un trueno...",
+        media: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/historia/1788940606469-mkij32-homero_1788940606463_wshf3vk.webp",
+      },
+    ],
+    audioES: {
+      success: true,
+      audioUrl: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/1788940644613-bj82ds-historia_gemini_1788940644613.wav",
+      url: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/1788940644613-bj82ds-historia_gemini_1788940644613.wav",
+    },
+    audioEN: {
+      audioUrl: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/audio_en_123.mp3",
+    },
+    autor: {
+      uid: "7cBW5g7xYGbh7Fh2zTCHvNBdGHx1",
+      photoURL: "https://mybuckethomero3.s3.us-east-1.amazonaws.com/profile/1789603214765-3s4quf-profile_7cBW5g7xYGbh7Fh2zTCHvNBdGHx1.jpg",
+    },
+  };
+
+  const urls = extraerUrlsS3DeObjeto(testPayload);
+
+  // Deben estar los audios wav/mp3, videos y portadas
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/1788940644613-bj82ds-historia_gemini_1788940644613.wav"), true);
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/google/audio_en_123.mp3"), true);
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/portada/1788940591691-3hpj5v-homero_1788940591652_ra9m2g2.mp4"), true);
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/historia/1788940602577-s2emuh-homero_1788940602579_ywy4gpo.mp4"), true);
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/historia/1788940606469-mkij32-homero_1788940606463_wshf3vk.webp"), true);
+
+  // NO debe incluir la foto de perfil del usuario
+  assertEquals(urls.includes("https://mybuckethomero3.s3.us-east-1.amazonaws.com/profile/1789603214765-3s4quf-profile_7cBW5g7xYGbh7Fh2zTCHvNBdGHx1.jpg"), false);
+});
+
