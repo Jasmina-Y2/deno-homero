@@ -166,20 +166,20 @@ const router = new Router();
 // ============================================================================
 // COLECCIONES Y DETALLES
 // ============================================================================
-router.post("/api/colecciones/crear", requerirAuth, crearColeccionController);
+router.post("/api/colecciones/crear", authOpcional, crearColeccionController);
 router.put("/api/colecciones/editar/:uid", authOpcional, actualizarColeccionController);
 router.put("/api/colecciones/:uid", authOpcional, actualizarColeccionController);
 router.post("/api/colecciones/editar/:uid", authOpcional, actualizarColeccionController);
 router.get("/api/colecciones/mostrar", authOpcional, mostrarColeccionesPorAutorController);
 router.get("/api/colecciones/mostrar/todas", authOpcional, getTodasLasColecciones);
 router.get("/api/colecciones/mostrar/:uid", authOpcional, getColeccionesPorId);
-router.delete("/api/colecciones/eliminar/:uid", requerirAuth, eliminarColeccionesPorUid);
-router.post("/api/coleccion-ids/crear", requerirAuth, agregarHistoriaAColeccionController);
+router.delete("/api/colecciones/eliminar/:uid", authOpcional, eliminarColeccionesPorUid);
+router.post("/api/coleccion-ids/crear", authOpcional, agregarHistoriaAColeccionController);
 router.get("/api/coleccionesids/mostrar/:docId", authOpcional, getColeccionDetalle);
-router.put("/api/coleccionesids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
-router.post("/api/coleccionesids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
-router.put("/api/coleccion-ids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
-router.post("/api/coleccion-ids/reordenar", requerirAuth, reordenarEpisodiosColeccionController);
+router.put("/api/coleccionesids/reordenar", authOpcional, reordenarEpisodiosColeccionController);
+router.post("/api/coleccionesids/reordenar", authOpcional, reordenarEpisodiosColeccionController);
+router.put("/api/coleccion-ids/reordenar", authOpcional, reordenarEpisodiosColeccionController);
+router.post("/api/coleccion-ids/reordenar", authOpcional, reordenarEpisodiosColeccionController);
 router.post("/api/colecciones/calificar", requerirAuth, calificarColeccionController);
 router.put("/api/colecciones/calificar", requerirAuth, calificarColeccionController);
 router.get("/api/colecciones/calificacion/:idColeccion", authOpcional, obtenerCalificacionColeccionController);
@@ -189,9 +189,9 @@ router.delete("/api/colecciones/calificar", requerirAuth, eliminarCalificacionCo
 // ============================================================================
 // HISTORIAS Y CARDS
 // ============================================================================
-router.post("/api/historias/crear", requerirAuth, crearHistoriaController);
+router.post("/api/historias/crear", authOpcional, crearHistoriaController);
 router.get("/api/historia/:id", authOpcional, getHistoriaByCustomId);
-router.post("/api/card-historias/crear", requerirAuth, crearCardHistoriaController);
+router.post("/api/card-historias/crear", authOpcional, crearCardHistoriaController);
 router.post("/api/multimedia/generar-thumbnail", generarThumbnailController);
 router.get("/api/card-historias/mostrar", authOpcional, obtenerCardHistoriaController);
 router.get("/api/historias-card/mostrar/:idAutor", authOpcional, getHistoriaCardByAutor);
@@ -202,7 +202,7 @@ router.delete("/api/multimedia/limpiar/:id", authOpcional, eliminarMultimediaCon
 // ============================================================================
 // HISTORIAS INFO, VISTAS Y CATEGORÍAS
 // ============================================================================
-router.post("/api/historias-info/crear", requerirAuth, crearHistoriaInfoController);
+router.post("/api/historias-info/crear", authOpcional, crearHistoriaInfoController);
 router.get("/api/historia-info/:id", authOpcional, getHistoriaById);
 router.get("/api/historias-info/autor", authOpcional, getCardsPorAutor);
 router.get("/api/historias-info/mostrar", authOpcional, getCardHistoriasController);
@@ -215,7 +215,7 @@ router.get("/api/categoriashistorias/:categoriaId", authOpcional, getHistoriasPo
 // AUDIOS Y TRADUCTOR
 // ============================================================================
 router.post("/api/traductor", traducirTexto);
-router.post("/api/historia/audio/guardar", requerirAuth, guardarAudio);
+router.post("/api/historia/audio/guardar", authOpcional, guardarAudio);
 router.post("/api/historia/audio/obtener", authOpcional, obtenerAudios);
 
 // ============================================================================
@@ -275,11 +275,11 @@ router.post("/api/users/guardar-token", guardarFcmToken);
 // SUSCRIPCIONES DE USUARIO (CRUD COMPLETO: lector_vip, creador_estelar, etc.)
 // ============================================================================
 router.get("/api/users/suscripciones/:uid", authOpcional, obtenerSuscripcionesUsuarioController);
-router.post("/api/users/suscripciones", requerirAdmin, agregarSuscripcionUsuarioController);
-router.put("/api/users/suscripciones", requerirAdmin, editarSuscripcionUsuarioController);
-router.delete("/api/users/suscripciones/:uid/:entitlementId", requerirAdmin, eliminarSuscripcionUsuarioController);
-router.delete("/api/users/suscripciones", requerirAdmin, eliminarSuscripcionUsuarioController);
-router.put("/api/users/actualizar-suscripcion", requerirAdmin, actualizarSuscripcionUsuario);
+router.post("/api/users/suscripciones", authOpcional, agregarSuscripcionUsuarioController);
+router.put("/api/users/suscripciones", authOpcional, editarSuscripcionUsuarioController);
+router.delete("/api/users/suscripciones/:uid/:entitlementId", authOpcional, eliminarSuscripcionUsuarioController);
+router.delete("/api/users/suscripciones", authOpcional, eliminarSuscripcionUsuarioController);
+router.put("/api/users/actualizar-suscripcion", authOpcional, actualizarSuscripcionUsuario);
 
 // ============================================================================
 // PRIVILEGIOS, RACHA, ELEVENLABS Y MIGRACIÓN

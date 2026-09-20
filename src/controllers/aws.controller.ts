@@ -78,19 +78,36 @@ export const uploadToS3 = async (
 export const generateAudio = async (ctx: Context) => {
   try {
     const body = await ctx.request.body.json();
-    const { text, voiceId = "Enrique", engine = "standard" } = body;
+    let { text, voiceId = "Enrique", engine = "standard" } = body;
 
-    const command = new SynthesizeSpeechCommand({
-      OutputFormat: "mp3",
-      Text: `<speak>${text}</speak>`,
-      TextType: "ssml",
-      VoiceId: voiceId,
-      Engine: engine,
-    });
+    let response: any;
+    try {
+      const command = new SynthesizeSpeechCommand({
+        OutputFormat: "mp3",
+        Text: `<speak>${text}</speak>`,
+        TextType: "ssml",
+        VoiceId: voiceId,
+        Engine: engine,
+      });
+      response = await pollyClient.send(command);
+    } catch (errEngine: any) {
+      const msg = String(errEngine?.message || errEngine);
+      if (msg.includes("does not support the selected engine") || msg.includes("engine")) {
+        const altEngine = engine === "neural" ? "standard" : "neural";
+        const retryCommand = new SynthesizeSpeechCommand({
+          OutputFormat: "mp3",
+          Text: `<speak>${text}</speak>`,
+          TextType: "ssml",
+          VoiceId: voiceId,
+          Engine: altEngine,
+        });
+        response = await pollyClient.send(retryCommand);
+      } else {
+        throw errEngine;
+      }
+    }
 
-    const response = await pollyClient.send(command);
-
-    if (response.AudioStream) {
+    if (response && response.AudioStream) {
       ctx.response.headers.set("Content-Type", "audio/mpeg");
       const audioArray = await response.AudioStream.transformToByteArray();
       ctx.response.body = audioArray;

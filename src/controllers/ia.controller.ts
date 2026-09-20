@@ -56,6 +56,27 @@ interface VoiceConfig {
   engine: "standard" | "neural";
 }
 
+export const AWS_POLLY_STANDARD_ONLY = new Set([
+  "Penelope", "Miguel", "Enrique", "Conchita", "Astrid", "Carmen", "Ines",
+  "Ricardo", "Cristiano", "Ruben", "Jan", "Maja", "Jacek", "Ewa", "Karl",
+  "Dora", "Geraint", "Celine", "Mathieu", "Chantal", "Hans", "Marlene",
+  "Vicki", "Aditi", "Raveena", "Giorgio", "Carla", "Bianca", "Mizuki",
+  "Takumi", "Seoyeon", "Liv", "Tatyana", "Maxim"
+]);
+
+export const AWS_POLLY_NEURAL_ONLY = new Set([
+  "Andres", "Pedro", "Sergio", "Sofía", "Arthur", "Danielle", "Gregory",
+  "Liam", "Ruth", "Stephen", "Kazuha", "Tomoko", "Remi", "Adriano",
+  "Thiago", "Camila", "Ida", "Elin", "Hala", "Zayd", "Arlet", "Hiujin", "Zhiyu"
+]);
+
+export function resolverMotorPolly(voiceId: string, requestedEngine?: string): "standard" | "neural" {
+  if (AWS_POLLY_STANDARD_ONLY.has(voiceId)) return "standard";
+  if (AWS_POLLY_NEURAL_ONLY.has(voiceId)) return "neural";
+  if (requestedEngine === "neural" || requestedEngine === "standard") return requestedEngine;
+  return "standard";
+}
+
 /**
  * Adapta y sanitiza el SSML según el motor de voz (standard o neural) de AWS Polly
  */
@@ -242,12 +263,12 @@ export const CATALOGO_VOCES_AWS_POLLY: AwsPollyVoice[] = [
   {
     key: "VOICE_13",
     id: "Penelope",
-    nombre: "Penelope (Neural US)",
+    nombre: "Penelope (Estándar US 2)",
     idioma: "Español",
     codigoIdioma: "es",
     region: "es-US",
     genero: "mujer",
-    motor: "neural",
+    motor: "standard",
   },
   {
     key: "VOICE_14",
@@ -495,12 +516,18 @@ export const obtenerVocesAwsController = (ctx: any) => {
     v.codigoIdioma === "en"
   );
 
+  const mapaVocesKey: Record<string, { id: string; motor: string; nombre: string }> = {};
+  for (const v of CATALOGO_VOCES_AWS_POLLY) {
+    mapaVocesKey[v.key] = { id: v.id, motor: v.motor, nombre: v.nombre };
+  }
+
   ctx.response.status = 200;
   ctx.response.headers.set("Content-Type", "application/json");
   ctx.response.body = {
     success: true,
     total: CATALOGO_VOCES_AWS_POLLY.length,
     proveedor: "AWS Polly",
+    voces: CATALOGO_VOCES_AWS_POLLY,
     idiomas: {
       espanol: {
         total: espanol.length,
@@ -511,7 +538,20 @@ export const obtenerVocesAwsController = (ctx: any) => {
         voces: ingles,
       },
     },
-    todas: CATALOGO_VOCES_AWS_POLLY,
+    mapaVocesKey,
+    ejemploPayload: {
+      TIPO: "AWS",
+      HISTORIA: [
+        {
+          personaje: "VOICE_1",
+          texto: "Hola, esta es una prueba de voz con AWS Polly en español.",
+        },
+        {
+          personaje: "VOICE_7",
+          texto: "Y esta es una respuesta con una voz neural premium compatible.",
+        },
+      ],
+    },
   };
 };
 
@@ -554,8 +594,8 @@ export const generateMultivoiceAudio = async (ctx: any) => {
           ? { id: rawVoice, engine: "standard" }
           : { id: "Mia", engine: "standard" });
 
-      const realVoiceId = voiceConfig.id as any;
-      const engineToUse = voiceConfig.engine;
+      const realVoiceId = (voiceConfig.id || "Mia") as any;
+      let engineToUse = resolverMotorPolly(realVoiceId, voiceConfig.engine);
 
       const rawText = pje.texto || pje.Texto || pje.TEXTO || pje.t ||
         pje.text || "";
@@ -563,18 +603,43 @@ export const generateMultivoiceAudio = async (ctx: any) => {
       if (!String(rawText).trim()) continue;
 
       // Preparamos el SSML correctamente
-      const finalSSML = prepararSSMLParaPolly(String(rawText), engineToUse);
+      let finalSSML = prepararSSMLParaPolly(String(rawText), engineToUse);
 
-      const command = new SynthesizeSpeechCommand({
-        OutputFormat: "mp3",
-        Text: finalSSML,
-        TextType: "ssml",
-        VoiceId: realVoiceId,
-        Engine: engineToUse,
-        SampleRate: "24000",
-      });
+      let res: any;
+      try {
+        const command = new SynthesizeSpeechCommand({
+          OutputFormat: "mp3",
+          Text: finalSSML,
+          TextType: "ssml",
+          VoiceId: realVoiceId,
+          Engine: engineToUse,
+          SampleRate: "24000",
+        });
 
-      const res = await pollyClient.send(command);
+        res = await pollyClient.send(command);
+      } catch (errEngine: any) {
+        const errMsg = String(errEngine?.message || errEngine);
+        // Si falló por incompatibilidad de motor o SSML, reintentar con el motor contrario
+        if (errMsg.includes("does not support the selected engine") || errMsg.includes("engine") || errMsg.includes("Engine")) {
+          const alternateEngine = engineToUse === "neural" ? "standard" : "neural";
+          console.warn(`⚠️ Reintentando Polly para voz '${realVoiceId}' cambiando motor de '${engineToUse}' a '${alternateEngine}'...`);
+          engineToUse = alternateEngine;
+          finalSSML = prepararSSMLParaPolly(String(rawText), engineToUse);
+
+          const retryCommand = new SynthesizeSpeechCommand({
+            OutputFormat: "mp3",
+            Text: finalSSML,
+            TextType: "ssml",
+            VoiceId: realVoiceId,
+            Engine: engineToUse,
+            SampleRate: "24000",
+          });
+
+          res = await pollyClient.send(retryCommand);
+        } else {
+          throw errEngine;
+        }
+      }
 
       if (!res.AudioStream) {
         throw new Error(
@@ -1441,19 +1506,30 @@ export const generarVozGeminiController = async (ctx: any) => {
       : null;
 
     // ========================================================
-    // CASO 1: HISTORIA MULTIVOZ (UNIFICADA EN 1 SOLA PETICIÓN A GEMINI)
+    // CASO 1: HISTORIA MULTIVOZ REAL (CONCATENACIÓN PCM POR PERSONAJE)
     // ========================================================
     if (dialogos && dialogos.length > 0) {
       console.log(
-        `🎙️ Unificando ${dialogos.length} fragmentos en 1 SOLA petición a Gemini (Ahorro de cuota gratis)...`,
+        `🎙️ Iniciando síntesis MULTIVOZ real con Google Gemini para ${dialogos.length} fragmentos...`,
       );
 
-      const listaPersonajes: string[] = [];
-      const lineasGuion: string[] = [];
+      const asignacionesPersonajes = new Map<string, string>();
+      const dialogosNormalizados: Array<{
+        personaje: string;
+        voz: string;
+        texto: string;
+        estilo: string;
+      }> = [];
 
       for (const item of dialogos) {
         if (typeof item === "string" && item.trim()) {
-          lineasGuion.push(item.trim());
+          const vozDefault = VOCES_GEMINI_MAP[String(body.voz || "Aoede").toUpperCase()] || "Aoede";
+          dialogosNormalizados.push({
+            personaje: "NARRADOR",
+            voz: vozDefault,
+            texto: item.trim(),
+            estilo: body.estilo || "",
+          });
           continue;
         }
 
@@ -1468,19 +1544,19 @@ export const generarVozGeminiController = async (ctx: any) => {
 
         if (!rawTexto) continue;
 
-        const estilo = item.estilo || item.emocion
-          ? ` (${item.estilo || item.emocion})`
-          : "";
-        lineasGuion.push(
-          `${rawPersonaje.toUpperCase()}${estilo}: "${rawTexto}"`,
-        );
+        // Si el usuario especificó una voz directa de Gemini en el item, usarla
+        const rawVozItem = String(item.voz || item.voice || "").trim().toUpperCase();
+        const vozAsignada = VOCES_GEMINI_MAP[rawVozItem] || resolverVozGemini(rawPersonaje, asignacionesPersonajes);
 
-        if (!listaPersonajes.includes(rawPersonaje)) {
-          listaPersonajes.push(rawPersonaje);
-        }
+        dialogosNormalizados.push({
+          personaje: rawPersonaje || "NARRADOR",
+          voz: vozAsignada,
+          texto: rawTexto,
+          estilo: item.estilo || item.emocion || body.estilo || "",
+        });
       }
 
-      if (lineasGuion.length === 0) {
+      if (dialogosNormalizados.length === 0) {
         ctx.response.status = 400;
         ctx.response.body = {
           success: false,
@@ -1490,54 +1566,139 @@ export const generarVozGeminiController = async (ctx: any) => {
         return;
       }
 
-      // Guion completo unificado con instrucciones de actuación y cambio de voces
-      const guionUnificado = lineasGuion.join("\n\n");
-      const vozPrincipal = VOCES_GEMINI_MAP[
-        String(body.voz || body.voice || listaPersonajes[0] || "Aoede")
-          .toUpperCase()
-      ] || "Aoede";
+      // Optimización inteligente: Agrupar fragmentos consecutivos que tengan la misma voz y estilo
+      const gruposDialogos: Array<{
+        voz: string;
+        texto: string;
+        estilo: string;
+        personajes: string[];
+      }> = [];
 
-      const promptInstruccion =
-        `Actúa y narra el siguiente guion dramatizado con locución cinematográfica profesional. 
-Modula y adapta la entonación, ritmo y emoción para que cada personaje se distinga claramente:
-
-${guionUnificado}`;
-
-      console.log(
-        `  -> Enviando guion completo (${lineasGuion.length} diálogos) en 1 sola llamada a Gemini (Voz base: ${vozPrincipal})...`,
-      );
-
-      const { pcmBytes, modelo } = await sintetizarAudioGeminiPCM(
-        promptInstruccion,
-        vozPrincipal,
-        geminiKey,
-        body.estilo || body.instrucciones ||
-          "actuación dramática con cambios de emoción según el personaje",
-      );
-
-      // Empaquetar a WAV estándar 24kHz 16-bit
-      const wavBytes = pcmToWav(pcmBytes, 24000, 1, 16);
-      const fileName = `historia_gemini_${Date.now()}.wav`;
-      const s3Url = await uploadToS3(wavBytes, fileName, "audio/wav", "google");
+      for (const d of dialogosNormalizados) {
+        const ultimoGrupo = gruposDialogos[gruposDialogos.length - 1];
+        if (ultimoGrupo && ultimoGrupo.voz === d.voz && ultimoGrupo.estilo === d.estilo) {
+          ultimoGrupo.texto += ` ${d.texto}`;
+          if (!ultimoGrupo.personajes.includes(d.personaje)) {
+            ultimoGrupo.personajes.push(d.personaje);
+          }
+        } else {
+          gruposDialogos.push({
+            voz: d.voz,
+            texto: d.texto,
+            estilo: d.estilo,
+            personajes: [d.personaje],
+          });
+        }
+      }
 
       console.log(
-        `✅ Audio de historia completa generado con 1 sola llamada y subido a S3: ${s3Url}`,
+        `🎙️ ${dialogosNormalizados.length} diálogos agrupados en ${gruposDialogos.length} bloques multivoz (${Array.from(new Set(dialogosNormalizados.map((d) => d.voz))).join(", ")})...`,
       );
 
-      ctx.response.status = 200;
-      ctx.response.headers.set("Content-Type", "application/json");
-      ctx.response.body = {
-        success: true,
-        audioUrl: s3Url,
-        url: s3Url,
-        tipo: "HISTORIA_COMPLETA_1_PETICION",
-        segmentosProcesados: lineasGuion.length,
-        personajes: listaPersonajes,
-        modelo: modelo,
-        mensaje:
-          "Audio completo de la historia generado con éxito en 1 sola petición a Google Gemini",
-      };
-      return;
+      // Sintetizar cada bloque multivoz con su respectiva voz de Gemini
+      const pcmBloques: Uint8Array[] = [];
+      let modeloUtilizado = "gemini-3.1-flash-tts-preview";
+
+      try {
+        // Pausa de silencio entre cambios de locutor (200ms de silencio a 24kHz 16-bit Mono = 9600 bytes)
+        const silencioPause = new Uint8Array(24000 * 2 * 0.2);
+
+        for (let i = 0; i < gruposDialogos.length; i++) {
+          const grupo = gruposDialogos[i];
+          console.log(
+            `  -> [${i + 1}/${gruposDialogos.length}] Generando voz "${grupo.voz}" para personajes [${grupo.personajes.join(", ")}]: "${grupo.texto.substring(0, 50)}..."`,
+          );
+
+          const { pcmBytes, modelo } = await sintetizarAudioGeminiPCM(
+            grupo.texto,
+            grupo.voz,
+            geminiKey,
+            grupo.estilo,
+          );
+
+          modeloUtilizado = modelo;
+          pcmBloques.push(pcmBytes);
+
+          // Si hay más bloques, agregar pausa natural de respiración
+          if (i < gruposDialogos.length - 1) {
+            pcmBloques.push(silencioPause);
+          }
+        }
+
+        // Unir todos los buffers PCM en un solo audio continuo
+        const totalBytes = pcmBloques.reduce((sum, b) => sum + b.length, 0);
+        const mergedPCM = new Uint8Array(totalBytes);
+        let offset = 0;
+        for (const b of pcmBloques) {
+          mergedPCM.set(b, offset);
+          offset += b.length;
+        }
+
+        // Empaquetar a WAV estándar 24kHz 16-bit
+        const wavBytes = pcmToWav(mergedPCM, 24000, 1, 16);
+        const fileName = `historia_gemini_multivoz_${Date.now()}.wav`;
+        const s3Url = await uploadToS3(wavBytes, fileName, "audio/wav", "google");
+
+        const duracionAproxSeg = Number((totalBytes / (24000 * 2)).toFixed(1));
+
+        console.log(
+          `✅ Audio MULTIVOZ Gemini generado y subido a S3 (${duracionAproxSeg}s): ${s3Url}`,
+        );
+
+        ctx.response.status = 200;
+        ctx.response.headers.set("Content-Type", "application/json");
+        ctx.response.body = {
+          success: true,
+          audioUrl: s3Url,
+          url: s3Url,
+          tipo: "MULTIVOZ_REAL_GEMINI",
+          duracionAproxSeg,
+          segmentosProcesados: dialogosNormalizados.length,
+          bloquesSintetizados: gruposDialogos.length,
+          vocesUsadas: Array.from(new Set(dialogosNormalizados.map((d) => d.voz))),
+          asignacionPersonajes: Object.fromEntries(asignacionesPersonajes),
+          modelo: modeloUtilizado,
+          mensaje:
+            "Audio multivoz generado con éxito combinando las diferentes voces de Gemini",
+        };
+        return;
+      } catch (multivozErr) {
+        console.warn(
+          "⚠️ Falló síntesis multivoz en bloques, ejecutando fallback unificado:",
+          multivozErr,
+        );
+
+        // Fallback resiliente: 1 llamada unificada
+        const lineasGuion = dialogosNormalizados.map(
+          (d) => `${d.personaje.toUpperCase()}: "${d.texto}"`,
+        );
+        const guionUnificado = lineasGuion.join("\n\n");
+        const vozFallback = dialogosNormalizados[0]?.voz || "Aoede";
+
+        const { pcmBytes, modelo } = await sintetizarAudioGeminiPCM(
+          `Narra el siguiente guion dramatizado:\n\n${guionUnificado}`,
+          vozFallback,
+          geminiKey,
+          body.estilo || "locución cinematográfica",
+        );
+
+        const wavBytes = pcmToWav(pcmBytes, 24000, 1, 16);
+        const fileName = `historia_gemini_${Date.now()}.wav`;
+        const s3Url = await uploadToS3(wavBytes, fileName, "audio/wav", "google");
+
+        ctx.response.status = 200;
+        ctx.response.headers.set("Content-Type", "application/json");
+        ctx.response.body = {
+          success: true,
+          audioUrl: s3Url,
+          url: s3Url,
+          tipo: "HISTORIA_FALLBACK_UNIFICADA",
+          segmentosProcesados: lineasGuion.length,
+          modelo,
+          mensaje: "Audio de historia generado exitosamente",
+        };
+        return;
+      }
     }
 
     // ========================================================

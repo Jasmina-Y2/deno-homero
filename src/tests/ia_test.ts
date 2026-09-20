@@ -44,3 +44,12 @@ Deno.test("IA Gemini Voz: Falla si el texto está vacío", async () => {
   assertEquals(ctx.response.body.success, false);
 });
 
+Deno.test("IA Gemini Voz: Falla si el array de diálogos no contiene texto", async () => {
+  const ctx = createMockContext({ historia: [{ personaje: "Narrador", texto: "   " }] });
+  await generarVozGeminiController(ctx);
+
+  assertEquals(ctx.response.status, 400);
+  assertEquals(ctx.response.body.success, false);
+});
+
+
