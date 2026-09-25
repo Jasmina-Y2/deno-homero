@@ -2,3 +2,4 @@
 node_modules
 serviceAccountKey.json
 src/config/serviceAccountKey.json
+clave.json
