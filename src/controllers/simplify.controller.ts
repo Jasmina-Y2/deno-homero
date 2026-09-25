@@ -33,7 +33,7 @@ import {
 } from "../service/notification.service.ts";
 import { getGenteQueMeSigueService } from "../service/seguir.service.ts";
 import { getGenteQueYoSigoService } from "../service/seguiruser.service.ts";
-import { CATALOGO_VOCES_AZURE, LISTA_VOCES_GEMINI } from "./ia.controller.ts";
+import { CATALOGO_VOCES_AWS_POLLY, CATALOGO_VOCES_AZURE, LISTA_VOCES_GEMINI } from "./ia.controller.ts";
 import { ElevenLabsService } from "../service/elevenlabs.service.ts";
 import { obtenerPagosUsuarioService } from "../service/pago.service.ts";
 import { obtenerComprasUsuarioService } from "../service/comprasApp.service.ts";
@@ -1527,6 +1527,31 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
       voces: elevenVoices.all || [],
     };
 
+    // 4. Voces AWS Polly
+    const espanolAws = (CATALOGO_VOCES_AWS_POLLY || []).filter((v: any) =>
+      v.codigoIdioma === "es"
+    );
+    const inglesAws = (CATALOGO_VOCES_AWS_POLLY || []).filter((v: any) =>
+      v.codigoIdioma === "en"
+    );
+    const awsData = {
+      success: true,
+      total: CATALOGO_VOCES_AWS_POLLY.length,
+      proveedor: "AWS Polly",
+      idiomas: {
+        espanol: {
+          total: espanolAws.length,
+          voces: espanolAws,
+        },
+        ingles: {
+          total: inglesAws.length,
+          voces: inglesAws,
+        },
+      },
+      todas: CATALOGO_VOCES_AWS_POLLY,
+      voces: CATALOGO_VOCES_AWS_POLLY,
+    };
+
     ctx.response.headers.set(
       "Cache-Control",
       "public, max-age=3600, stale-while-revalidate=86400",
@@ -1535,18 +1560,21 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
     ctx.response.body = {
       success: true,
       message:
-        "Catálogo completo de voces de IA (Azure, Gemini y ElevenLabs) obtenido correctamente",
+        "Catálogo completo de voces de IA (Azure, Gemini, ElevenLabs y AWS Polly) obtenido correctamente",
       data: {
         azure: azureData,
         gemini: geminiData,
         elevenlabs: elevenlabsData,
+        aws: awsData,
+        polly: awsData,
       },
       totales: {
         azure: CATALOGO_VOCES_AZURE.length,
         gemini: LISTA_VOCES_GEMINI.length,
         elevenlabs: elevenVoices.total || 0,
+        aws: CATALOGO_VOCES_AWS_POLLY.length,
         total: CATALOGO_VOCES_AZURE.length + LISTA_VOCES_GEMINI.length +
-          (elevenVoices.total || 0),
+          (elevenVoices.total || 0) + CATALOGO_VOCES_AWS_POLLY.length,
       },
     };
   } catch (error: any) {
@@ -1560,6 +1588,8 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
         azure: { total: 0, voces: [] },
         gemini: { total: 0, voces: [] },
         elevenlabs: { total: 0, voces: [] },
+        aws: { total: 0, voces: [] },
+        polly: { total: 0, voces: [] },
       },
     };
   }
