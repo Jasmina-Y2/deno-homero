@@ -126,6 +126,8 @@ export interface AwsPollyVoice {
   region: string;
   genero: "mujer" | "hombre";
   motor: "standard" | "neural";
+  mp3?: string;
+  preview_url?: string | null;
 }
 
 export const CATALOGO_VOCES_AWS_POLLY: AwsPollyVoice[] = [
@@ -503,6 +505,12 @@ export const CATALOGO_VOCES_AWS_POLLY: AwsPollyVoice[] = [
     motor: "neural",
   },
 ];
+
+// Asignar URLs del MP3 de muestra a todas las voces de AWS Polly
+for (const v of CATALOGO_VOCES_AWS_POLLY) {
+  v.mp3 = `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/VOCES_AUDIO_AWS/${encodeURIComponent(v.id)}_${v.motor}.mp3`;
+  v.preview_url = v.mp3;
+}
 
 /**
  * Retorna el catálogo completo de voces de AWS Polly organizado por idioma (Español e Inglés) y motor (Standard / Neural)
@@ -1897,6 +1905,12 @@ export const LISTA_VOCES_GEMINI = [
   },
 ];
 
+// Asignar URLs del MP3 de muestra a todas las voces de Google Gemini
+for (const v of LISTA_VOCES_GEMINI as any[]) {
+  v.mp3 = `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/VOCES_AUDIO_GOOGLE/${encodeURIComponent(v.id)}.mp3`;
+  v.preview_url = v.mp3;
+}
+
 /**
  * Retorna el catálogo completo de voces neuronales gratuitas disponibles en Google Gemini
  */
@@ -1996,6 +2010,8 @@ export interface AzureVoice {
   motor: "neural";
   estilos?: string[];
   descripcion: string;
+  mp3?: string;
+  preview_url?: string | null;
 }
 
 export const CATALOGO_VOCES_AZURE: AzureVoice[] = [
@@ -2636,8 +2652,10 @@ const VOCES_AZURE_ALIAS_MAP: Record<string, string> = {
   "ALONSO": "es-US-AlonsoNeural",
 };
 
-// Indexar todas las voces del catálogo por Key y por Alias
+// Indexar todas las voces del catálogo por Key y por Alias, y asignar URL del MP3 de muestra
 for (const v of CATALOGO_VOCES_AZURE) {
+  v.mp3 = `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/VOCES_AUDIO_AZURE/${encodeURIComponent(v.alias)}.mp3`;
+  v.preview_url = v.mp3;
   VOCES_AZURE_ALIAS_MAP[v.key.toUpperCase()] = v.id;
   VOCES_AZURE_ALIAS_MAP[v.alias.toUpperCase()] = v.id;
   VOCES_AZURE_ALIAS_MAP[v.id.toUpperCase()] = v.id;

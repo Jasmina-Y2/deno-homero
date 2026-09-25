@@ -1,5 +1,5 @@
 // elevenlabs.service.ts
-import { config, SPANISH_VOICES } from "../config/elevenlabs.ts";
+import { config, ElevenLabsVoice, SPANISH_VOICES } from "../config/elevenlabs.ts";
 import { PutObjectCommand } from "npm:@aws-sdk/client-s3";
 import { BUCKET_NAME, s3Client } from "../config/aws.ts";
 import { db } from "../config/firebase.ts";
@@ -113,7 +113,7 @@ export class ElevenLabsService {
   }
 
   /**
-   * Sube el buffer de audio a S3 en la carpeta elevenslab/ y devuelve la URL pública.
+   * Sube el buffer de audio a S3 en la carpeta especificada y devuelve la URL pública.
    */
   async uploadToS3(
     buffer: Uint8Array,
@@ -121,10 +121,7 @@ export class ElevenLabsService {
     folder = "elevenslab",
   ): Promise<string> {
     try {
-      const uniqueId = `${Date.now()}-${
-        Math.random().toString(36).substring(2, 8)
-      }`;
-      const key = `${folder}/${uniqueId}-${fileName}`;
+      const key = `${folder}/${fileName}`;
 
       const command = new PutObjectCommand({
         Bucket: BUCKET_NAME,
@@ -135,7 +132,7 @@ export class ElevenLabsService {
       });
 
       await s3Client.send(command);
-      return `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/${key}`;
+      return `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/${folder}/${encodeURIComponent(fileName)}`;
     } catch (error) {
       console.error("❌ Error subiendo audio de ElevenLabs a S3:", error);
       throw error;
@@ -230,7 +227,8 @@ export class ElevenLabsService {
   }
 
   /**
-   * Devuelve las voces configuradas organizadas por categorías, idiomas y lista general.
+   * Devuelve las voces configuradas organizadas por categorías, idiomas y lista general,
+   * incluyendo la URL del archivo mp3 para cada voz.
    */
   getVoices() {
     return {
@@ -319,5 +317,84 @@ export class ElevenLabsService {
       bitrate: "128k",
       sampleRate: "44100",
     });
+  }
+
+  /**
+   * Sincroniza todas las voces con AWS S3 y Firebase Firestore.
+   * Genera el audio para cada voz con el mensaje dado, lo sube a S3 y actualiza Firestore.
+   */
+  async syncVoicesWithS3AndFirebase(
+    sampleText = "HOLA ESTO ES UNA PRUEBA DE MI VOZ EN HOMERO",
+    folder = "VOCES_AUDIO_ELEVENSLAB",
+  ) {
+    const results: Array<{
+      id: string;
+      name: string;
+      gender: string;
+      mp3: string;
+      status: "ok" | "error";
+      error?: string;
+    }> = [];
+
+    for (const voice of SPANISH_VOICES) {
+      try {
+        const audioBuffer = await this.generateAudio(sampleText, voice.id);
+        const fileName = `${voice.name}.mp3`;
+        const s3Key = `${folder}/${fileName}`;
+
+        const uploadCmd = new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: s3Key,
+          Body: audioBuffer,
+          ContentType: "audio/mpeg",
+          ACL: "public-read",
+        });
+        await s3Client.send(uploadCmd);
+
+        const s3Url = `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/${folder}/${encodeURIComponent(fileName)}`;
+
+        const docData = {
+          id: voice.id,
+          voiceId: voice.id,
+          name: voice.name,
+          nombre: voice.name,
+          gender: voice.gender,
+          genero: voice.gender,
+          mp3: s3Url,
+          audioUrl: s3Url,
+          preview_url: s3Url,
+          textoPrueba: sampleText,
+          description: voice.description,
+          descripcion: voice.description,
+          idioma: voice.idioma,
+          language: voice.language,
+          codigoIdioma: voice.codigoIdioma,
+          idiomasSoportados: voice.idiomasSoportados,
+          multilingue: voice.multilingue,
+          actualizadoEn: new Date().toISOString(),
+        };
+
+        await db.collection(folder).doc(voice.id).set(docData, { merge: true });
+
+        results.push({
+          id: voice.id,
+          name: voice.name,
+          gender: voice.gender,
+          mp3: s3Url,
+          status: "ok",
+        });
+      } catch (err) {
+        results.push({
+          id: voice.id,
+          name: voice.name,
+          gender: voice.gender,
+          mp3: "",
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return results;
   }
 }

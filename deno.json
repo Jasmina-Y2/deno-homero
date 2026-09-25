@@ -1,7 +1,11 @@
 {
   "tasks": {
     "dev": "deno run -A --watch main.ts",
-    "start": "deno run --allow-net --allow-read --allow-env main.ts"
+    "start": "deno run --allow-net --allow-read --allow-env main.ts",
+    "sync-voices": "deno run -A scripts/sync_all_elevenlabs_voices.ts",
+    "sync-azure-voices": "deno run -A scripts/sync_all_azure_voices.ts",
+    "sync-aws-voices": "deno run -A scripts/sync_all_aws_voices.ts",
+    "sync-google-voices": "deno run -A scripts/sync_all_google_voices.ts"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@1",

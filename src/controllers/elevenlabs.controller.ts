@@ -18,7 +18,7 @@ export const getServiceStatus = async (ctx: RouterContext<string>) => {
 };
 
 /**
- * Endpoint para obtener todas las voces disponibles (femeninas, masculinas, neutrales)
+ * Endpoint para obtener todas las voces disponibles (femeninas, masculinas, neutrales) con sus URLs MP3
  * GET /elevenslab/voices
  */
 export const getAvailableVoices = (ctx: RouterContext<string>) => {
@@ -28,6 +28,54 @@ export const getAvailableVoices = (ctx: RouterContext<string>) => {
     success: true,
     ...voicesData,
   };
+};
+
+/**
+ * Endpoint para sincronizar todas las voces, generar muestra, subir a S3 (VOCES_AUDIO_ELEVENSLAB) y guardar en Firestore
+ * POST /elevenslab/sync-voices
+ */
+export const syncVoicesController = async (ctx: RouterContext<string>) => {
+  try {
+    let sampleText = "HOLA ESTO ES UNA PRUEBA DE MI VOZ EN HOMERO";
+    let folder = "VOCES_AUDIO_ELEVENSLAB";
+
+    try {
+      const body = await ctx.request.body.json();
+      if (body.text || body.texto || body.sampleText) {
+        sampleText = body.text || body.texto || body.sampleText;
+      }
+      if (body.folder || body.carpeta) {
+        folder = body.folder || body.carpeta;
+      }
+    } catch {
+      // Body opcional
+    }
+
+    const results = await elevenLabsService.syncVoicesWithS3AndFirebase(
+      sampleText,
+      folder,
+    );
+
+    const successCount = results.filter((r) => r.status === "ok").length;
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      total: results.length,
+      sincronizadas: successCount,
+      folder: folder,
+      sampleText: sampleText,
+      data: results,
+      message: `Se sincronizaron ${successCount} de ${results.length} voces en AWS S3 y Firebase Firestore.`,
+    };
+  } catch (error) {
+    console.error("[ElevenLabs Sync Error]:", error);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      error: error instanceof Error ? error.message : "Error interno en sincronización",
+    };
+  }
 };
 
 /**

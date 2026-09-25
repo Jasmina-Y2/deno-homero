@@ -1,3 +1,5 @@
+import { BUCKET_NAME } from "./aws.ts";
+
 export interface ElevenLabsVoice {
   id: string;
   name: string;
@@ -8,12 +10,16 @@ export interface ElevenLabsVoice {
   codigoIdioma: string;
   idiomasSoportados: string[];
   multilingue: boolean;
+  mp3: string;
   preview_url?: string | null;
 }
 
 const IDIOMAS_MULTILINGUAL_V2 = [
   "es", "en", "pt", "fr", "de", "it", "ja", "ko", "zh", "hi", "ar", "ru", "pl", "nl", "tr", "sv", "id", "fil", "uk", "el", "cs", "fi", "ro", "da", "bg", "ms", "sk", "hr", "ta"
 ];
+
+const getS3Mp3Url = (name: string) =>
+  `https://${BUCKET_NAME}.s3.us-east-1.amazonaws.com/VOCES_AUDIO_ELEVENSLAB/${name}.mp3`;
 
 export const SPANISH_VOICES: ElevenLabsVoice[] = [
   // 👩 VOCES FEMENINAS
@@ -27,6 +33,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Matilda"),
+    preview_url: getS3Mp3Url("Matilda"),
   },
   {
     id: "EXAVITQu4vr4xnSDxMaL",
@@ -38,6 +46,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Sarah"),
+    preview_url: getS3Mp3Url("Sarah"),
   },
   {
     id: "FGY2WhTYpPnrIDTdsKH5",
@@ -49,6 +59,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Laura"),
+    preview_url: getS3Mp3Url("Laura"),
   },
   {
     id: "Xb7hH8MSUJpSbSDYk0k2",
@@ -60,6 +72,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Alice"),
+    preview_url: getS3Mp3Url("Alice"),
   },
   {
     id: "hpp4J3VqNfWAUOO0d1Us",
@@ -71,6 +85,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Bella"),
+    preview_url: getS3Mp3Url("Bella"),
   },
   {
     id: "cgSgspJ2msm6clMCkdW9",
@@ -82,6 +98,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Jessica"),
+    preview_url: getS3Mp3Url("Jessica"),
   },
   {
     id: "pFZP5JQG7iQjIQuC4Bku",
@@ -93,6 +111,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Lily"),
+    preview_url: getS3Mp3Url("Lily"),
   },
 
   // 👨 VOCES MASCULINAS / NEUTRALES
@@ -106,6 +126,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Adam"),
+    preview_url: getS3Mp3Url("Adam"),
   },
   {
     id: "CwhRBWXzGAHq8TQ4Fs17",
@@ -117,6 +139,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Roger"),
+    preview_url: getS3Mp3Url("Roger"),
   },
   {
     id: "IKne3meq5aSn9XLyUdCD",
@@ -128,6 +152,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Charlie"),
+    preview_url: getS3Mp3Url("Charlie"),
   },
   {
     id: "JBFqnCBsd6RMkjVDRZzb",
@@ -139,6 +165,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("George"),
+    preview_url: getS3Mp3Url("George"),
   },
   {
     id: "N2lVS1w4EtoT3dr4eOWO",
@@ -150,6 +178,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Callum"),
+    preview_url: getS3Mp3Url("Callum"),
   },
   {
     id: "SAz9YHcvj6GT2YYXdXww",
@@ -161,6 +191,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("River"),
+    preview_url: getS3Mp3Url("River"),
   },
   {
     id: "SOYHLrjzK2X1ezoPC6cr",
@@ -172,6 +204,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Harry"),
+    preview_url: getS3Mp3Url("Harry"),
   },
   {
     id: "TX3LPaxmHKxFdv7VOQHJ",
@@ -183,6 +217,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Liam"),
+    preview_url: getS3Mp3Url("Liam"),
   },
   {
     id: "bIHbv24MWmeRgasZH58o",
@@ -194,6 +230,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Will"),
+    preview_url: getS3Mp3Url("Will"),
   },
   {
     id: "cjVigY5qzO86Huf0OWal",
@@ -205,6 +243,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Eric"),
+    preview_url: getS3Mp3Url("Eric"),
   },
   {
     id: "iP95p4xoKVk53GoZ742B",
@@ -216,6 +256,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Chris"),
+    preview_url: getS3Mp3Url("Chris"),
   },
   {
     id: "nPczCjzI2devNBz1zQrb",
@@ -227,6 +269,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Brian"),
+    preview_url: getS3Mp3Url("Brian"),
   },
   {
     id: "onwK4e9ZLuTAKqWW03F9",
@@ -238,6 +282,8 @@ export const SPANISH_VOICES: ElevenLabsVoice[] = [
     codigoIdioma: "es",
     idiomasSoportados: IDIOMAS_MULTILINGUAL_V2,
     multilingue: true,
+    mp3: getS3Mp3Url("Daniel"),
+    preview_url: getS3Mp3Url("Daniel"),
   },
 ];
 
@@ -245,9 +291,10 @@ export const config = {
   elevenLabs: {
     defaultVoiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah
     modelId: "eleven_multilingual_v2",
+    sampleFolder: "VOCES_AUDIO_ELEVENSLAB",
+    sampleText: "HOLA ESTO ES UNA PRUEBA DE MI VOZ EN HOMERO",
   },
   server: {
     port: Number(Deno.env.get("PORT")) || 8000,
   },
 };
-
