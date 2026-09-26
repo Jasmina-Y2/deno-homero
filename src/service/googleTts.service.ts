@@ -8,6 +8,7 @@ import {
   TEXTO_MUESTRA_DEFAULT,
   extractLanguageCode,
   GoogleVoiceMetadata,
+  getGoogleCredentials,
 } from "../config/google.ts";
 import { BUCKET_NAME, s3Client } from "../config/aws.ts";
 import { PutObjectCommand } from "npm:@aws-sdk/client-s3";
@@ -72,15 +73,17 @@ async function getGoogleOAuthToken(): Promise<string> {
     return cachedAuthToken;
   }
 
+  const { credentials, path } = await getGoogleCredentials();
+
   const auth = new GoogleAuth({
-    keyFilename: "./clave.json",
+    ...(credentials ? { credentials } : { keyFilename: "./clave.json" }),
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],
   });
 
   const client = await auth.getClient();
   const tokenRes = await client.getAccessToken();
   if (!tokenRes.token) {
-    throw new Error("No se pudo obtener el OAuth token de Google con clave.json");
+    throw new Error(`No se pudo obtener el OAuth token de Google desde ${path || "clave.json"}`);
   }
 
   cachedAuthToken = tokenRes.token;
