@@ -43,11 +43,14 @@ export const GOOGLE_PREMIUM_VOICES_LIST = new Set([
 ]);
 
 /**
- * Obtiene las credenciales de Google Service Account desde clave.json o variables de entorno.
+ * Obtiene las credenciales de Google Service Account desde clave.json, serviceAccountKey.json o variables de entorno.
  */
 export async function getGoogleCredentials() {
   const possiblePaths = [
     "./clave.json",
+    "./src/config/clave.json",
+    "./serviceAccountKey.json",
+    "./src/config/serviceAccountKey.json",
   ];
 
   for (const path of possiblePaths) {
@@ -65,20 +68,28 @@ export async function getGoogleCredentials() {
     }
   }
 
-  const envCredentials = Deno.env.get("GOOGLE_CREDENTIALS");
+  const envCandidates = [
+    Deno.env.get("GOOGLE_CREDENTIALS"),
+    Deno.env.get("GOOGLE_CREDENTIALS_JSON"),
+    Deno.env.get("FIREBASE_KEY"),
+    Deno.env.get("GOOGLE_APPLICATION_CREDENTIALS_JSON"),
+    Deno.env.get("GOOGLE_KEY_JSON"),
+  ];
 
-  if (envCredentials) {
-    try {
-      let raw = envCredentials.trim();
-      if (raw.startsWith("ey") && !raw.startsWith("{")) {
-        raw = atob(raw);
+  for (const envVal of envCandidates) {
+    if (envVal && typeof envVal === "string" && envVal.trim()) {
+      try {
+        let raw = envVal.trim();
+        if (raw.startsWith("ey") && !raw.startsWith("{")) {
+          raw = atob(raw);
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed.type === "service_account" && parsed.client_email && parsed.private_key) {
+          return { credentials: parsed, path: "ENV" };
+        }
+      } catch (e) {
+        console.warn("⚠️ Error parseando credenciales de Google desde ENV:", e);
       }
-      const parsed = JSON.parse(raw);
-      if (parsed.type === "service_account" && parsed.client_email && parsed.private_key) {
-        return { credentials: parsed, path: "ENV" };
-      }
-    } catch (e) {
-      console.warn("⚠️ Error parseando credenciales de Google desde ENV:", e);
     }
   }
 

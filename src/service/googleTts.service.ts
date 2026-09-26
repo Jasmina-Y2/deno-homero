@@ -75,15 +75,27 @@ async function getGoogleOAuthToken(): Promise<string> {
 
   const { credentials, path } = await getGoogleCredentials();
 
-  const auth = new GoogleAuth({
-    ...(credentials ? { credentials } : { keyFilename: "./clave.json" }),
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-  });
+  let auth: GoogleAuth;
+  if (credentials) {
+    auth = new GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+  } else {
+    try {
+      auth = new GoogleAuth({
+        keyFilename: "./clave.json",
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      });
+    } catch {
+      throw new Error("No se encontraron credenciales de Google (clave.json o variable de entorno GOOGLE_CREDENTIALS / FIREBASE_KEY)");
+    }
+  }
 
   const client = await auth.getClient();
   const tokenRes = await client.getAccessToken();
   if (!tokenRes.token) {
-    throw new Error(`No se pudo obtener el OAuth token de Google desde ${path || "clave.json"}`);
+    throw new Error(`No se pudo obtener el OAuth token de Google desde ${path || "credenciales"}`);
   }
 
   cachedAuthToken = tokenRes.token;
