@@ -196,13 +196,22 @@ export class GoogleTtsService {
       return existing ? { ...cv, ...existing } : cv;
     });
 
+    const gratis = voices.filter((v) => !v.is_premium);
+    const premium = voices.filter((v) => v.is_premium);
+
     return {
       success: true,
       total: voices.length,
+      totalGratis: gratis.length,
+      totalPremium: premium.length,
       provider: "Google Cloud Text-to-Speech (Gemini 2.5 Pro TTS)",
       folderS3: FOLDER_GOOGLE_VOCES,
       textoMuestra: TEXTO_MUESTRA_DEFAULT,
       vocesOficialesGoogle: voices,
+      vocesGratis: gratis.map((v) => v.name || v.shortName),
+      vocesPremium: premium.map((v) => v.name || v.shortName),
+      listaVocesGratis: gratis,
+      listaVocesPremium: premium,
       vocesFemeninas: voices.filter((v) => v.gender === "female" || v.genero === "Femenino").map((v) => v.name || v.shortName),
       vocesMasculinas: voices.filter((v) => v.gender === "male" || v.genero === "Masculino").map((v) => v.name || v.shortName),
     };

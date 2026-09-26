@@ -35,6 +35,7 @@ import { getGenteQueMeSigueService } from "../service/seguir.service.ts";
 import { getGenteQueYoSigoService } from "../service/seguiruser.service.ts";
 import { CATALOGO_VOCES_AWS_POLLY, CATALOGO_VOCES_AZURE, LISTA_VOCES_GEMINI } from "./ia.controller.ts";
 import { ElevenLabsService } from "../service/elevenlabs.service.ts";
+import { googleTtsService } from "../service/googleTts.service.ts";
 import { obtenerPagosUsuarioService } from "../service/pago.service.ts";
 import { obtenerComprasUsuarioService } from "../service/comprasApp.service.ts";
 import { consultarEstadoLimiteDispositivoService } from "../service/deviceAdLimit.service.ts";
@@ -1480,7 +1481,7 @@ export const getSimplifyTab3DataController = async (
 // ============================================================================
 const elevenLabsServiceInstance = new ElevenLabsService();
 
-export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
+export const getSimplifyVocesController = async (ctx: RouterContext<string>) => {
   try {
     // 1. Voces Azure
     const espanolAzure = (CATALOGO_VOCES_AZURE || []).filter((v: any) =>
@@ -1508,15 +1509,27 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
       voces: CATALOGO_VOCES_AZURE,
     };
 
-    // 2. Voces Google Gemini
+    // 2. Voces Google Gemini (30 Voces Oficiales con soporte Gratis y Premium)
+    const geminiVoicesRes = await googleTtsService.getVoices();
     const geminiData = {
       success: true,
-      total: LISTA_VOCES_GEMINI.length,
-      proveedor: "Google Gemini API (AI Studio)",
+      total: geminiVoicesRes.total,
+      totalGratis: geminiVoicesRes.totalGratis,
+      totalPremium: geminiVoicesRes.totalPremium,
+      proveedor: "Google Cloud Text-to-Speech (Gemini 2.5 Pro TTS)",
+      folderS3: geminiVoicesRes.folderS3,
+      textoMuestra: geminiVoicesRes.textoMuestra,
+      voces: geminiVoicesRes.vocesOficialesGoogle,
+      vocesOficialesGoogle: geminiVoicesRes.vocesOficialesGoogle,
+      vocesGratis: geminiVoicesRes.vocesGratis,
+      vocesPremium: geminiVoicesRes.vocesPremium,
+      listaVocesGratis: geminiVoicesRes.listaVocesGratis,
+      listaVocesPremium: geminiVoicesRes.listaVocesPremium,
+      vocesFemeninas: geminiVoicesRes.vocesFemeninas,
+      vocesMasculinas: geminiVoicesRes.vocesMasculinas,
       gratis: true,
       soporteMultilingue:
         "Todas las voces detectan automáticamente el idioma del texto (Español, Inglés, Portugués, Francés, Alemán, Italiano, Japonés, etc.) sin necesidad de configuración adicional.",
-      voces: LISTA_VOCES_GEMINI,
     };
 
     // 3. Voces ElevenLabs
@@ -1570,10 +1583,10 @@ export const getSimplifyVocesController = (ctx: RouterContext<string>) => {
       },
       totales: {
         azure: CATALOGO_VOCES_AZURE.length,
-        gemini: LISTA_VOCES_GEMINI.length,
+        gemini: geminiVoicesRes.total,
         elevenlabs: elevenVoices.total || 0,
         aws: CATALOGO_VOCES_AWS_POLLY.length,
-        total: CATALOGO_VOCES_AZURE.length + LISTA_VOCES_GEMINI.length +
+        total: CATALOGO_VOCES_AZURE.length + geminiVoicesRes.total +
           (elevenVoices.total || 0) + CATALOGO_VOCES_AWS_POLLY.length,
       },
     };

@@ -19,7 +19,28 @@ export interface GoogleVoiceMetadata {
   preview_url: string;
   textoPrueba: string;
   proveedor: string;
+  is_premium: boolean;
+  isPremium: boolean;
+  plan: "free" | "premium";
+  categoria: string;
+  etiqueta: "GRATIS" | "PREMIUM";
+  calidad: string;
 }
+
+export const GOOGLE_PREMIUM_VOICES_LIST = new Set([
+  "aoede",
+  "puck",
+  "charon",
+  "fenrir",
+  "kore",
+  "leda",
+  "orus",
+  "zephyr",
+  "despina",
+  "umbriel",
+  "callirrhoe",
+  "rasalgethi",
+]);
 
 /**
  * Obtiene las credenciales de Google Service Account desde clave.json o variables de entorno.
@@ -48,8 +69,14 @@ export async function getGoogleCredentials() {
 
   if (envCredentials) {
     try {
-      const parsed = JSON.parse(envCredentials);
-      return { credentials: parsed, path: "ENV" };
+      let raw = envCredentials.trim();
+      if (raw.startsWith("ey") && !raw.startsWith("{")) {
+        raw = atob(raw);
+      }
+      const parsed = JSON.parse(raw);
+      if (parsed.type === "service_account" && parsed.client_email && parsed.private_key) {
+        return { credentials: parsed, path: "ENV" };
+      }
     } catch (e) {
       console.warn("⚠️ Error parseando credenciales de Google desde ENV:", e);
     }
@@ -88,17 +115,17 @@ export const GOOGLE_OFFICIAL_VOICES = [
   {
     shortName: "Aoede",
     gender: "female",
-    desc: "Voz femenina expresiva, brillante y juvenil",
+    desc: "Voz femenina expresiva, brillante y juvenil (Ultra Realista)",
   },
   {
     shortName: "Puck",
     gender: "male",
-    desc: "Voz masculina conversacional, alegre y natural",
+    desc: "Voz masculina conversacional, alegre y natural (Ultra Realista)",
   },
   {
     shortName: "Charon",
     gender: "male",
-    desc: "Voz masculina profunda, reflexiva y calmada",
+    desc: "Voz masculina profunda, reflexiva y cinematográfica",
   },
   {
     shortName: "Fenrir",
@@ -196,6 +223,8 @@ export const GOOGLE_OFFICIAL_VOICES = [
 export const GOOGLE_VOICES_CATALOG: GoogleVoiceMetadata[] =
   GOOGLE_OFFICIAL_VOICES.map((v) => {
     const s3Url = getS3Mp3Url(v.shortName);
+    const isPremium = GOOGLE_PREMIUM_VOICES_LIST.has(v.shortName.toLowerCase());
+
     return {
       id: v.shortName,
       name: v.shortName,
@@ -212,7 +241,13 @@ export const GOOGLE_VOICES_CATALOG: GoogleVoiceMetadata[] =
       audioUrl: s3Url,
       preview_url: s3Url,
       textoPrueba: TEXTO_MUESTRA_DEFAULT,
-      proveedor: "Google Cloud Text-to-Speech",
+      proveedor: isPremium ? "Google Gemini 2.5 Pro (Ultra Realista)" : "Google Cloud TTS (Estándar)",
+      is_premium: isPremium,
+      isPremium: isPremium,
+      plan: isPremium ? "premium" : "free",
+      categoria: isPremium ? "Premium (Pro HD)" : "Estándar (Gratis)",
+      etiqueta: isPremium ? "PREMIUM" : "GRATIS",
+      calidad: isPremium ? "Ultra Realista (Gemini Pro)" : "HD Estándar",
     };
   });
 
