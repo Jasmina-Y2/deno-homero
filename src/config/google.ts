@@ -44,7 +44,7 @@ export async function getGoogleCredentials() {
     }
   }
 
-  const envCredentials = Deno.env.get("GOOGLE_CREDENTIALS ");
+  const envCredentials = Deno.env.get("GOOGLE_CREDENTIALS");
 
   if (envCredentials) {
     try {
